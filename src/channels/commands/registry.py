@@ -15,6 +15,7 @@ from src.channels.commands.help import HelpCommand
 from src.channels.commands.bind import BindCommand
 from src.channels.commands.status import StatusCommand
 from src.channels.commands.list import ListCommand
+from src.channels.commands.manage import ManageCommand
 
 
 # Command registry: name -> command class
@@ -32,6 +33,8 @@ COMMANDS: dict[str, type["BaseCommand"]] = {
     # List + alias
     "list": ListCommand,
     "清單": ListCommand,
+    # Manage
+    "管理": ManageCommand,
 }
 
 

@@ -68,6 +68,7 @@ class TelegramBot:
         text: str,
         parse_mode: str = ParseMode.MARKDOWN,
         disable_web_page_preview: bool = False,
+        reply_markup: Optional[any] = None,
     ) -> bool:
         """
         Send a text message.
@@ -77,6 +78,7 @@ class TelegramBot:
             text: Message text
             parse_mode: Parse mode (Markdown, HTML)
             disable_web_page_preview: Disable link preview
+            reply_markup: Inline keyboard markup
 
         Returns:
             True if sent successfully
@@ -91,6 +93,7 @@ class TelegramBot:
                 text=text,
                 parse_mode=parse_mode,
                 disable_web_page_preview=disable_web_page_preview,
+                reply_markup=reply_markup,
             )
             return True
         except Exception as e:

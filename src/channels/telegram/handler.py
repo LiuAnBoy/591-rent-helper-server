@@ -6,9 +6,11 @@ Routes incoming Telegram updates to appropriate command handlers.
 
 from typing import Optional
 
+import os
+
 from asyncpg import Pool
 from loguru import logger
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 
 from src.channels.telegram.bot import TelegramBot
@@ -101,7 +103,15 @@ class TelegramHandler:
                 # Format result using Telegram formatter
                 response = self._formatter.format_command_result(result)
 
-                await self._bot.send_message(chat_id, response, parse_mode=ParseMode.HTML)
+                # Add inline keyboard for specific commands
+                reply_markup = self._get_reply_markup(result.title)
+
+                await self._bot.send_message(
+                    chat_id,
+                    response,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=reply_markup,
+                )
                 return True
             except Exception as e:
                 logger.error(f"Command {command_name} error: {e}")
@@ -115,6 +125,29 @@ class TelegramHandler:
                 "❓ 未知指令\n\n輸入 /help 查看可用指令",
             )
             return True
+
+    def _get_reply_markup(self, title: str) -> Optional[InlineKeyboardMarkup]:
+        """
+        Get inline keyboard markup for specific command results.
+
+        Args:
+            title: Command result title
+
+        Returns:
+            InlineKeyboardMarkup or None
+        """
+        web_app_url = os.getenv("WEB_APP_URL", "")
+        if not web_app_url:
+            return None
+
+        # Commands that need a management button
+        if title in ("list_subscriptions", "list_empty", "manage"):
+            keyboard = [[
+                InlineKeyboardButton("📱 開啟管理頁面", url=web_app_url)
+            ]]
+            return InlineKeyboardMarkup(keyboard)
+
+        return None
 
     async def _handle_text(self, chat_id: int, text: str) -> bool:
         """

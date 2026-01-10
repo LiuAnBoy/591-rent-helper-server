@@ -36,6 +36,7 @@ class TelegramFormatter(BaseFormatter):
             "status_unbound": self._format_status_unbound,
             "list_subscriptions": self._format_list_subscriptions,
             "list_empty": self._format_list_empty,
+            "manage": self._format_manage,
         }
 
         formatter = formatters.get(title)
@@ -188,27 +189,19 @@ class TelegramFormatter(BaseFormatter):
 
         lines.append(f"\n共 {count} 個訂閱")
 
-        web_app_url = os.getenv("WEB_APP_URL", "")
-        if web_app_url:
-            lines.append(f'\n🔗 <a href="{web_app_url}">前往管理訂閱</a>')
-
         return "\n".join(lines)
 
     def _format_list_empty(self, result: CommandResult) -> str:
         """Format empty list message."""
-        lines = [
+        return "\n".join([
             "📋 訂閱清單",
             "",
             "目前沒有任何訂閱",
-        ]
+        ])
 
-        web_app_url = os.getenv("WEB_APP_URL", "")
-        if web_app_url:
-            lines.append(f'\n🔗 <a href="{web_app_url}">前往建立訂閱</a>')
-        else:
-            lines.append("\n請至網站建立訂閱條件")
-
-        return "\n".join(lines)
+    def _format_manage(self, result: CommandResult) -> str:
+        """Format manage message."""
+        return "請點擊下方按鈕開啟管理頁面"
 
     def format_listing(self, listing: Any) -> str:
         """
