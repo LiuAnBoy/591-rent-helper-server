@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # ============================================
 # 591 Crawler Deployment Script
@@ -19,14 +19,14 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Project directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Project directory (POSIX compatible)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # Detect docker compose command (v2: "docker compose" vs v1: "docker-compose")
-if docker compose version &> /dev/null; then
+if docker compose version >/dev/null 2>&1; then
     DOCKER_COMPOSE="docker compose"
-elif docker-compose version &> /dev/null; then
+elif docker-compose version >/dev/null 2>&1; then
     DOCKER_COMPOSE="docker-compose"
 else
     echo "Error: docker compose not found. Please install Docker."
@@ -51,19 +51,19 @@ get_db_name() { echo "${PG_DATABASE:-rent591}"; }
 # ============================================
 
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    printf "${BLUE}[INFO]${NC} %s\n" "$1"
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    printf "${GREEN}[SUCCESS]${NC} %s\n" "$1"
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    printf "${YELLOW}[WARN]${NC} %s\n" "$1"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    printf "${RED}[ERROR]${NC} %s\n" "$1"
 }
 
 # Check if this is first run (no .env file or no postgres data)
@@ -96,7 +96,7 @@ wait_for_postgres() {
         fi
         echo -n "."
         sleep 1
-        ((attempt++))
+        attempt=$((attempt + 1))
     done
 
     log_error "PostgreSQL failed to start after ${max_attempts} seconds"
@@ -194,7 +194,7 @@ run_migrations() {
         
         # Run the migration
         run_migration "$migration_file"
-        ((pending_count++))
+        pending_count=$((pending_count + 1))
     done
     
     if [ $pending_count -eq 0 ]; then
