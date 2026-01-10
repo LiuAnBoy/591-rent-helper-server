@@ -9,7 +9,7 @@ from typing import Optional
 from loguru import logger
 
 from src.channels.commands.base import BaseCommand, CommandResult
-from src.modules.bindings import BindingRepository
+from src.modules.bindings import BindingRepository, sync_user_subscriptions_to_redis
 
 
 class StartCommand(BaseCommand):
@@ -83,6 +83,10 @@ class StartCommand(BaseCommand):
 
             if user_id:
                 logger.info(f"Binding completed: user {user_id} -> telegram:{chat_id}")
+
+                # Sync subscriptions to Redis so notifications work immediately
+                await sync_user_subscriptions_to_redis(user_id)
+
                 return CommandResult.ok(
                     message="綁定成功",
                     title="bind_success",

@@ -11,6 +11,7 @@ from src.modules.bindings import (
     BindingRepository,
     BindCodeResponse,
     BindingResponse,
+    sync_user_subscriptions_to_redis,
 )
 
 router = APIRouter(prefix="/bindings", tags=["Bindings"])
@@ -103,6 +104,10 @@ async def unbind_telegram(current_user: CurrentUser) -> dict:
             raise HTTPException(status_code=404, detail="綁定不存在")
 
         logger.info(f"Deleted telegram binding for user {current_user.id}")
+
+        # Sync subscriptions to Redis (removes service_id from cached subscriptions)
+        await sync_user_subscriptions_to_redis(current_user.id)
+
         return {"success": True}
     except HTTPException:
         raise
@@ -134,6 +139,10 @@ async def toggle_telegram(current_user: CurrentUser, enabled: bool) -> dict:
             raise HTTPException(status_code=500, detail="更新失敗")
 
         logger.info(f"Toggled telegram binding for user {current_user.id}: {enabled}")
+
+        # Sync subscriptions to Redis (updates enabled status in cached subscriptions)
+        await sync_user_subscriptions_to_redis(current_user.id)
+
         return {"success": True}
     except HTTPException:
         raise

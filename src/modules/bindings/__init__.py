@@ -11,6 +11,7 @@ from src.modules.bindings.models import (
     BindingResponse,
 )
 from src.modules.bindings.repository import BindingRepository
+from src.modules.bindings.redis_sync import sync_user_subscriptions_to_redis
 
 __all__ = [
     "NotificationBinding",
@@ -18,4 +19,5 @@ __all__ = [
     "BindCodeResponse",
     "BindingResponse",
     "BindingRepository",
+    "sync_user_subscriptions_to_redis",
 ]
