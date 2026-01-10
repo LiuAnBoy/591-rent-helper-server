@@ -35,9 +35,9 @@ fi
 
 # Load environment variables from .env if exists
 load_env() {
-    if [ -f ".env" ]; then
+    if [ -f "$SCRIPT_DIR/.env" ]; then
         set -a
-        . .env
+        . "$SCRIPT_DIR/.env"
         set +a
     fi
 }
