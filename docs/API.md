@@ -10,10 +10,10 @@
 
 | 操作類型 | 成功回覆 | 失敗回覆 |
 | -------- | -------- | -------- |
-| 註冊 | `{"success": true}` | `{"detail": "錯誤訊息"}` |
-| 登入 | `{"token": "..."}` | `{"detail": "錯誤訊息"}` |
-| 查詢資料 | 直接回傳資料 | `{"detail": "錯誤訊息"}` |
-| 新增/修改/刪除 | `{"success": true}` | `{"detail": "錯誤訊息"}` |
+| 註冊 | `{"success": true}` | `{"success": false, "message": "..."}` |
+| 登入 | `{"token": "..."}` | `{"success": false, "message": "..."}` |
+| 查詢資料 | 直接回傳資料 | `{"success": false, "message": "..."}` |
+| 新增/修改/刪除 | `{"success": true}` | `{"success": false, "message": "..."}` |
 
 ---
 
@@ -41,7 +41,7 @@ curl -X POST http://localhost:8000/auth/register \
 **Error (400):**
 
 ```json
-{ "detail": "此 Email 已被註冊" }
+{ "success": false, "message": "此 Email 已被註冊" }
 ```
 
 ---
@@ -68,7 +68,7 @@ curl -X POST http://localhost:8000/auth/login \
 **Error (401):**
 
 ```json
-{ "detail": "Email 或密碼錯誤" }
+{ "success": false, "message": "Email 或密碼錯誤" }
 ```
 
 ---
@@ -188,7 +188,7 @@ curl -X GET http://localhost:8000/subscriptions/1 \
 **Error (404):**
 
 ```json
-{ "detail": "訂閱不存在" }
+{ "success": false, "message": "訂閱不存在" }
 ```
 
 ---
@@ -301,7 +301,7 @@ curl -X GET http://localhost:8000/bindings/telegram \
 **Error (404):**
 
 ```json
-{ "detail": "綁定不存在" }
+{ "success": false, "message": "綁定不存在" }
 ```
 
 ---

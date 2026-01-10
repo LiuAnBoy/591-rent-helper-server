@@ -12,8 +12,11 @@ from dotenv import load_dotenv
 # Load .env file at startup
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from loguru import logger
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.routes import (
     auth_router,
@@ -74,3 +77,32 @@ app.include_router(bindings_router)
 app.include_router(checker_router)
 app.include_router(subscriptions_router)
 app.include_router(telegram_router)
+
+
+# Custom exception handlers for unified error response format
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Convert HTTPException to unified error format."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"success": False, "message": exc.detail},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Convert validation errors to unified error format."""
+    errors = exc.errors()
+    if errors:
+        # Get first error message
+        first_error = errors[0]
+        field = ".".join(str(loc) for loc in first_error.get("loc", []))
+        msg = first_error.get("msg", "Validation error")
+        message = f"{field}: {msg}" if field else msg
+    else:
+        message = "Validation error"
+
+    return JSONResponse(
+        status_code=422,
+        content={"success": False, "message": message},
+    )
