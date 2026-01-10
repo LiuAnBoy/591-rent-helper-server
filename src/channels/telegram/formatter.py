@@ -65,6 +65,10 @@ class TelegramFormatter(BaseFormatter):
             prefix = "" if ord(name[0]) > 0x4E00 else "/"
             lines.append(f"{prefix}{name}{usage} - {cmd['desc']}")
 
+        web_app_url = os.getenv("WEB_APP_URL", "")
+        if web_app_url:
+            lines.append(f'\n🌐 網站：{web_app_url}')
+
         return "\n".join(lines)
 
     def _format_help(self, result: CommandResult) -> str:
