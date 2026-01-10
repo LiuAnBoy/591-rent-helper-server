@@ -4,6 +4,7 @@ Telegram Formatter Module.
 Formats messages for Telegram using HTML markup.
 """
 
+import os
 from typing import Any, Optional
 
 from src.channels.base import BaseFormatter
@@ -183,17 +184,27 @@ class TelegramFormatter(BaseFormatter):
 
         lines.append(f"\n共 {count} 個訂閱")
 
+        web_app_url = os.getenv("WEB_APP_URL", "")
+        if web_app_url:
+            lines.append(f'\n🔗 <a href="{web_app_url}">前往管理訂閱</a>')
+
         return "\n".join(lines)
 
     def _format_list_empty(self, result: CommandResult) -> str:
         """Format empty list message."""
-        return "\n".join([
+        lines = [
             "📋 訂閱清單",
             "",
             "目前沒有任何訂閱",
-            "",
-            "請至網站建立訂閱條件",
-        ])
+        ]
+
+        web_app_url = os.getenv("WEB_APP_URL", "")
+        if web_app_url:
+            lines.append(f'\n🔗 <a href="{web_app_url}">前往建立訂閱</a>')
+        else:
+            lines.append("\n請至網站建立訂閱條件")
+
+        return "\n".join(lines)
 
     def format_listing(self, listing: Any) -> str:
         """
