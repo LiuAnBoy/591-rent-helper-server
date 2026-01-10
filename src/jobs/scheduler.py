@@ -5,9 +5,13 @@ Manages scheduled tasks for crawling and checking.
 """
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from loguru import logger
+
+# Timezone for scheduler
+TZ = ZoneInfo("Asia/Taipei")
 
 from config.settings import get_settings
 from src.jobs.checker import Checker
@@ -40,7 +44,7 @@ def _is_night_time() -> bool:
     """Check if current time is in night period."""
     settings = get_settings()
     crawler = settings.crawler
-    current_hour = datetime.now().hour
+    current_hour = datetime.now(TZ).hour
 
     # Night: 01:00 - 06:00
     return crawler.night_start_hour <= current_hour < crawler.night_end_hour
@@ -59,7 +63,7 @@ def _get_current_interval() -> int:
 def _schedule_next_job() -> None:
     """Schedule next checker job based on current time."""
     interval = _get_current_interval()
-    next_run = datetime.now() + timedelta(minutes=interval)
+    next_run = datetime.now(TZ) + timedelta(minutes=interval)
 
     # Remove existing job if any
     if _scheduler.get_job("checker_job_next"):
@@ -132,7 +136,7 @@ def setup_jobs() -> None:
     _scheduler.add_job(
         run_checker_job,
         trigger="date",
-        run_date=datetime.now(),
+        run_date=datetime.now(TZ),
         id="checker_job_startup",
         name="Startup checker",
         replace_existing=True,
