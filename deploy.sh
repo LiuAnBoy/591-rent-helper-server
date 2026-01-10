@@ -68,7 +68,7 @@ log_error() {
 
 # Check if this is first run (no .env file or no postgres data)
 is_first_run() {
-    if [ ! -f ".env" ]; then
+    if [ ! -f "$SCRIPT_DIR/.env" ]; then
         return 0  # true, is first run
     fi
     
@@ -108,9 +108,9 @@ wait_for_postgres() {
 # ============================================
 
 setup_env() {
-    if [ ! -f ".env" ]; then
+    if [ ! -f "$SCRIPT_DIR/.env" ]; then
         log_info "Creating .env from .env.example..."
-        cp .env.example .env
+        cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
         log_warn "Please edit .env with your configuration!"
         log_warn "Especially: TELEGRAM_BOT_TOKEN, JWT_SECRET"
         echo ""
@@ -183,7 +183,7 @@ run_migrations() {
     local pending_count=0
     
     # Find all .sql files in migrations folder, sorted by name
-    for migration_file in $(find migrations -name "*.sql" -type f | sort); do
+    for migration_file in $(find "$SCRIPT_DIR/migrations" -name "*.sql" -type f | sort); do
         local filename=$(basename "$migration_file")
         
         # Skip if already applied
@@ -241,7 +241,7 @@ git_pull() {
     log_info "Pulling latest changes from git..."
 
     # Check if this is a git repo
-    if [ ! -d ".git" ]; then
+    if [ ! -d "$SCRIPT_DIR/.git" ]; then
         log_warn "Not a git repository, skipping git pull"
         return 0
     fi
