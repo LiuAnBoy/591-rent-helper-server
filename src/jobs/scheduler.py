@@ -40,8 +40,23 @@ async def close_checker() -> None:
         _checker = None
 
 
-async def run_checker_job() -> None:
-    """Scheduled job to check for new listings in active regions."""
+async def run_checker_job(skip_night: bool = False) -> None:
+    """
+    Scheduled job to check for new listings in active regions.
+
+    Args:
+        skip_night: If True, skip execution during night hours (for interval-based daytime job)
+    """
+    if skip_night:
+        settings = get_settings()
+        crawler = settings.crawler
+        current_hour = datetime.now(TZ).hour
+        is_night = crawler.night_start_hour <= current_hour < crawler.night_end_hour
+
+        if is_night:
+            logger.debug(f"Skipping daytime job during night hours (hour={current_hour})")
+            return
+
     try:
         logger.info("Running scheduled checker job...")
         checker = get_checker()
@@ -78,45 +93,29 @@ async def run_checker_job() -> None:
 
 def setup_jobs() -> None:
     """
-    Setup scheduler jobs with fixed time intervals.
+    Setup scheduler jobs.
 
-    Daytime (08:00-01:00): Every 15 minutes at :00, :15, :30, :45
-    Nighttime (01:00-08:00): Every 60 minutes at :00
+    Daytime (08:00-01:00): Interval-based (every X minutes)
+    Nighttime (01:00-08:00): Fixed times (cron-based)
     """
+    from functools import partial
+
+    from apscheduler.triggers.interval import IntervalTrigger
+
     settings = get_settings()
     crawler = settings.crawler
 
     logger.info(
-        f"Scheduler config: daytime={crawler.interval_minutes}min, "
-        f"night={crawler.night_interval_minutes}min "
+        f"Scheduler config: daytime={crawler.interval_minutes}min (interval), "
+        f"night={crawler.night_interval_minutes}min (fixed) "
         f"(night: {crawler.night_start_hour}:00-{crawler.night_end_hour}:00)"
     )
 
-    # Calculate cron minute expression based on interval
-    # For 15 min: "0,15,30,45"
-    # For 30 min: "0,30"
-    # For 60 min: "0"
-    def get_minute_expr(interval: int) -> str:
-        if interval >= 60:
-            return "0"
-        minutes = list(range(0, 60, interval))
-        return ",".join(str(m) for m in minutes)
-
-    daytime_minutes = get_minute_expr(crawler.interval_minutes)
-    night_minutes = get_minute_expr(crawler.night_interval_minutes)
-
-    # Daytime job: 08:00-00:59 (before night starts)
-    # Hours: 8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0
-    daytime_hours = list(range(crawler.night_end_hour, 24)) + list(
-        range(0, crawler.night_start_hour)
-    )
-    daytime_hours_expr = ",".join(str(h) for h in daytime_hours)
-
+    # Daytime job: interval-based scheduling (skips during night hours)
     _scheduler.add_job(
-        run_checker_job,
-        CronTrigger(
-            minute=daytime_minutes,
-            hour=daytime_hours_expr,
+        partial(run_checker_job, skip_night=True),
+        IntervalTrigger(
+            minutes=crawler.interval_minutes,
             timezone="Asia/Taipei",
         ),
         id="checker_job_daytime",
@@ -124,10 +123,17 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
     logger.info(
-        f"Daytime job: minute={daytime_minutes}, hour={daytime_hours_expr}"
+        f"Daytime job: every {crawler.interval_minutes} minutes (interval-based)"
     )
 
-    # Nighttime job: 01:00-07:59
+    # Nighttime job: fixed times (cron-based)
+    def get_minute_expr(interval: int) -> str:
+        if interval >= 60:
+            return "0"
+        minutes = list(range(0, 60, interval))
+        return ",".join(str(m) for m in minutes)
+
+    night_minutes = get_minute_expr(crawler.night_interval_minutes)
     night_hours = list(
         range(crawler.night_start_hour, crawler.night_end_hour)
     )
@@ -145,7 +151,7 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
     logger.info(
-        f"Night job: minute={night_minutes}, hour={night_hours_expr}"
+        f"Night job: minute={night_minutes}, hour={night_hours_expr} (fixed times)"
     )
 
     # Run immediately on startup

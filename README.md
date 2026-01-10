@@ -136,11 +136,15 @@ uv run uvicorn src.api.main:app --reload
 | `TELEGRAM_BOT_USERNAME`          | Telegram Bot 使用者名稱 | -      |
 | `TELEGRAM_WEBHOOK_URL`           | Telegram Webhook URL | -         |
 | `JWT_SECRET`                     | JWT 密鑰             | -         |
-| `CRAWLER_INTERVAL_MINUTES`       | 白天爬取間隔（分鐘） | 15        |
-| `CRAWLER_NIGHT_INTERVAL_MINUTES` | 夜間爬取間隔（分鐘） | 60        |
+| `CRAWLER_INTERVAL_MINUTES`       | 白天爬取間隔（分鐘），間隔式排程 | 15        |
+| `CRAWLER_NIGHT_INTERVAL_MINUTES` | 夜間爬取間隔（分鐘），固定時間點 | 60        |
 | `CRAWLER_NIGHT_START_HOUR`       | 夜間開始時間         | 1         |
 | `CRAWLER_NIGHT_END_HOUR`         | 夜間結束時間         | 8         |
 | `CORS_ORIGINS`                   | CORS 允許來源        | *         |
+
+> **排程說明**
+> - 白天（08:00-01:00）：間隔式排程，每 X 分鐘執行一次（相對時間）
+> - 夜間（01:00-08:00）：固定時間點，例如 60 分鐘 = 每小時整點執行
 
 ---
 
