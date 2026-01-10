@@ -1,0 +1,29 @@
+"""Checker routes."""
+
+from fastapi import APIRouter
+from loguru import logger
+
+from src.jobs import scheduler
+
+router = APIRouter(prefix="/checker", tags=["Checker"])
+
+
+@router.post("/run")
+async def trigger_checker() -> dict:
+    """Manually trigger checker job."""
+    logger.info("Manually triggering checker job...")
+    checker = scheduler.get_checker()
+    results = await checker.check_all_regions(max_items=10)
+    return {
+        "status": True,
+        "results": [
+            {
+                "region": r.get("region"),
+                "fetched": r["fetched"],
+                "new_count": r["new_count"],
+                "matches": len(r["matches"]),
+                "broadcast": r.get("broadcast", {}),
+            }
+            for r in results
+        ],
+    }

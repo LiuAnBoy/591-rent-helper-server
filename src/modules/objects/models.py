@@ -1,0 +1,106 @@
+"""
+Object Models.
+
+Pydantic model for 591 rental listing data.
+"""
+
+from typing import Any, Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class Surrounding(BaseModel):
+    """Surrounding information (e.g., nearby metro station)."""
+
+    type: Optional[str] = None
+    desc: Optional[str] = None
+    distance: Optional[str] = None
+
+
+class RentalObject(BaseModel):
+    """591 rental object data model."""
+
+    # Primary key
+    id: int
+
+    # Basic info
+    type: Optional[int] = None
+    kind: Optional[int] = None
+    kind_name: Optional[str] = None
+    title: str
+    url: Optional[str] = None
+
+    # Price
+    price: str
+    price_unit: Optional[str] = Field(default="元/月")
+    price_has_carport: Optional[int] = None
+    price_per: Optional[float] = None
+    price_per_unit: Optional[str] = None
+
+    @field_validator("price_per", mode="before")
+    @classmethod
+    def parse_price_per(cls, v: Any) -> Optional[float]:
+        """Parse price_per, handling comma-separated numbers."""
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            # Remove commas and convert to float
+            try:
+                return float(v.replace(",", ""))
+            except ValueError:
+                return None
+        return None
+
+    # Space info
+    floor_name: Optional[str] = None
+    area: Optional[float] = None
+    area_name: Optional[str] = None
+    layout_str: Optional[str] = Field(default=None, alias="layoutStr")
+    fitment: Optional[int] = Field(default=None, description="裝潢代號 (99=新, 3=中檔, 4=高檔)")
+
+    # Location
+    address: Optional[str] = None
+    region: Optional[int] = Field(default=None, alias="regionid")
+    section: Optional[int] = Field(default=None, alias="sectionid")
+
+    # Tags
+    tags: list[str] = Field(default_factory=list)
+
+    # Surrounding
+    surrounding: Optional[Surrounding] = None
+
+    # Extra flags
+    community_name: Optional[str] = None
+    community_id: Optional[int] = None
+    social_house: Optional[int] = None
+    mvip: Optional[int] = None
+    preferred: Optional[int] = None
+    good_house: Optional[int] = None
+    labels: list[str] = Field(default_factory=list)
+
+    # Detail page fields (parsed from detail page)
+    is_rooftop: bool = Field(default=False, description="是否頂樓加蓋 (from floor_name)")
+    gender: str = Field(default="all", description="性別限制 (boy/girl/all, from service.rule)")
+    pet_allowed: Optional[bool] = Field(default=None, description="可否養寵物 (from service.rule)")
+    options: list[str] = Field(default_factory=list, description="提供設備 (from service.facility)")
+
+    class Config:
+        """Pydantic config."""
+
+        populate_by_name = True
+
+    def price_int(self) -> int:
+        """Get price as integer (remove comma)."""
+        return int(self.price.replace(",", ""))
+
+    def __str__(self) -> str:
+        """String representation for console output."""
+        return (
+            f"[{self.id}] {self.title}\n"
+            f"    💰 {self.price} {self.price_unit or ''}\n"
+            f"    📍 {self.address or 'N/A'}\n"
+            f"    🏠 {self.kind_name or 'N/A'} | {self.area_name or 'N/A'} | {self.layout_str or 'N/A'}\n"
+            f"    🏷️  {', '.join(self.tags) if self.tags else 'N/A'}"
+        )
