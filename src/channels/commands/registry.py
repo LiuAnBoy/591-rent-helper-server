@@ -12,8 +12,6 @@ if TYPE_CHECKING:
 # Import commands (will be populated after command files are created)
 from src.channels.commands.start import StartCommand
 from src.channels.commands.help import HelpCommand
-from src.channels.commands.bind import BindCommand
-from src.channels.commands.status import StatusCommand
 from src.channels.commands.list import ListCommand
 from src.channels.commands.manage import ManageCommand
 from src.channels.commands.command import CommandListCommand
@@ -27,10 +25,6 @@ COMMANDS: dict[str, type["BaseCommand"]] = {
     # Help + alias
     "help": HelpCommand,
     "幫助": HelpCommand,
-    # Bind
-    "bind": BindCommand,
-    # Status
-    "status": StatusCommand,
     # List + alias
     "list": ListCommand,
     "清單": ListCommand,

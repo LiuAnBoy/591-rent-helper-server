@@ -34,17 +34,15 @@ class HelpCommand(BaseCommand):
             Help message with step-by-step instructions
         """
         steps = [
-            "在網站上註冊帳號",
-            "從網站取得綁定碼",
-            "使用 /bind [綁定碼] 連結帳號",
+            "在網站上註冊 / 登入帳號",
+            "點擊「綁定 Telegram」按鈕完成綁定",
             "在網站建立訂閱條件",
             "當有符合條件的新物件時，會自動推播通知！",
         ]
 
         commands = [
-            {"name": "bind", "desc": "輸入綁定碼連結帳號", "usage": "[綁定碼]"},
-            {"name": "status", "desc": "查看綁定狀態"},
             {"name": "清單", "desc": "查看訂閱清單"},
+            {"name": "管理", "desc": "開啟管理頁面"},
         ]
 
         return CommandResult.ok(

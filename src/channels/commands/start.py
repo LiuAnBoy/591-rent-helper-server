@@ -34,10 +34,9 @@ class StartCommand(BaseCommand):
             Welcome message with user ID and available commands
         """
         steps = [
-            "請先前往網頁註冊",
-            "登入並綁定 Telegram",
-            "回到這裡輸入 /bind [綁定碼]",
-            "回到網頁設定篩選條件",
+            "前往網頁註冊 / 登入",
+            "點擊「綁定 Telegram」按鈕",
+            "設定篩選條件，開始接收通知！",
         ]
 
         return CommandResult.ok(
