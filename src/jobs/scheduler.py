@@ -4,18 +4,18 @@ Job Scheduler Module.
 Manages scheduled tasks for crawling and checking.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from loguru import logger
-
-# Timezone for scheduler
-TZ = ZoneInfo("Asia/Taipei")
 
 from config.settings import get_settings
 from src.jobs.checker import Checker
 
+# Timezone for scheduler
+TZ = ZoneInfo("Asia/Taipei")
 
 # Scheduler instance
 _scheduler = AsyncIOScheduler(timezone="Asia/Taipei")
@@ -38,48 +38,6 @@ async def close_checker() -> None:
     if _checker is not None:
         await _checker.close()
         _checker = None
-
-
-def _is_night_time() -> bool:
-    """Check if current time is in night period."""
-    settings = get_settings()
-    crawler = settings.crawler
-    current_hour = datetime.now(TZ).hour
-
-    # Night: 01:00 - 06:00
-    return crawler.night_start_hour <= current_hour < crawler.night_end_hour
-
-
-def _get_current_interval() -> int:
-    """Get current interval based on time of day."""
-    settings = get_settings()
-    crawler = settings.crawler
-
-    if _is_night_time():
-        return crawler.night_interval_minutes
-    return crawler.interval_minutes
-
-
-def _schedule_next_job() -> None:
-    """Schedule next checker job based on current time."""
-    interval = _get_current_interval()
-    next_run = datetime.now(TZ) + timedelta(minutes=interval)
-
-    # Remove existing job if any
-    if _scheduler.get_job("checker_job_next"):
-        _scheduler.remove_job("checker_job_next")
-
-    _scheduler.add_job(
-        run_checker_job,
-        trigger="date",
-        run_date=next_run,
-        id="checker_job_next",
-        name=f"Next checker (in {interval} min)",
-        replace_existing=True,
-    )
-
-    time_period = "night" if _is_night_time() else "daytime"
-    logger.info(f"Next job scheduled in {interval} minutes ({time_period})")
 
 
 async def run_checker_job() -> None:
@@ -117,12 +75,14 @@ async def run_checker_job() -> None:
         await close_checker()
         logger.info("Browser closed, memory released")
 
-        # Schedule next job
-        _schedule_next_job()
-
 
 def setup_jobs() -> None:
-    """Setup scheduler jobs."""
+    """
+    Setup scheduler jobs with fixed time intervals.
+
+    Daytime (08:00-01:00): Every 15 minutes at :00, :15, :30, :45
+    Nighttime (01:00-08:00): Every 60 minutes at :00
+    """
     settings = get_settings()
     crawler = settings.crawler
 
@@ -130,6 +90,62 @@ def setup_jobs() -> None:
         f"Scheduler config: daytime={crawler.interval_minutes}min, "
         f"night={crawler.night_interval_minutes}min "
         f"(night: {crawler.night_start_hour}:00-{crawler.night_end_hour}:00)"
+    )
+
+    # Calculate cron minute expression based on interval
+    # For 15 min: "0,15,30,45"
+    # For 30 min: "0,30"
+    # For 60 min: "0"
+    def get_minute_expr(interval: int) -> str:
+        if interval >= 60:
+            return "0"
+        minutes = list(range(0, 60, interval))
+        return ",".join(str(m) for m in minutes)
+
+    daytime_minutes = get_minute_expr(crawler.interval_minutes)
+    night_minutes = get_minute_expr(crawler.night_interval_minutes)
+
+    # Daytime job: 08:00-00:59 (before night starts)
+    # Hours: 8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0
+    daytime_hours = list(range(crawler.night_end_hour, 24)) + list(
+        range(0, crawler.night_start_hour)
+    )
+    daytime_hours_expr = ",".join(str(h) for h in daytime_hours)
+
+    _scheduler.add_job(
+        run_checker_job,
+        CronTrigger(
+            minute=daytime_minutes,
+            hour=daytime_hours_expr,
+            timezone="Asia/Taipei",
+        ),
+        id="checker_job_daytime",
+        name=f"Daytime checker (every {crawler.interval_minutes} min)",
+        replace_existing=True,
+    )
+    logger.info(
+        f"Daytime job: minute={daytime_minutes}, hour={daytime_hours_expr}"
+    )
+
+    # Nighttime job: 01:00-07:59
+    night_hours = list(
+        range(crawler.night_start_hour, crawler.night_end_hour)
+    )
+    night_hours_expr = ",".join(str(h) for h in night_hours)
+
+    _scheduler.add_job(
+        run_checker_job,
+        CronTrigger(
+            minute=night_minutes,
+            hour=night_hours_expr,
+            timezone="Asia/Taipei",
+        ),
+        id="checker_job_night",
+        name=f"Night checker (every {crawler.night_interval_minutes} min)",
+        replace_existing=True,
+    )
+    logger.info(
+        f"Night job: minute={night_minutes}, hour={night_hours_expr}"
     )
 
     # Run immediately on startup
