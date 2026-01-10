@@ -37,7 +37,7 @@ fi
 load_env() {
     if [ -f ".env" ]; then
         set -a
-        source .env
+        . .env
         set +a
     fi
 }
