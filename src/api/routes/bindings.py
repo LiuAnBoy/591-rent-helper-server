@@ -80,7 +80,7 @@ async def bind_telegram(current_user: CurrentUser) -> dict:
 
         bot_username = os.getenv("TELEGRAM_BOT_USERNAME")
         if bot_username:
-            response["bind_url"] = f"https://t.me/{bot_username}?start=BIND_{code}"
+            response["bind_url"] = f"tg://resolve?domain={bot_username}&start=BIND_{code}"
 
         return response
     except Exception as e:
