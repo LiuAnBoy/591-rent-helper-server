@@ -61,13 +61,9 @@ async def bind_telegram(current_user: CurrentUser) -> dict:
     """
     Start Telegram binding process.
 
-    Generates a bind code and returns deep link URLs.
+    Generates a bind code and returns a deep link URL.
     User clicks the bind_url to open Telegram and complete binding.
     The code is valid for 10 minutes.
-
-    Returns:
-        - bind_url: tg:// protocol (direct app open)
-        - bind_url_web: https://t.me/ link (web fallback)
 
     Requires authentication.
     """
@@ -84,8 +80,7 @@ async def bind_telegram(current_user: CurrentUser) -> dict:
 
         bot_username = os.getenv("TELEGRAM_BOT_USERNAME")
         if bot_username:
-            response["bind_url"] = f"tg://resolve?domain={bot_username}&start=BIND_{code}"
-            response["bind_url_web"] = f"https://t.me/{bot_username}?start=BIND_{code}"
+            response["bind_url"] = f"https://t.me/{bot_username}?start=BIND_{code}"
 
         return response
     except Exception as e:
