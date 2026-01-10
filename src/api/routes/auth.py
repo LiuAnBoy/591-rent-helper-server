@@ -77,7 +77,7 @@ async def login(data: UserLogin) -> dict:
             )
 
         # Create access token
-        token, expires_in = repo.create_access_token(user.id, user.email)
+        token, expires_in = repo.create_access_token(user.id, user.email, user.role)
 
         logger.info(f"User logged in: {data.email}")
 

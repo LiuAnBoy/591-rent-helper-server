@@ -59,13 +59,14 @@ class UserRepository:
         """
         return UserRepository.hash_password(password) == hashed
 
-    def create_access_token(self, user_id: int, email: str) -> tuple[str, int]:
+    def create_access_token(self, user_id: int, email: str, role: str) -> tuple[str, int]:
         """
         Create JWT access token.
 
         Args:
             user_id: User ID
             email: User email
+            role: User role
 
         Returns:
             Tuple of (token, expires_in_seconds)
@@ -76,6 +77,7 @@ class UserRepository:
         payload = {
             "sub": str(user_id),
             "email": email,
+            "role": role,
             "exp": expire,
             "iat": datetime.now(timezone.utc),
         }

@@ -1,6 +1,6 @@
 """User routes."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from src.api.dependencies import CurrentUser
@@ -22,6 +22,9 @@ async def get_current_user_profile(current_user: CurrentUser) -> dict:
     - Notification bindings (Telegram, etc.)
     - Subscription count and limit
     """
+    if not current_user:
+        raise HTTPException(status_code=404, detail="找不到使用者")
+
     postgres = await get_postgres()
 
     # Get bindings
