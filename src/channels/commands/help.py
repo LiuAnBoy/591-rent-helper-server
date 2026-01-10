@@ -36,13 +36,13 @@ class HelpCommand(BaseCommand):
         steps = [
             "在網站上註冊帳號",
             "從網站取得綁定碼",
-            "使用 /bind <綁定碼> 連結帳號",
+            "使用 /bind [綁定碼] 連結帳號",
             "在網站建立訂閱條件",
             "當有符合條件的新物件時，會自動推播通知！",
         ]
 
         commands = [
-            {"name": "bind", "desc": "輸入綁定碼連結帳號", "usage": "<code>"},
+            {"name": "bind", "desc": "輸入綁定碼連結帳號", "usage": "[綁定碼]"},
             {"name": "status", "desc": "查看綁定狀態"},
             {"name": "清單", "desc": "查看訂閱清單"},
         ]

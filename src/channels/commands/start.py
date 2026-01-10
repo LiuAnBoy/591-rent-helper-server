@@ -35,7 +35,7 @@ class StartCommand(BaseCommand):
         """
         commands = [
             {"name": "start", "desc": "開始使用"},
-            {"name": "bind", "desc": "綁定帳號", "usage": "<code>"},
+            {"name": "bind", "desc": "綁定帳號", "usage": "[綁定碼]"},
             {"name": "清單", "desc": "訂閱清單"},
             {"name": "幫助", "desc": "顯示說明"},
             {"name": "管理", "desc": "管理頁面"},
