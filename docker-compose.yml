@@ -51,7 +51,9 @@ services:
     environment:
       # Override for Docker internal network
       PG_HOST: postgres
+      PG_PORT: ${PG_INTERNAL_PORT:-5432}
       REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_INTERNAL_PORT:-6379}
     restart: unless-stopped
 
 volumes:
