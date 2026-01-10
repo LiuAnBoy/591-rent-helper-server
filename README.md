@@ -108,7 +108,7 @@ cp .env.example .env
 
 ```bash
 # 啟動 PostgreSQL & Redis（使用 Docker）
-docker-compose up -d postgres redis
+docker compose up -d postgres redis
 
 # 執行 migrations
 ./deploy.sh migrate
@@ -138,6 +138,7 @@ uv run uvicorn src.api.main:app --reload
 | `CRAWLER_NIGHT_INTERVAL_MINUTES` | 夜間爬取間隔（分鐘） | 60        |
 | `CRAWLER_NIGHT_START_HOUR`       | 夜間開始時間         | 1         |
 | `CRAWLER_NIGHT_END_HOUR`         | 夜間結束時間         | 8         |
+| `CORS_ORIGINS`                   | CORS 允許來源        | *         |
 
 ---
 
@@ -236,6 +237,9 @@ uv run uvicorn src.api.main:app --reload
 │   │   ├── checker.py           # 物件比對
 │   │   ├── broadcaster.py       # 推播通知
 │   │   └── parser.py            # 資料解析
+│   ├── middleware/
+│   │   ├── __init__.py          # Middleware 初始化
+│   │   └── cors.py              # CORS 設定
 │   ├── modules/
 │   │   ├── users/               # 使用者模組
 │   │   ├── subscriptions/       # 訂閱模組
