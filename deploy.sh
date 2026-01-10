@@ -23,6 +23,16 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Detect docker compose command (v2: "docker compose" vs v1: "docker-compose")
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose"
+elif docker-compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+else
+    echo "Error: docker compose not found. Please install Docker."
+    exit 1
+fi
+
 # Load environment variables from .env if exists
 load_env() {
     if [ -f ".env" ]; then
@@ -80,7 +90,7 @@ wait_for_postgres() {
     local attempt=1
 
     while [ $attempt -le $max_attempts ]; do
-        if docker-compose exec -T postgres pg_isready -U "$db_user" > /dev/null 2>&1; then
+        if $DOCKER_COMPOSE exec -T postgres pg_isready -U "$db_user" > /dev/null 2>&1; then
             log_success "PostgreSQL is ready!"
             return 0
         fi
@@ -121,7 +131,7 @@ ensure_migration_table() {
     local db_name=$(get_db_name)
 
     log_info "Ensuring migration tracking table exists..."
-    docker-compose exec -T postgres psql -U "$db_user" -d "$db_name" << 'SQL'
+    $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" << 'SQL'
 CREATE TABLE IF NOT EXISTS schema_migrations (
     id SERIAL PRIMARY KEY,
     filename VARCHAR(255) UNIQUE NOT NULL,
@@ -136,7 +146,7 @@ get_applied_migrations() {
     local db_user=$(get_db_user)
     local db_name=$(get_db_name)
 
-    docker-compose exec -T postgres psql -U "$db_user" -d "$db_name" -t -A -c \
+    $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" -t -A -c \
         "SELECT filename FROM schema_migrations ORDER BY filename;" 2>/dev/null || echo ""
 }
 
@@ -151,9 +161,9 @@ run_migration() {
     log_info "Running migration: $filename"
 
     # Run the migration
-    if docker-compose exec -T postgres psql -U "$db_user" -d "$db_name" < "$migration_file"; then
+    if $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" < "$migration_file"; then
         # Record the migration
-        docker-compose exec -T postgres psql -U "$db_user" -d "$db_name" -c \
+        $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" -c \
             "INSERT INTO schema_migrations (filename) VALUES ('$filename') ON CONFLICT DO NOTHING;"
         log_success "Migration $filename completed"
         return 0
@@ -208,7 +218,7 @@ first_time_setup() {
     
     # Start all services
     log_info "Starting all services..."
-    docker-compose up -d
+    $DOCKER_COMPOSE up -d
     
     # Wait for postgres
     wait_for_postgres
@@ -220,7 +230,7 @@ first_time_setup() {
     log_success "First-time setup complete!"
     log_success "=========================================="
     log_info "Services running:"
-    docker-compose ps
+    $DOCKER_COMPOSE ps
 }
 
 # ============================================
@@ -269,7 +279,7 @@ update_deployment() {
 
     # Ensure postgres and redis are running
     log_info "Ensuring database services are running..."
-    docker-compose up -d postgres redis
+    $DOCKER_COMPOSE up -d postgres redis
 
     # Wait for postgres
     wait_for_postgres
@@ -279,16 +289,16 @@ update_deployment() {
 
     # Rebuild and restart app only
     log_info "Rebuilding app container..."
-    docker-compose build app
+    $DOCKER_COMPOSE build app
 
     log_info "Restarting app container..."
-    docker-compose up -d --no-deps app
+    $DOCKER_COMPOSE up -d --no-deps app
 
     log_success "=========================================="
     log_success "Update complete!"
     log_success "=========================================="
     log_info "Services running:"
-    docker-compose ps
+    $DOCKER_COMPOSE ps
 }
 
 # ============================================
