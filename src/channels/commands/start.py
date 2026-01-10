@@ -35,9 +35,10 @@ class StartCommand(BaseCommand):
         """
         commands = [
             {"name": "start", "desc": "開始使用"},
-            {"name": "幫助", "desc": "查看幫助"},
             {"name": "bind", "desc": "綁定帳號", "usage": "<code>"},
-            {"name": "清單", "desc": "查看訂閱清單"},
+            {"name": "清單", "desc": "訂閱清單"},
+            {"name": "幫助", "desc": "顯示說明"},
+            {"name": "管理", "desc": "管理頁面"},
         ]
 
         return CommandResult.ok(
