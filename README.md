@@ -131,6 +131,7 @@ uv run uvicorn src.api.main:app --reload
 | `REDIS_HOST`                     | Redis 主機           | localhost |
 | `REDIS_PORT`                     | Redis 埠號           | 6379      |
 | `APP_PORT`                       | API 服務埠號         | 8000      |
+| `WEB_APP_URL`                    | 前台網址             | -         |
 | `TELEGRAM_BOT_TOKEN`             | Telegram Bot Token   | -         |
 | `TELEGRAM_WEBHOOK_URL`           | Telegram Webhook URL | -         |
 | `JWT_SECRET`                     | JWT 密鑰             | -         |
