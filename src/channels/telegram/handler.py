@@ -9,6 +9,7 @@ from typing import Optional
 from asyncpg import Pool
 from loguru import logger
 from telegram import Update
+from telegram.constants import ParseMode
 
 from src.channels.telegram.bot import TelegramBot
 from src.channels.telegram.formatter import TelegramFormatter, get_telegram_formatter
@@ -100,7 +101,7 @@ class TelegramHandler:
                 # Format result using Telegram formatter
                 response = self._formatter.format_command_result(result)
 
-                await self._bot.send_message(chat_id, response)
+                await self._bot.send_message(chat_id, response, parse_mode=ParseMode.HTML)
                 return True
             except Exception as e:
                 logger.error(f"Command {command_name} error: {e}")
