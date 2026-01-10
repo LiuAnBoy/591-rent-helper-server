@@ -29,6 +29,7 @@ from src.api.routes import (
 )
 from src.api.routes.telegram import init_bot, auto_setup_webhook
 from src.jobs import scheduler
+from src.middleware import setup_middleware
 
 
 async def sync_subscriptions_on_startup():
@@ -68,6 +69,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Setup middleware
+setup_middleware(app)
 
 # Register routes
 app.include_router(health_router)
