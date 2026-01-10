@@ -47,6 +47,7 @@ class BindCodeResponse(BaseModel):
 
     code: str = Field(..., description="10-character alphanumeric bind code")
     expires_in: int = Field(default=600, description="Expiry time in seconds")
+    bind_url: Optional[str] = Field(default=None, description="Telegram deep link URL")
 
 
 class BindingResponse(BaseModel):

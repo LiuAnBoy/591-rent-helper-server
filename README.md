@@ -133,6 +133,7 @@ uv run uvicorn src.api.main:app --reload
 | `APP_PORT`                       | API 服務埠號         | 8000      |
 | `WEB_APP_URL`                    | 前台網址             | -         |
 | `TELEGRAM_BOT_TOKEN`             | Telegram Bot Token   | -         |
+| `TELEGRAM_BOT_USERNAME`          | Telegram Bot 使用者名稱 | -      |
 | `TELEGRAM_WEBHOOK_URL`           | Telegram Webhook URL | -         |
 | `JWT_SECRET`                     | JWT 密鑰             | -         |
 | `CRAWLER_INTERVAL_MINUTES`       | 白天爬取間隔（分鐘） | 15        |
@@ -145,15 +146,17 @@ uv run uvicorn src.api.main:app --reload
 
 ## Telegram Bot 指令
 
-| 指令             | 別名   | 說明         |
-| ---------------- | ------ | ------------ |
-| `/start`         | -      | 開始使用     |
-| `/help`          | `幫助` | 顯示使用說明 |
-| `/bind <綁定碼>` | -      | 綁定帳號     |
-| `/status`        | -      | 查看綁定狀態 |
-| `/list`          | `清單` | 查看訂閱清單 |
+| 指令     | 別名   | 說明         |
+| -------- | ------ | ------------ |
+| `/start` | -      | 開始使用     |
+| -        | `幫助` | 顯示使用說明 |
+| -        | `清單` | 查看訂閱清單 |
+| -        | `管理` | 開啟管理頁面 |
+| -        | `指令` | 顯示可用指令 |
 
 > 中文指令不需要加 `/`，直接輸入即可（例如：`幫助`、`清單`）
+>
+> 綁定帳號請透過網頁操作，點擊「綁定 Telegram」後會自動開啟 Bot 完成綁定
 
 ---
 
@@ -163,18 +166,19 @@ uv run uvicorn src.api.main:app --reload
 
 ### 快速參考
 
-| 模組         | 端點                  | 說明           |
-| ------------ | --------------------- | -------------- |
-| 認證         | `POST /auth/register` | 註冊帳號       |
-|              | `POST /auth/login`    | 登入           |
-| 使用者       | `GET /users/me`       | 取得個人資料   |
-| 訂閱         | `GET /subscriptions`  | 列出所有訂閱   |
-|              | `POST /subscriptions` | 新增訂閱       |
-|              | `PATCH .../toggle`    | 啟用/停用訂閱  |
-| 綁定         | `GET /bindings`       | 列出所有綁定   |
-|              | `POST .../bind-code`  | 產生綁定碼     |
-| Webhook      | `POST .../setup`      | 設定 Webhook   |
-| 健康檢查     | `GET /health`         | 健康檢查       |
+| 模組     | 端點                       | 說明              |
+| -------- | -------------------------- | ----------------- |
+| 認證     | `POST /auth/register`      | 註冊帳號          |
+|          | `POST /auth/login`         | 登入              |
+| 使用者   | `GET /users/me`            | 取得個人資料      |
+| 訂閱     | `GET /subscriptions`       | 列出所有訂閱      |
+|          | `POST /subscriptions`      | 新增訂閱          |
+|          | `PATCH .../toggle`         | 啟用/停用訂閱     |
+| 綁定     | `GET /bindings/telegram`   | 查詢綁定狀態      |
+|          | `POST /bindings/telegram`  | 開始綁定（含連結）|
+|          | `DELETE /bindings/telegram`| 解除綁定          |
+| Webhook  | `POST .../setup`           | 設定 Webhook      |
+| 健康檢查 | `GET /health`              | 健康檢查          |
 
 ---
 
@@ -218,11 +222,11 @@ uv run uvicorn src.api.main:app --reload
 │   │   ├── commands/            # 平台無關的指令
 │   │   │   ├── base.py          # 指令基礎類別
 │   │   │   ├── registry.py      # 指令註冊表
-│   │   │   ├── start.py         # /start 指令
-│   │   │   ├── help.py          # /help 指令
-│   │   │   ├── bind.py          # /bind 指令
-│   │   │   ├── status.py        # /status 指令
-│   │   │   └── list.py          # /list 指令
+│   │   │   ├── start.py         # /start 指令（含自動綁定）
+│   │   │   ├── help.py          # 幫助 指令
+│   │   │   ├── list.py          # 清單 指令
+│   │   │   ├── manage.py        # 管理 指令
+│   │   │   └── command.py       # 指令 指令
 │   │   └── telegram/            # Telegram 實作
 │   │       ├── bot.py           # Bot 封裝
 │   │       ├── handler.py       # 訊息處理

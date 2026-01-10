@@ -65,9 +65,8 @@ Authorization: Bearer <token>
 |      | `/subscriptions/{id}` | PUT | ✓ | 更新訂閱 |
 |      | `/subscriptions/{id}` | DELETE | ✓ | 刪除訂閱 |
 |      | `/subscriptions/{id}/toggle` | PATCH | ✓ | 啟用/停用訂閱 |
-| 綁定 | `/bindings` | GET | ✓ | 列出所有綁定 |
-|      | `/bindings/telegram` | GET | ✓ | 取得 Telegram 綁定 |
-|      | `/bindings/telegram/code` | POST | ✓ | 產生綁定碼 |
+| 綁定 | `/bindings/telegram` | GET | ✓ | 取得 Telegram 綁定狀態 |
+|      | `/bindings/telegram` | POST | ✓ | 開始綁定（回傳綁定連結）|
 |      | `/bindings/telegram` | DELETE | ✓ | 解除綁定 |
 |      | `/bindings/telegram/toggle` | PATCH | ✓ | 啟用/停用綁定 |
 | 健康檢查 | `/health` | GET | | 健康檢查 |
@@ -268,25 +267,7 @@ Authorization: Bearer <token>
 
 ## 綁定 `/bindings`
 
-### GET `/bindings` - 列出所有綁定 🔒
-
-**Response:**
-
-```json
-[
-  {
-    "service": "telegram",
-    "is_bound": true,
-    "service_id": "123456789",
-    "enabled": true,
-    "created_at": "2025-01-10T12:00:00+08:00"
-  }
-]
-```
-
----
-
-### GET `/bindings/telegram` - 取得 Telegram 綁定 🔒
+### GET `/bindings/telegram` - 取得 Telegram 綁定狀態 🔒
 
 **Response:**
 
@@ -295,22 +276,32 @@ Authorization: Bearer <token>
   "service": "telegram",
   "is_bound": true,
   "service_id": "123456789",
-  "enabled": true
+  "enabled": true,
+  "created_at": "2025-01-10T12:00:00+08:00"
 }
 ```
 
 ---
 
-### POST `/bindings/telegram/code` - 產生綁定碼 🔒
+### POST `/bindings/telegram` - 開始 Telegram 綁定 🔒
+
+產生綁定碼並回傳 Telegram Deep Link。用戶點擊 `bind_url` 後會自動開啟 Telegram Bot 完成綁定。
 
 **Response:**
 
 ```json
 {
   "code": "ABC123",
-  "expires_in": 600
+  "expires_in": 600,
+  "bind_url": "https://t.me/YourBot?start=BIND_ABC123"
 }
 ```
+
+| 欄位 | 類型 | 說明 |
+|------|------|------|
+| `code` | string | 綁定碼（10 分鐘內有效）|
+| `expires_in` | int | 有效秒數 |
+| `bind_url` | string | Telegram 綁定連結（需設定 `TELEGRAM_BOT_USERNAME`）|
 
 ---
 

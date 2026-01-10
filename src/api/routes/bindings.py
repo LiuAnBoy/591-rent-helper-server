@@ -1,5 +1,7 @@
 """Notification bindings routes."""
 
+import os
+
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
@@ -18,32 +20,6 @@ async def get_repository() -> BindingRepository:
     """Get binding repository instance."""
     postgres = await get_postgres()
     return BindingRepository(postgres.pool)
-
-
-@router.get("", response_model=list[BindingResponse])
-async def list_bindings(current_user: CurrentUser) -> list[dict]:
-    """
-    Get all notification bindings for current user.
-
-    Requires authentication.
-    """
-    repo = await get_repository()
-
-    try:
-        bindings = await repo.get_bindings_by_user(current_user.id)
-        return [
-            {
-                "service": b.service,
-                "is_bound": b.is_bound,
-                "service_id": b.service_id if b.is_bound else None,
-                "enabled": b.enabled,
-                "created_at": b.created_at,
-            }
-            for b in bindings
-        ]
-    except Exception as e:
-        logger.error(f"Failed to get bindings: {e}")
-        raise HTTPException(status_code=500, detail="查詢綁定失敗")
 
 
 @router.get("/telegram", response_model=BindingResponse)
@@ -79,12 +55,15 @@ async def get_telegram_binding(current_user: CurrentUser) -> dict:
         raise HTTPException(status_code=500, detail="查詢綁定失敗")
 
 
-@router.post("/telegram/code", response_model=BindCodeResponse)
-async def generate_telegram_bind_code(current_user: CurrentUser) -> dict:
+@router.post("/telegram", response_model=BindCodeResponse)
+async def bind_telegram(current_user: CurrentUser) -> dict:
     """
-    Generate a Telegram bind code for current user.
+    Start Telegram binding process.
 
+    Generates a bind code and returns a deep link URL.
+    User clicks the bind_url to open Telegram and complete binding.
     The code is valid for 10 minutes.
+
     Requires authentication.
     """
     repo = await get_repository()
@@ -92,17 +71,24 @@ async def generate_telegram_bind_code(current_user: CurrentUser) -> dict:
     try:
         code = await repo.create_bind_code(current_user.id, "telegram")
         logger.info(f"Generated bind code for user {current_user.id}")
-        return {
+
+        response = {
             "code": code,
             "expires_in": repo.BIND_CODE_EXPIRY_MINUTES * 60,
         }
+
+        bot_username = os.getenv("TELEGRAM_BOT_USERNAME")
+        if bot_username:
+            response["bind_url"] = f"https://t.me/{bot_username}?start=BIND_{code}"
+
+        return response
     except Exception as e:
         logger.error(f"Failed to generate bind code: {e}")
         raise HTTPException(status_code=500, detail="產生綁定碼失敗")
 
 
 @router.delete("/telegram")
-async def delete_telegram_binding(current_user: CurrentUser) -> dict:
+async def unbind_telegram(current_user: CurrentUser) -> dict:
     """
     Delete Telegram binding for current user.
 
@@ -126,10 +112,7 @@ async def delete_telegram_binding(current_user: CurrentUser) -> dict:
 
 
 @router.patch("/telegram/toggle")
-async def toggle_telegram_binding(
-    current_user: CurrentUser,
-    enabled: bool,
-) -> dict:
+async def toggle_telegram(current_user: CurrentUser, enabled: bool) -> dict:
     """
     Enable or disable Telegram notifications.
 
