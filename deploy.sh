@@ -83,11 +83,11 @@ is_first_run() {
 # Wait for PostgreSQL to be ready
 wait_for_postgres() {
     load_env
-    local db_user=$(get_db_user)
+    db_user=$(get_db_user)
 
     log_info "Waiting for PostgreSQL to be ready..."
-    local max_attempts=30
-    local attempt=1
+    max_attempts=30
+    attempt=1
 
     while [ $attempt -le $max_attempts ]; do
         if $DOCKER_COMPOSE exec -T postgres pg_isready -U "$db_user" > /dev/null 2>&1; then
@@ -127,8 +127,8 @@ setup_env() {
 # Ensure schema_migrations table exists
 ensure_migration_table() {
     load_env
-    local db_user=$(get_db_user)
-    local db_name=$(get_db_name)
+    db_user=$(get_db_user)
+    db_name=$(get_db_name)
 
     log_info "Ensuring migration tracking table exists..."
     $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" << 'SQL'
@@ -143,8 +143,8 @@ SQL
 # Get list of applied migrations
 get_applied_migrations() {
     load_env
-    local db_user=$(get_db_user)
-    local db_name=$(get_db_name)
+    db_user=$(get_db_user)
+    db_name=$(get_db_name)
 
     $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" -t -A -c \
         "SELECT filename FROM schema_migrations ORDER BY filename;" 2>/dev/null || echo ""
@@ -153,10 +153,10 @@ get_applied_migrations() {
 # Run a single migration file
 run_migration() {
     load_env
-    local db_user=$(get_db_user)
-    local db_name=$(get_db_name)
-    local migration_file="$1"
-    local filename=$(basename "$migration_file")
+    db_user=$(get_db_user)
+    db_name=$(get_db_name)
+    migration_file="$1"
+    filename=$(basename "$migration_file")
 
     log_info "Running migration: $filename"
 
@@ -179,12 +179,12 @@ run_migrations() {
     
     ensure_migration_table
     
-    local applied=$(get_applied_migrations)
-    local pending_count=0
+    applied=$(get_applied_migrations)
+    pending_count=0
     
     # Find all .sql files in migrations folder, sorted by name
     for migration_file in $(find "$SCRIPT_DIR/migrations" -name "*.sql" -type f | sort); do
-        local filename=$(basename "$migration_file")
+        filename=$(basename "$migration_file")
         
         # Skip if already applied
         if echo "$applied" | grep -q "^${filename}$"; then
@@ -306,7 +306,7 @@ update_deployment() {
 # ============================================
 
 main() {
-    local mode="${1:-auto}"
+    mode="${1:-auto}"
     
     echo ""
     echo "======================================"
