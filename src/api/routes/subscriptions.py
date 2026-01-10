@@ -97,7 +97,7 @@ async def remove_subscription_from_redis(
                 )
 
 
-@router.post("", response_model=SubscriptionResponse, status_code=201)
+@router.post("", status_code=201)
 async def create_subscription(
     data: SubscriptionCreate,
     current_user: CurrentUser,
@@ -134,7 +134,7 @@ async def create_subscription(
         await sync_subscription_to_redis(subscription)
 
         logger.info(f"Created subscription {subscription['id']} for user {current_user.id}")
-        return subscription
+        return {"success": True}
     except Exception as e:
         logger.error(f"Failed to create subscription: {e}")
         raise HTTPException(status_code=500, detail="建立訂閱失敗")
@@ -186,7 +186,7 @@ async def get_subscription(
     return subscription
 
 
-@router.put("/{subscription_id}", response_model=SubscriptionResponse)
+@router.put("/{subscription_id}")
 async def update_subscription(
     subscription_id: int,
     data: SubscriptionUpdate,
@@ -214,7 +214,7 @@ async def update_subscription(
     # Update
     update_data = data.model_dump(exclude_unset=True)
     if not update_data:
-        return existing
+        return {"success": True}
 
     try:
         subscription = await repo.update(subscription_id, update_data)
@@ -223,17 +223,17 @@ async def update_subscription(
         await sync_subscription_to_redis(subscription)
 
         logger.info(f"Updated subscription {subscription_id}")
-        return subscription
+        return {"success": True}
     except Exception as e:
         logger.error(f"Failed to update subscription: {e}")
         raise HTTPException(status_code=500, detail="更新訂閱失敗")
 
 
-@router.delete("/{subscription_id}", status_code=204)
+@router.delete("/{subscription_id}")
 async def delete_subscription(
     subscription_id: int,
     current_user: CurrentUser,
-) -> None:
+) -> dict:
     """
     Delete a subscription.
 
@@ -259,12 +259,13 @@ async def delete_subscription(
         await remove_subscription_from_redis(existing["region"], subscription_id)
 
         logger.info(f"Deleted subscription {subscription_id}")
+        return {"success": True}
     except Exception as e:
         logger.error(f"Failed to delete subscription: {e}")
         raise HTTPException(status_code=500, detail="刪除訂閱失敗")
 
 
-@router.patch("/{subscription_id}/toggle", response_model=SubscriptionResponse)
+@router.patch("/{subscription_id}/toggle")
 async def toggle_subscription(
     subscription_id: int,
     current_user: CurrentUser,
@@ -299,4 +300,4 @@ async def toggle_subscription(
     await sync_subscription_to_redis(subscription, was_disabled=was_disabled and new_status)
 
     logger.info(f"Toggled subscription {subscription_id} to {new_status}")
-    return subscription
+    return {"success": True}

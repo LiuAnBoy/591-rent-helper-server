@@ -117,7 +117,7 @@ async def delete_telegram_binding(current_user: CurrentUser) -> dict:
             raise HTTPException(status_code=404, detail="綁定不存在")
 
         logger.info(f"Deleted telegram binding for user {current_user.id}")
-        return {"status": True, "message": "已解除 Telegram 綁定"}
+        return {"success": True}
     except HTTPException:
         raise
     except Exception as e:
@@ -150,9 +150,8 @@ async def toggle_telegram_binding(
         if not updated:
             raise HTTPException(status_code=500, detail="更新失敗")
 
-        status_text = "已啟用" if enabled else "已暫停"
         logger.info(f"Toggled telegram binding for user {current_user.id}: {enabled}")
-        return {"status": True, "message": f"Telegram 通知{status_text}"}
+        return {"success": True}
     except HTTPException:
         raise
     except Exception as e:

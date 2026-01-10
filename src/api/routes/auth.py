@@ -21,7 +21,7 @@ async def get_repository() -> UserRepository:
     return UserRepository(postgres.pool)
 
 
-@router.post("/register", response_model=UserResponse, status_code=201)
+@router.post("/register", status_code=201)
 async def register(data: UserCreate) -> dict:
     """
     Register a new user.
@@ -30,7 +30,7 @@ async def register(data: UserCreate) -> dict:
         data: User registration data (email, password)
 
     Returns:
-        Created user data
+        Success status
     """
     repo = await get_repository()
 
@@ -45,14 +45,7 @@ async def register(data: UserCreate) -> dict:
 
         logger.info(f"New user registered: {data.email}")
 
-        return {
-            "id": user.id,
-            "email": user.email,
-            "role": user.role,
-            "enabled": user.enabled,
-            "created_at": user.created_at,
-            "updated_at": user.updated_at,
-        }
+        return {"success": True}
 
     except HTTPException:
         raise
@@ -61,7 +54,7 @@ async def register(data: UserCreate) -> dict:
         raise HTTPException(status_code=500, detail="註冊失敗")
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 async def login(data: UserLogin) -> dict:
     """
     Login and get access token.
@@ -70,7 +63,7 @@ async def login(data: UserLogin) -> dict:
         data: Login credentials (email, password)
 
     Returns:
-        Access token and expiry info
+        Access token
     """
     repo = await get_repository()
 
@@ -88,11 +81,7 @@ async def login(data: UserLogin) -> dict:
 
         logger.info(f"User logged in: {data.email}")
 
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "expires_in": expires_in,
-        }
+        return {"token": token}
 
     except HTTPException:
         raise

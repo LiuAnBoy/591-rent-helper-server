@@ -6,6 +6,15 @@
 - **認證方式**: Bearer Token (JWT)
 - **Content-Type**: `application/json`
 
+## 統一回覆格式
+
+| 操作類型 | 成功回覆 | 失敗回覆 |
+| -------- | -------- | -------- |
+| 註冊 | `{"success": true}` | `{"detail": "錯誤訊息"}` |
+| 登入 | `{"token": "..."}` | `{"detail": "錯誤訊息"}` |
+| 查詢資料 | 直接回傳資料 | `{"detail": "錯誤訊息"}` |
+| 新增/修改/刪除 | `{"success": true}` | `{"detail": "錯誤訊息"}` |
+
 ---
 
 ## 認證 `/auth`
@@ -26,19 +35,13 @@ curl -X POST http://localhost:8000/auth/register \
 **Response (201):**
 
 ```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "role": "user",
-  "enabled": true,
-  "created_at": "2025-01-10T12:00:00+08:00"
-}
+{ "success": true }
 ```
 
 **Error (400):**
 
 ```json
-{ "detail": "Email already registered" }
+{ "detail": "此 Email 已被註冊" }
 ```
 
 ---
@@ -59,16 +62,13 @@ curl -X POST http://localhost:8000/auth/login \
 **Response (200):**
 
 ```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer"
-}
+{ "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
 ```
 
 **Error (401):**
 
 ```json
-{ "detail": "Invalid email or password" }
+{ "detail": "Email 或密碼錯誤" }
 ```
 
 ---
@@ -126,24 +126,7 @@ curl -X POST http://localhost:8000/subscriptions \
 **Response (201):**
 
 ```json
-{
-  "id": 1,
-  "user_id": 1,
-  "name": "台北套房",
-  "region": 1,
-  "section": [5, 6, 7],
-  "kind": [2, 3],
-  "price_min": 8000,
-  "price_max": 15000,
-  "area_min": 5.0,
-  "area_max": 15.0,
-  "layout": [1],
-  "exclude_rooftop": true,
-  "gender": null,
-  "pet_required": false,
-  "enabled": true,
-  "created_at": "2025-01-10T12:00:00+08:00"
-}
+{ "success": true }
 ```
 
 ---
@@ -229,12 +212,7 @@ curl -X PUT http://localhost:8000/subscriptions/1 \
 **Response (200):**
 
 ```json
-{
-  "id": 1,
-  "name": "台北套房-更新",
-  "price_max": 20000,
-  ...
-}
+{ "success": true }
 ```
 
 ---
@@ -248,7 +226,11 @@ curl -X DELETE http://localhost:8000/subscriptions/1 \
   -H "Authorization: Bearer <token>"
 ```
 
-**Response (204):** No Content
+**Response (200):**
+
+```json
+{ "success": true }
+```
 
 ---
 
@@ -264,11 +246,7 @@ curl -X PATCH http://localhost:8000/subscriptions/1/toggle \
 **Response (200):**
 
 ```json
-{
-  "id": 1,
-  "enabled": false,
-  ...
-}
+{ "success": true }
 ```
 
 ---
@@ -323,17 +301,17 @@ curl -X GET http://localhost:8000/bindings/telegram \
 **Error (404):**
 
 ```json
-{ "detail": "Telegram binding not found" }
+{ "detail": "綁定不存在" }
 ```
 
 ---
 
-### POST `/bindings/telegram/bind-code` - 產生綁定碼
+### POST `/bindings/telegram/code` - 產生綁定碼
 
 **Request:**
 
 ```bash
-curl -X POST http://localhost:8000/bindings/telegram/bind-code \
+curl -X POST http://localhost:8000/bindings/telegram/code \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -341,9 +319,8 @@ curl -X POST http://localhost:8000/bindings/telegram/bind-code \
 
 ```json
 {
-  "bind_code": "ABC123",
-  "expires_in": 300,
-  "message": "請在 Telegram 對 Bot 發送: /bind ABC123"
+  "code": "ABC123",
+  "expires_in": 600
 }
 ```
 
@@ -361,28 +338,24 @@ curl -X DELETE http://localhost:8000/bindings/telegram \
 **Response (200):**
 
 ```json
-{ "message": "Telegram binding deleted" }
+{ "success": true }
 ```
 
 ---
 
-### POST `/bindings/telegram/toggle` - 啟用/停用綁定
+### PATCH `/bindings/telegram/toggle` - 啟用/停用綁定
 
 **Request:**
 
 ```bash
-curl -X POST http://localhost:8000/bindings/telegram/toggle \
+curl -X PATCH http://localhost:8000/bindings/telegram/toggle?enabled=false \
   -H "Authorization: Bearer <token>"
 ```
 
 **Response (200):**
 
 ```json
-{
-  "id": 1,
-  "enabled": false,
-  ...
-}
+{ "success": true }
 ```
 
 ---
