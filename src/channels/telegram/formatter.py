@@ -92,15 +92,24 @@ class TelegramFormatter(BaseFormatter):
 
     def _format_bind_success(self, result: CommandResult) -> str:
         """Format bind success message."""
-        return "\n".join([
+        web_url = result.data.get("web_url")
+
+        lines = [
             "✅ 綁定成功！",
             "",
             "您現在可以接收租屋通知了。",
             "當有符合訂閱條件的新物件時，會自動推播到這裡。",
             "",
-            "輸入 /status 查看綁定狀態",
-            "輸入 /list 查看訂閱清單",
-        ])
+            "輸入 清單 查看訂閱清單",
+        ]
+
+        if web_url:
+            lines.extend([
+                "",
+                f'🔗 <a href="{web_url}">前往網站設定篩選條件</a>',
+            ])
+
+        return "\n".join(lines)
 
     def _format_status_bound(self, result: CommandResult) -> str:
         """Format bound status message."""

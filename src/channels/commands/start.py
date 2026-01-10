@@ -68,6 +68,8 @@ class StartCommand(BaseCommand):
         Returns:
             Binding success or failure result
         """
+        import os
+
         if not self._pool:
             logger.error("Database pool not available")
             return CommandResult.fail("系統錯誤，請稍後再試")
@@ -90,6 +92,7 @@ class StartCommand(BaseCommand):
                 return CommandResult.ok(
                     message="綁定成功",
                     title="bind_success",
+                    web_url=os.getenv("WEB_APP_URL"),
                 )
             else:
                 return CommandResult.fail("綁定碼無效或已過期")
