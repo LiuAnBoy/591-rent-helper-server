@@ -33,17 +33,16 @@ class StartCommand(BaseCommand):
         Returns:
             Welcome message with user ID and available commands
         """
-        commands = [
-            {"name": "start", "desc": "開始使用"},
-            {"name": "bind", "desc": "綁定帳號", "usage": "[綁定碼]"},
-            {"name": "清單", "desc": "訂閱清單"},
-            {"name": "幫助", "desc": "顯示說明"},
-            {"name": "管理", "desc": "管理頁面"},
+        steps = [
+            "請先前往網頁註冊",
+            "登入並綁定 Telegram",
+            "回到這裡輸入 /bind [綁定碼]",
+            "回到網頁設定篩選條件",
         ]
 
         return CommandResult.ok(
-            message="Welcome to 591 Rental Notification Bot!",
+            message="收取通知步驟",
             title="welcome",
             user_id=user_id,
-            commands=commands,
+            steps=steps,
         )

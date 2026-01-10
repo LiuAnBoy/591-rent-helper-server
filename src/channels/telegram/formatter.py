@@ -37,6 +37,7 @@ class TelegramFormatter(BaseFormatter):
             "list_subscriptions": self._format_list_subscriptions,
             "list_empty": self._format_list_empty,
             "manage": self._format_manage,
+            "command_list": self._format_command_list,
         }
 
         formatter = formatters.get(title)
@@ -51,24 +52,19 @@ class TelegramFormatter(BaseFormatter):
 
     def _format_welcome(self, result: CommandResult) -> str:
         """Format welcome message."""
-        commands = result.data.get("commands", [])
+        steps = result.data.get("steps", [])
 
         lines = [
             "👋 歡迎使用 591 租屋通知機器人！",
             "",
-            "📋 可用指令：",
+            "📋 收取通知步驟：",
         ]
 
-        for cmd in commands:
-            name = cmd["name"]
-            usage = f" {cmd.get('usage', '')}" if cmd.get("usage") else ""
-            # Don't add slash for Chinese command names
-            prefix = "" if ord(name[0]) > 0x4E00 else "/"
-            lines.append(f"{prefix}{name}{usage} - {cmd['desc']}")
+        for i, step in enumerate(steps, 1):
+            emoji = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"][i - 1] if i <= 5 else f"{i}."
+            lines.append(f"{emoji} {step}")
 
-        web_app_url = os.getenv("WEB_APP_URL", "")
-        if web_app_url:
-            lines.append(f'\n🌐 網站：{web_app_url}')
+        lines.append("\n💡 輸入 幫助 或 指令 查看更多")
 
         return "\n".join(lines)
 
@@ -202,6 +198,18 @@ class TelegramFormatter(BaseFormatter):
     def _format_manage(self, result: CommandResult) -> str:
         """Format manage message."""
         return "請點擊下方按鈕開啟管理頁面"
+
+    def _format_command_list(self, result: CommandResult) -> str:
+        """Format command list message."""
+        commands = result.data.get("commands", [])
+
+        lines = ["📋 可用指令：", ""]
+
+        for cmd in commands:
+            name = cmd["name"]
+            lines.append(f"{name} - {cmd['desc']}")
+
+        return "\n".join(lines)
 
     def format_listing(self, listing: Any) -> str:
         """

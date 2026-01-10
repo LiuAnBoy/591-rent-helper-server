@@ -16,6 +16,7 @@ from src.channels.commands.bind import BindCommand
 from src.channels.commands.status import StatusCommand
 from src.channels.commands.list import ListCommand
 from src.channels.commands.manage import ManageCommand
+from src.channels.commands.command import CommandListCommand
 
 
 # Command registry: name -> command class
@@ -35,6 +36,8 @@ COMMANDS: dict[str, type["BaseCommand"]] = {
     "清單": ListCommand,
     # Manage
     "管理": ManageCommand,
+    # Command list
+    "指令": CommandListCommand,
 }
 
 

@@ -140,7 +140,13 @@ class TelegramHandler:
         if not web_app_url:
             return None
 
-        # Commands that need a management button
+        # Commands that need a button
+        if title == "welcome":
+            keyboard = [[
+                InlineKeyboardButton("📝 前往註冊", url=f"{web_app_url}/register")
+            ]]
+            return InlineKeyboardMarkup(keyboard)
+
         if title in ("list_subscriptions", "list_empty", "manage"):
             keyboard = [[
                 InlineKeyboardButton("📱 開啟管理頁面", url=web_app_url)
