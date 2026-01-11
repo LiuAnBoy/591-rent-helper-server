@@ -4,6 +4,7 @@ FastAPI Application.
 Main entry point for the API server.
 """
 
+import logging
 import sys
 from contextlib import asynccontextmanager
 
@@ -18,6 +19,28 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+
+class InterceptHandler(logging.Handler):
+    """Intercept standard logging and redirect to loguru."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Get corresponding loguru level
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        # Find caller from where originated the logged message
+        frame, depth = logging.currentframe(), 2
+        while frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.bind(module="Server").opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
+
+
 # Configure loguru format
 logger.remove()
 logger.add(
@@ -25,6 +48,11 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[module]: <12}</cyan> | <level>{message}</level>",
     level="DEBUG",
 )
+
+# Intercept uvicorn logs
+logging.getLogger("uvicorn").handlers = [InterceptHandler()]
+logging.getLogger("uvicorn.access").handlers = [InterceptHandler()]
+logging.getLogger("uvicorn.error").handlers = [InterceptHandler()]
 
 log = logger.bind(module="App")
 
