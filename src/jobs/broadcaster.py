@@ -82,7 +82,7 @@ class Broadcaster:
                 disable_web_page_preview=False,
             )
 
-            logger.info(f"Sent Telegram notification to {chat_id} for listing {listing.id}")
+            logger.info(f"Sent Telegram notification to {chat_id} for object {listing.id}")
             return True
 
         except Exception as e:

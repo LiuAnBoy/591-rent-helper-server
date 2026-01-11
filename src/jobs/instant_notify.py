@@ -209,7 +209,7 @@ class InstantNotifier:
                     sort="posttime_desc",
                     max_items=self.FETCH_COUNT,
                 )
-                logger.info(f"Crawled {len(listings)} listings for region {region}")
+                logger.info(f"Crawled {len(listings)} objects for region {region}")
 
                 # Save to DB
                 repo = ObjectRepository(self._postgres.pool)
@@ -315,7 +315,7 @@ class InstantNotifier:
                 max_items=self.FETCH_COUNT,
             )
 
-            logger.info(f"Crawled {len(listings)} listings for region {region}")
+            logger.info(f"Crawled {len(listings)} objects for region {region}")
 
             # Save to DB and filter new ones
             repo = ObjectRepository(self._postgres.pool)

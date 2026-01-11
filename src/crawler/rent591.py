@@ -134,7 +134,7 @@ class Rent591Crawler:
             all_listings.extend(listings)
 
             logger.info(
-                f"Page {page_num}: Found {len(listings)} listings "
+                f"Page {page_num}: Found {len(listings)} objects "
                 f"(Total so far: {len(all_listings)}/{total})"
             )
 
@@ -162,7 +162,7 @@ class Rent591Crawler:
             logger.debug(f"Waiting {delay:.1f}s before next page...")
             await asyncio.sleep(delay)
 
-        logger.info(f"Crawling complete. Total listings: {len(all_listings)}")
+        logger.info(f"Crawling complete. Total objects: {len(all_listings)}")
         return all_listings
 
     def _build_url(

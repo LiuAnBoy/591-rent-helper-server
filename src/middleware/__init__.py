@@ -7,6 +7,7 @@ Exports middleware setup functions for FastAPI application.
 from fastapi import FastAPI
 
 from src.middleware.cors import setup_cors
+from src.middleware.logging import setup_logging
 
 
 def setup_middleware(app: FastAPI) -> None:
@@ -17,3 +18,4 @@ def setup_middleware(app: FastAPI) -> None:
         app: FastAPI application instance
     """
     setup_cors(app)
+    setup_logging(app)

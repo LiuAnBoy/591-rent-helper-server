@@ -4,7 +4,7 @@ FastAPI Application.
 Main entry point for the API server.
 """
 
-import os
+import sys
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -17,6 +17,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+# Configure loguru format
+logger.remove()
+logger.add(
+    sys.stderr,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+    level="DEBUG",
+)
 
 from src.api.routes import (
     auth_router,

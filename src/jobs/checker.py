@@ -562,7 +562,7 @@ class Checker:
             )
 
             if not listings:
-                logger.warning("No listings fetched")
+                logger.warning("No objects fetched")
                 await self._postgres.finish_crawler_run(
                     run_id=run_id,
                     status="success",
@@ -579,7 +579,7 @@ class Checker:
                     "initialized_subs": [],
                 }
 
-            logger.info(f"Fetched {len(listings)} listings from list page")
+            logger.info(f"Fetched {len(listings)} objects")
 
             # Step 2: Parse is_rooftop and save to PostgreSQL + Redis
             new_count = 0
@@ -598,7 +598,7 @@ class Checker:
 
             # Step 3: Find new IDs (not in seen set)
             new_ids = await self._redis.get_new_ids(region, fetched_ids)
-            logger.info(f"Found {len(new_ids)} new listings")
+            logger.info(f"Found {len(new_ids)} new objects")
 
             # Step 4: Add to seen set
             await self._redis.add_seen_ids(region, fetched_ids)

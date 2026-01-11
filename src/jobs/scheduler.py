@@ -106,9 +106,9 @@ def setup_jobs() -> None:
     crawler = settings.crawler
 
     logger.info(
-        f"Scheduler config: daytime={crawler.interval_minutes}min (interval), "
-        f"night={crawler.night_interval_minutes}min (fixed) "
-        f"(night: {crawler.night_start_hour}:00-{crawler.night_end_hour}:00)"
+        f"Scheduler started: "
+        f"{crawler.night_end_hour:02d}:00-{crawler.night_start_hour:02d}:00 every {crawler.interval_minutes}min, "
+        f"{crawler.night_start_hour:02d}:00-{crawler.night_end_hour:02d}:00 every {crawler.night_interval_minutes}min"
     )
 
     # Daytime job: interval-based scheduling (skips during night hours)
