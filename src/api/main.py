@@ -51,9 +51,10 @@ logger.add(
 )
 
 # Intercept uvicorn logs
-logging.getLogger("uvicorn").handlers = [InterceptHandler()]
-logging.getLogger("uvicorn.access").handlers = [InterceptHandler()]
-logging.getLogger("uvicorn.error").handlers = [InterceptHandler()]
+for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+    uv_logger = logging.getLogger(name)
+    uv_logger.handlers = [InterceptHandler()]
+    uv_logger.propagate = False
 
 log = logger.bind(module="App")
 
