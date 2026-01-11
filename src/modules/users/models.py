@@ -7,7 +7,7 @@ Pydantic models for user authentication and profile.
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field
 
 
 class User(BaseModel):
@@ -18,39 +18,6 @@ class User(BaseModel):
     email: Optional[str] = None
     role: str = "user"
     enabled: bool = True
-    created_at: datetime
-    updated_at: datetime
-
-
-class UserCreate(BaseModel):
-    """Model for user registration."""
-
-    email: EmailStr = Field(..., description="User email address")
-    password: str = Field(..., min_length=6, description="Password (min 6 characters)")
-
-
-class UserLogin(BaseModel):
-    """Model for user login."""
-
-    email: EmailStr = Field(..., description="User email address")
-    password: str = Field(..., description="Password")
-
-
-class TokenResponse(BaseModel):
-    """Response model for authentication tokens."""
-
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int = Field(description="Token expiry in seconds")
-
-
-class UserResponse(BaseModel):
-    """Response model for user data (without password)."""
-
-    id: int
-    email: str
-    role: str
-    enabled: bool
     created_at: datetime
     updated_at: datetime
 
