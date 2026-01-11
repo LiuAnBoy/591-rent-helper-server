@@ -71,7 +71,7 @@ class UserRepository:
         Returns:
             Tuple of (token, expires_in_seconds)
         """
-        expires_in = 86400  # 24 hours
+        expires_in = 604800  # 7 days
         expire = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
         payload = {
