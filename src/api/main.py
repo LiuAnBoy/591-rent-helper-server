@@ -46,7 +46,7 @@ logger.configure(extra={"module": "Server"})
 logger.remove()
 logger.add(
     sys.stderr,
-    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[module]: <12}</cyan> | <level>{message}</level>",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[module]: <14}</cyan> | <level>{message}</level>",
     level="DEBUG",
 )
 
