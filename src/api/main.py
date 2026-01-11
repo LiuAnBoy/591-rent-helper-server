@@ -36,12 +36,13 @@ class InterceptHandler(logging.Handler):
             frame = frame.f_back
             depth += 1
 
-        logger.bind(module="Server").opt(depth=depth, exception=record.exc_info).log(
+        logger.opt(depth=depth, exception=record.exc_info).log(
             level, record.getMessage()
         )
 
 
-# Configure loguru format
+# Configure loguru format with default module
+logger.configure(extra={"module": "Server"})
 logger.remove()
 logger.add(
     sys.stderr,
