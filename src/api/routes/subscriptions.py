@@ -14,6 +14,7 @@ from src.modules.subscriptions import (
     SubscriptionRepository,
 )
 from src.modules.users import UserRepository
+from src.modules.providers import sync_user_subscriptions_to_redis
 
 router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 
@@ -22,44 +23,6 @@ async def get_repository() -> SubscriptionRepository:
     """Get subscription repository instance."""
     postgres = await get_postgres()
     return SubscriptionRepository(postgres.pool)
-
-
-async def sync_subscription_to_redis(
-    subscription: dict,
-    was_disabled: bool = False,
-    max_retries: int = 3,
-    retry_delay: float = 0.5
-) -> None:
-    """
-    Sync a subscription to Redis cache with retry mechanism.
-
-    Args:
-        subscription: Subscription data
-        was_disabled: If True, subscription was previously disabled (re-enabling)
-        max_retries: Maximum retry attempts
-        retry_delay: Initial delay between retries (exponential backoff)
-    """
-    import asyncio
-    from loguru import logger
-
-    for attempt in range(max_retries):
-        try:
-            redis = await get_redis()
-            await redis.sync_subscription(subscription, was_disabled=was_disabled)
-            return
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = retry_delay * (2 ** attempt)
-                logger.warning(
-                    f"Redis sync failed (attempt {attempt + 1}/{max_retries}): {e}. "
-                    f"Retrying in {wait_time}s..."
-                )
-                await asyncio.sleep(wait_time)
-            else:
-                logger.error(
-                    f"Redis sync failed after {max_retries} attempts: {e}. "
-                    f"Subscription {subscription.get('id')} may be out of sync."
-                )
 
 
 async def remove_subscription_from_redis(
@@ -133,8 +96,8 @@ async def create_subscription(
             data=data.model_dump()
         )
 
-        # Sync to Redis
-        await sync_subscription_to_redis(subscription)
+        # Sync all user subscriptions to Redis (includes provider info)
+        await sync_user_subscriptions_to_redis(current_user.id)
 
         logger.info(f"Created subscription {subscription['id']} for user {current_user.id}")
 
@@ -246,8 +209,8 @@ async def update_subscription(
     try:
         subscription = await repo.update(subscription_id, update_data)
 
-        # Sync to Redis
-        await sync_subscription_to_redis(subscription)
+        # Sync all user subscriptions to Redis (includes provider info)
+        await sync_user_subscriptions_to_redis(current_user.id)
 
         logger.info(f"Updated subscription {subscription_id}")
         return {"success": True}
@@ -305,7 +268,11 @@ async def toggle_subscription(
     Args:
         subscription_id: Subscription ID
     """
+    import asyncio
+    from src.modules.providers import UserProviderRepository
+
     repo = await get_repository()
+    postgres = await get_postgres()
 
     # Check ownership
     existing = await repo.get_by_id(subscription_id)
@@ -323,8 +290,31 @@ async def toggle_subscription(
         {"enabled": new_status}
     )
 
-    # Sync to Redis (pass was_disabled to trigger re-initialization if re-enabling)
-    await sync_subscription_to_redis(subscription, was_disabled=was_disabled and new_status)
+    # Sync all user subscriptions to Redis (includes provider info)
+    await sync_user_subscriptions_to_redis(current_user.id)
+
+    # If re-enabling, trigger instant notification
+    if was_disabled and new_status:
+        provider_repo = UserProviderRepository(postgres.pool)
+        providers = await provider_repo.get_by_user(current_user.id)
+
+        active_provider = next(
+            (p for p in providers if p.notify_enabled),
+            None
+        )
+
+        if active_provider:
+            from src.jobs.instant_notify import notify_for_new_subscription
+
+            asyncio.create_task(
+                notify_for_new_subscription(
+                    user_id=current_user.id,
+                    subscription=subscription,
+                    service=active_provider.provider,
+                    service_id=active_provider.provider_id,
+                )
+            )
+            logger.info(f"Triggered instant notify for re-enabled subscription {subscription_id}")
 
     logger.info(f"Toggled subscription {subscription_id} to {new_status}")
     return {"success": True}

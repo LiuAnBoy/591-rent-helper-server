@@ -97,6 +97,177 @@ class InstantNotifier:
             logger.error(f"Instant notify failed for subscription {sub_id}: {e}")
             return {"checked": 0, "matched": 0, "notified": 0, "error": str(e)}
 
+    async def notify_for_subscriptions_batch(
+        self,
+        user_id: int,
+        subscriptions: list[dict],
+        service: str = "telegram",
+        service_id: str = None,
+    ) -> dict:
+        """
+        Notify for multiple subscriptions efficiently.
+
+        Groups by region and fetches data once per region.
+
+        Args:
+            user_id: User ID
+            subscriptions: List of subscription dicts
+            service: Notification service
+            service_id: Service user ID
+
+        Returns:
+            Aggregated result dict
+        """
+        await self._ensure_connections()
+
+        if not subscriptions:
+            return {"checked": 0, "matched": 0, "notified": 0}
+
+        # Group subscriptions by region
+        by_region: dict[int, list[dict]] = {}
+        for sub in subscriptions:
+            region = sub.get("region")
+            if region:
+                if region not in by_region:
+                    by_region[region] = []
+                by_region[region].append(sub)
+
+        logger.info(
+            f"Batch notify for user {user_id}: "
+            f"{len(subscriptions)} subscriptions across {len(by_region)} regions"
+        )
+
+        total_checked = 0
+        total_matched = 0
+        total_notified = 0
+
+        # Process each region once
+        for region, region_subs in by_region.items():
+            try:
+                result = await self._notify_region_batch(
+                    region, region_subs, service, service_id
+                )
+                total_checked += result["checked"]
+                total_matched += result["matched"]
+                total_notified += result["notified"]
+
+                # Mark all subscriptions as initialized
+                for sub in region_subs:
+                    await self._redis.mark_subscription_initialized(sub["id"])
+
+            except Exception as e:
+                logger.error(f"Batch notify failed for region {region}: {e}")
+
+        logger.info(
+            f"Batch notify completed for user {user_id}: "
+            f"checked={total_checked}, matched={total_matched}, notified={total_notified}"
+        )
+
+        return {
+            "checked": total_checked,
+            "matched": total_matched,
+            "notified": total_notified,
+        }
+
+    async def _notify_region_batch(
+        self,
+        region: int,
+        subscriptions: list[dict],
+        service: str,
+        service_id: str,
+    ) -> dict:
+        """
+        Notify for multiple subscriptions in the same region.
+
+        Fetches objects once and matches against all subscriptions.
+
+        Args:
+            region: Region code
+            subscriptions: List of subscriptions for this region
+            service: Notification service
+            service_id: Service user ID
+
+        Returns:
+            Result dict
+        """
+        # Check if region has existing data
+        has_data = await self._redis.has_seen_ids(region)
+
+        if has_data:
+            # Region has data - fetch from DB
+            repo = ObjectRepository(self._postgres.pool)
+            objects = await repo.get_latest_by_region(region, self.FETCH_COUNT)
+            logger.info(f"Found {len(objects)} objects in DB for region {region}")
+        else:
+            # Region has no data - need to crawl
+            crawler = Rent591Crawler(headless=True)
+            await crawler.start()
+
+            try:
+                listings = await crawler.fetch_listings(
+                    region=region,
+                    sort="posttime_desc",
+                    max_items=self.FETCH_COUNT,
+                )
+                logger.info(f"Crawled {len(listings)} listings for region {region}")
+
+                # Save to DB
+                repo = ObjectRepository(self._postgres.pool)
+                all_ids = set()
+
+                for listing in listings:
+                    all_ids.add(listing.id)
+                    await repo.save(listing)
+
+                # Add to seen_ids
+                if all_ids:
+                    await self._redis.add_seen_ids(region, all_ids)
+
+                # Convert to dict for matching
+                objects = [self._rental_object_to_dict(obj) for obj in listings]
+
+            finally:
+                await crawler.close()
+
+        # Match objects against ALL subscriptions for this region
+        total_matched = 0
+        total_notified = 0
+
+        for sub in subscriptions:
+            sub_name = sub.get("name", f"訂閱 {sub.get('id')}")
+            matched_objects = []
+
+            for obj in objects:
+                if self._matches_subscription(obj, sub):
+                    matched_objects.append(obj)
+
+            total_matched += len(matched_objects)
+
+            # Send notifications for matched objects
+            if matched_objects and service_id:
+                for obj in matched_objects:
+                    try:
+                        rental_obj = self._dict_to_rental_object(obj)
+                        await self._broadcaster.send_notification(
+                            service=service,
+                            service_id=service_id,
+                            listing=rental_obj,
+                            subscription_name=sub_name,
+                        )
+                        total_notified += 1
+                    except Exception as e:
+                        logger.error(f"Failed to notify for object {obj.get('id')}: {e}")
+
+            logger.debug(
+                f"Subscription {sub.get('id')}: matched {len(matched_objects)} objects"
+            )
+
+        return {
+            "checked": len(objects),
+            "matched": total_matched,
+            "notified": total_notified,
+        }
+
     async def _notify_from_db(
         self,
         subscription: dict,
@@ -364,4 +535,30 @@ async def notify_for_new_subscription(
     notifier = get_instant_notifier()
     return await notifier.notify_for_subscription(
         user_id, subscription, service, service_id
+    )
+
+
+async def notify_for_subscriptions_batch(
+    user_id: int,
+    subscriptions: list[dict],
+    service: str = "telegram",
+    service_id: str = None,
+) -> dict:
+    """
+    Notify for multiple subscriptions efficiently.
+
+    Groups subscriptions by region and fetches data once per region.
+
+    Args:
+        user_id: User ID
+        subscriptions: List of subscription dicts
+        service: Notification service
+        service_id: Service user ID
+
+    Returns:
+        Result dict with aggregated stats
+    """
+    notifier = get_instant_notifier()
+    return await notifier.notify_for_subscriptions_batch(
+        user_id, subscriptions, service, service_id
     )

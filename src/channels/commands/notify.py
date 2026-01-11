@@ -133,24 +133,23 @@ class ResumeCommand(BaseCommand):
 
         logger.info(f"Resumed notifications for user {provider.user_id} ({service}:{user_id})")
 
-        # Trigger instant notification for all enabled subscriptions
+        # Trigger instant notification for all enabled subscriptions (batch mode)
         sub_repo = SubscriptionRepository(self._pool)
         subscriptions = await sub_repo.get_by_user(provider.user_id, enabled_only=True)
 
         if subscriptions:
-            from src.jobs.instant_notify import notify_for_new_subscription
+            from src.jobs.instant_notify import notify_for_subscriptions_batch
 
-            for sub in subscriptions:
-                asyncio.create_task(
-                    notify_for_new_subscription(
-                        user_id=provider.user_id,
-                        subscription=sub,
-                        service=service,
-                        service_id=user_id,
-                    )
+            asyncio.create_task(
+                notify_for_subscriptions_batch(
+                    user_id=provider.user_id,
+                    subscriptions=subscriptions,
+                    service=service,
+                    service_id=user_id,
                 )
+            )
 
-            logger.info(f"Triggered instant notify for {len(subscriptions)} subscriptions")
+            logger.info(f"Triggered batch instant notify for {len(subscriptions)} subscriptions")
 
         return CommandResult.ok(
             message="已恢復通知。有新物件時會立即通知你！",

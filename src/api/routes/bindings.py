@@ -51,25 +51,24 @@ async def toggle_telegram(current_user: CurrentUser, enabled: bool) -> dict:
         # Sync subscriptions to Redis (updates enabled status in cached subscriptions)
         await sync_user_subscriptions_to_redis(current_user.id)
 
-        # Trigger instant notification when enabling notifications
+        # Trigger instant notification when enabling notifications (batch mode)
         if enabled:
             postgres = await get_postgres()
             sub_repo = SubscriptionRepository(postgres.pool)
             subscriptions = await sub_repo.get_by_user(current_user.id, enabled_only=True)
 
             if subscriptions:
-                from src.jobs.instant_notify import notify_for_new_subscription
+                from src.jobs.instant_notify import notify_for_subscriptions_batch
 
-                for sub in subscriptions:
-                    asyncio.create_task(
-                        notify_for_new_subscription(
-                            user_id=current_user.id,
-                            subscription=sub,
-                            service="telegram",
-                            service_id=telegram_provider.provider_id,
-                        )
+                asyncio.create_task(
+                    notify_for_subscriptions_batch(
+                        user_id=current_user.id,
+                        subscriptions=subscriptions,
+                        service="telegram",
+                        service_id=telegram_provider.provider_id,
                     )
-                logger.info(f"Triggered instant notify for {len(subscriptions)} subscriptions")
+                )
+                logger.info(f"Triggered batch instant notify for {len(subscriptions)} subscriptions")
 
         return {"success": True}
     except HTTPException:
