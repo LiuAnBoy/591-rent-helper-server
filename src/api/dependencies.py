@@ -59,7 +59,7 @@ async def get_current_user(
         )
 
     # Get user from database
-    user_id = int(payload.get("sub", 0))
+    user_id = int(payload.get("id", 0))
     user = await repo.get_by_id(user_id)
 
     if not user:

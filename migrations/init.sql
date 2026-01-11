@@ -40,8 +40,9 @@ CREATE TRIGGER update_role_limits_updated_at
 -- ============================================
 CREATE TABLE IF NOT EXISTS users (
     id          SERIAL PRIMARY KEY,
-    email       VARCHAR(255) UNIQUE NOT NULL,
-    password    VARCHAR(255) NOT NULL,
+    name        VARCHAR(100),                    -- 顯示名稱 (從 provider 取得)
+    email       VARCHAR(255) UNIQUE,             -- 可選，傳統登入用
+    password    VARCHAR(255),                    -- 可選，傳統登入用
     role        VARCHAR(20) DEFAULT 'user' REFERENCES role_limits(role),
     enabled     BOOLEAN DEFAULT TRUE,
     created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -56,29 +57,27 @@ CREATE TRIGGER update_users_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================
--- 3. Notification Bindings (通知綁定表)
+-- 3. User Providers (使用者登入與通知綁定)
+--    合併 identity + notification 功能
 -- ============================================
-CREATE TABLE IF NOT EXISTS notification_bindings (
-    id                   SERIAL PRIMARY KEY,
-    user_id              INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    service              VARCHAR(32) NOT NULL,  -- 'telegram', 'line', 'discord'
-    service_id           VARCHAR(128),          -- chat_id or user_id (NULL during bind code phase)
-    bind_code            VARCHAR(64),
-    bind_code_expires_at TIMESTAMP WITH TIME ZONE,
-    enabled              BOOLEAN DEFAULT TRUE,
-    created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(user_id, service)
+CREATE TABLE IF NOT EXISTS user_providers (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider        VARCHAR(20) NOT NULL,        -- 'telegram', 'line', 'discord', 'google'
+    provider_id     VARCHAR(100) NOT NULL,       -- 平台用戶 ID
+    provider_data   JSONB DEFAULT '{}',          -- 額外資料 (username, avatar, first_name...)
+    notify_enabled  BOOLEAN DEFAULT TRUE,        -- 是否接收通知
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(provider, provider_id)                -- 同平台同 ID 只能綁一個帳號
 );
 
-CREATE INDEX IF NOT EXISTS idx_notification_bindings_user_id ON notification_bindings(user_id);
-CREATE INDEX IF NOT EXISTS idx_notification_bindings_service ON notification_bindings(service);
--- Partial unique index: only enforce uniqueness when service_id is not null
-CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_bindings_service_service_id
-ON notification_bindings(service, service_id) WHERE service_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_user_providers_user_id ON user_providers(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_providers_provider ON user_providers(provider);
+CREATE INDEX IF NOT EXISTS idx_user_providers_lookup ON user_providers(provider, provider_id);
 
-CREATE TRIGGER update_notification_bindings_updated_at
-    BEFORE UPDATE ON notification_bindings
+CREATE TRIGGER update_user_providers_updated_at
+    BEFORE UPDATE ON user_providers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================
@@ -312,13 +311,14 @@ SELECT
     s.name,
     s.region,
     s.section,
-    u.email as user_email,
+    u.id as user_id,
+    u.name as user_name,
     COUNT(no.id) as total_notified,
     MAX(no.notified_at) as last_notified_at
 FROM subscriptions s
 JOIN users u ON s.user_id = u.id
 LEFT JOIN notified_objects no ON s.id = no.subscription_id
-GROUP BY s.id, s.name, s.region, s.section, u.email;
+GROUP BY s.id, s.name, s.region, s.section, u.id, u.name;
 
 -- 活躍物件視圖 (最近 7 天)
 CREATE OR REPLACE VIEW recent_objects AS

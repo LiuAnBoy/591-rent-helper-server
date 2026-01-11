@@ -7,20 +7,16 @@ from loguru import logger
 
 from src.api.dependencies import CurrentUser
 from src.connections.postgres import get_postgres
-from src.modules.bindings import (
-    BindingRepository,
-    BindCodeResponse,
-    BindingResponse,
-    sync_user_subscriptions_to_redis,
-)
+from src.modules.providers import UserProviderRepository, sync_user_subscriptions_to_redis
+from src.modules.bindings import BindCodeResponse, BindingResponse
 
 router = APIRouter(prefix="/bindings", tags=["Bindings"])
 
 
-async def get_repository() -> BindingRepository:
-    """Get binding repository instance."""
+async def get_provider_repository() -> UserProviderRepository:
+    """Get user provider repository instance."""
     postgres = await get_postgres()
-    return BindingRepository(postgres.pool)
+    return UserProviderRepository(postgres.pool)
 
 
 @router.get("/telegram", response_model=BindingResponse)
@@ -30,12 +26,15 @@ async def get_telegram_binding(current_user: CurrentUser) -> dict:
 
     Requires authentication.
     """
-    repo = await get_repository()
+    repo = await get_provider_repository()
 
     try:
-        binding = await repo.get_binding_by_user(current_user.id, "telegram")
+        providers = await repo.get_by_user(current_user.id)
+        telegram_provider = next(
+            (p for p in providers if p.provider == "telegram"), None
+        )
 
-        if not binding:
+        if not telegram_provider:
             return {
                 "service": "telegram",
                 "is_bound": False,
@@ -45,29 +44,34 @@ async def get_telegram_binding(current_user: CurrentUser) -> dict:
             }
 
         return {
-            "service": binding.service,
-            "is_bound": binding.is_bound,
-            "service_id": binding.service_id if binding.is_bound else None,
-            "enabled": binding.enabled,
-            "created_at": binding.created_at,
+            "service": "telegram",
+            "is_bound": True,
+            "service_id": telegram_provider.provider_id,
+            "enabled": telegram_provider.notify_enabled,
+            "created_at": telegram_provider.created_at,
         }
     except Exception as e:
         logger.error(f"Failed to get telegram binding: {e}")
         raise HTTPException(status_code=500, detail="查詢綁定失敗")
 
 
-@router.post("/telegram", response_model=BindCodeResponse)
+@router.post("/telegram", response_model=BindCodeResponse, deprecated=True)
 async def bind_telegram(current_user: CurrentUser) -> dict:
     """
-    Start Telegram binding process.
+    Start Telegram binding process (DEPRECATED).
 
+    This endpoint is deprecated. Use Telegram Web App login instead.
     Generates a bind code and returns a deep link URL.
-    User clicks the bind_url to open Telegram and complete binding.
     The code is valid for 10 minutes.
 
     Requires authentication.
     """
-    repo = await get_repository()
+    # NOTE: This endpoint is deprecated and will be removed.
+    # Keep backward compatibility by importing old repository
+    from src.modules.bindings import BindingRepository
+
+    postgres = await get_postgres()
+    repo = BindingRepository(postgres.pool)
 
     try:
         code = await repo.create_bind_code(current_user.id, "telegram")
@@ -95,10 +99,10 @@ async def unbind_telegram(current_user: CurrentUser) -> dict:
 
     Requires authentication.
     """
-    repo = await get_repository()
+    repo = await get_provider_repository()
 
     try:
-        deleted = await repo.delete_binding(current_user.id, "telegram")
+        deleted = await repo.delete(current_user.id, "telegram")
 
         if not deleted:
             raise HTTPException(status_code=404, detail="綁定不存在")
@@ -126,14 +130,19 @@ async def toggle_telegram(current_user: CurrentUser, enabled: bool) -> dict:
     Args:
         enabled: Whether to enable notifications
     """
-    repo = await get_repository()
+    repo = await get_provider_repository()
 
     try:
-        binding = await repo.get_binding_by_user(current_user.id, "telegram")
-        if not binding or not binding.is_bound:
+        # Check if provider exists
+        providers = await repo.get_by_user(current_user.id)
+        telegram_provider = next(
+            (p for p in providers if p.provider == "telegram"), None
+        )
+
+        if not telegram_provider:
             raise HTTPException(status_code=404, detail="尚未綁定 Telegram")
 
-        updated = await repo.set_enabled(current_user.id, "telegram", enabled)
+        updated = await repo.update_notify_enabled(current_user.id, "telegram", enabled)
 
         if not updated:
             raise HTTPException(status_code=500, detail="更新失敗")

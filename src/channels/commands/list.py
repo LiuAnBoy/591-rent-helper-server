@@ -9,7 +9,7 @@ from typing import Optional
 from loguru import logger
 
 from src.channels.commands.base import BaseCommand, CommandResult
-from src.modules.bindings import BindingRepository
+from src.modules.providers import UserProviderRepository
 from src.modules.subscriptions import SubscriptionRepository
 
 
@@ -43,25 +43,25 @@ class ListCommand(BaseCommand):
 
         service = context.get("service", "unknown") if context else "unknown"
 
-        # Check binding first
-        binding_repo = BindingRepository(self._pool)
-        binding = await binding_repo.get_binding_by_service_id(
-            service=service,
-            service_id=user_id,
+        # Check provider binding first
+        provider_repo = UserProviderRepository(self._pool)
+        provider = await provider_repo.find_by_provider(
+            provider=service,
+            provider_id=user_id,
         )
 
-        if not binding:
+        if not provider:
             return CommandResult.fail(
-                "Not bound to any account. Use /bind <code> first."
+                "尚未綁定帳號。請點擊「開啟管理頁面」按鈕登入。"
             )
 
         # Get subscriptions
         sub_repo = SubscriptionRepository(self._pool)
-        subscriptions = await sub_repo.get_by_user(binding.user_id)
+        subscriptions = await sub_repo.get_by_user(provider.user_id)
 
         if not subscriptions:
             return CommandResult.ok(
-                message="No subscriptions found.",
+                message="目前沒有訂閱。",
                 title="list_empty",
                 subscriptions=[],
                 count=0,
@@ -82,7 +82,7 @@ class ListCommand(BaseCommand):
             sub_list.append(sub_data)
 
         return CommandResult.ok(
-            message=f"Found {len(sub_list)} subscription(s).",
+            message=f"找到 {len(sub_list)} 個訂閱。",
             title="list_subscriptions",
             subscriptions=sub_list,
             count=len(sub_list),

@@ -60,3 +60,8 @@ Thumbs.db
 
 # Project specific
 data/
+
+# Docs - only keep API.md and OPTIONS.md
+docs/*
+!docs/API.md
+!docs/OPTIONS.md

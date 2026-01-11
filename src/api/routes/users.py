@@ -5,7 +5,7 @@ from loguru import logger
 
 from src.api.dependencies import CurrentUser
 from src.connections.postgres import get_postgres
-from src.modules.bindings import BindingRepository
+from src.modules.providers import UserProviderRepository
 from src.modules.subscriptions import SubscriptionRepository
 from src.modules.users import UserRepository, UserWithBindings
 
@@ -15,11 +15,11 @@ router = APIRouter(prefix="/users", tags=["Users"])
 @router.get("/me", response_model=UserWithBindings)
 async def get_current_user_profile(current_user: CurrentUser) -> dict:
     """
-    Get current user's profile with bindings.
+    Get current user's profile with providers.
 
     Returns user data including:
     - Basic profile info
-    - Notification bindings (Telegram, etc.)
+    - Provider bindings (Telegram, etc.)
     - Subscription count and limit
     """
     if not current_user:
@@ -27,20 +27,20 @@ async def get_current_user_profile(current_user: CurrentUser) -> dict:
 
     postgres = await get_postgres()
 
-    # Get bindings
-    binding_repo = BindingRepository(postgres.pool)
-    bindings = await binding_repo.get_bindings_by_user(current_user.id)
+    # Get providers
+    provider_repo = UserProviderRepository(postgres.pool)
+    providers = await provider_repo.get_by_user(current_user.id)
 
-    # Format bindings for response
+    # Format providers for response (backward compatible with "bindings" key)
     bindings_data = [
         {
-            "service": b.service,
-            "is_bound": b.is_bound,
-            "service_id": b.service_id if b.is_bound else None,
-            "enabled": b.enabled,
-            "created_at": b.created_at,
+            "service": p.provider,
+            "is_bound": True,
+            "service_id": p.provider_id,
+            "enabled": p.notify_enabled,
+            "created_at": p.created_at,
         }
-        for b in bindings
+        for p in providers
     ]
 
     # Get subscription count
@@ -55,7 +55,8 @@ async def get_current_user_profile(current_user: CurrentUser) -> dict:
 
     return {
         "id": current_user.id,
-        "email": current_user.email,
+        "email": current_user.email or "",
+        "name": current_user.name,
         "role": current_user.role,
         "enabled": current_user.enabled,
         "created_at": current_user.created_at,

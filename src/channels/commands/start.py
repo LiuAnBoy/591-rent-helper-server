@@ -9,7 +9,8 @@ from typing import Optional
 from loguru import logger
 
 from src.channels.commands.base import BaseCommand, CommandResult
-from src.modules.bindings import BindingRepository, sync_user_subscriptions_to_redis
+from src.modules.bindings import BindingRepository
+from src.modules.providers import sync_user_subscriptions_to_redis
 
 
 class StartCommand(BaseCommand):
@@ -28,8 +29,8 @@ class StartCommand(BaseCommand):
         """
         Execute /start command.
 
-        If args contains BIND_<code>, complete the binding.
-        Otherwise, show welcome message.
+        If args contains BIND_<code>, complete the binding (deprecated).
+        Otherwise, show welcome message with Web App button.
 
         Args:
             user_id: Platform user ID (chat_id)
@@ -39,19 +40,19 @@ class StartCommand(BaseCommand):
         Returns:
             Binding result or welcome message
         """
-        # Check if this is a binding request via deep link
+        # Check if this is a binding request via deep link (deprecated)
         if args.startswith("BIND_"):
             return await self._handle_binding(user_id, args[5:])
 
-        # Normal welcome message
+        # Normal welcome message - Web App flow
         steps = [
-            "前往網頁註冊 / 登入",
-            "點擊「綁定 Telegram」按鈕",
-            "設定篩選條件，開始接收通知！",
+            "點擊下方「開啟管理頁面」按鈕",
+            "自動登入後設定篩選條件",
+            "開始接收新物件通知！",
         ]
 
         return CommandResult.ok(
-            message="收取通知步驟",
+            message="歡迎使用 591 租屋通知",
             title="welcome",
             user_id=user_id,
             steps=steps,

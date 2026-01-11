@@ -1,7 +1,8 @@
 """
-Bind Command Module.
+Bind Command Module (DEPRECATED).
 
 Handles the /bind command - links platform account to user account.
+This command is deprecated in favor of Telegram Web App login flow.
 """
 
 from typing import Optional

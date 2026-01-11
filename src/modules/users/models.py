@@ -14,7 +14,8 @@ class User(BaseModel):
     """User model from database."""
 
     id: int
-    email: str
+    name: Optional[str] = None
+    email: Optional[str] = None
     role: str = "user"
     enabled: bool = True
     created_at: datetime
@@ -58,7 +59,8 @@ class UserWithBindings(BaseModel):
     """User response with bindings data."""
 
     id: int
-    email: str
+    email: str = ""
+    name: Optional[str] = None
     role: str
     enabled: bool
     created_at: datetime

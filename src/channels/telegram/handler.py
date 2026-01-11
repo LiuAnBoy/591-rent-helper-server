@@ -10,7 +10,7 @@ import os
 
 from asyncpg import Pool
 from loguru import logger
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ParseMode
 
 from src.channels.telegram.bot import TelegramBot
@@ -143,13 +143,19 @@ class TelegramHandler:
         # Commands that need a button
         if title == "welcome":
             keyboard = [[
-                InlineKeyboardButton("📝 前往註冊", url=f"{web_app_url}/register")
+                InlineKeyboardButton(
+                    "📱 開啟管理頁面",
+                    web_app=WebAppInfo(url=web_app_url)
+                )
             ]]
             return InlineKeyboardMarkup(keyboard)
 
         if title in ("list_subscriptions", "list_empty", "manage"):
             keyboard = [[
-                InlineKeyboardButton("📱 開啟管理頁面", url=web_app_url)
+                InlineKeyboardButton(
+                    "📱 開啟管理頁面",
+                    web_app=WebAppInfo(url=web_app_url)
+                )
             ]]
             return InlineKeyboardMarkup(keyboard)
 

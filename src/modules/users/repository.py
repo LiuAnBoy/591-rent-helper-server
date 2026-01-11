@@ -75,7 +75,7 @@ class UserRepository:
         expire = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
         payload = {
-            "sub": str(user_id),
+            "id": user_id,
             "email": email,
             "role": role,
             "exp": expire,
@@ -263,4 +263,70 @@ class UserRepository:
 
         async with self._pool.acquire() as conn:
             result = await conn.fetchrow(query, user_id, enabled)
+            return result is not None
+
+
+    async def create_from_provider(self, name: str) -> User:
+        """
+        Create a new user from provider login (without email/password).
+
+        Args:
+            name: Display name from provider
+
+        Returns:
+            Created User
+        """
+        query = """
+        INSERT INTO users (name)
+        VALUES ($1)
+        RETURNING *
+        """
+
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(query, name)
+            logger.info(f"Created user from provider: {name}")
+            return User(**dict(row))
+
+    async def find_by_provider(self, provider: str, provider_id: str) -> Optional[User]:
+        """
+        Find user by provider type and provider ID.
+
+        Args:
+            provider: Provider type (telegram, line, etc.)
+            provider_id: Provider user ID
+
+        Returns:
+            User if found, None otherwise
+        """
+        query = """
+        SELECT u.* FROM users u
+        JOIN user_providers up ON u.id = up.user_id
+        WHERE up.provider = $1 AND up.provider_id = $2
+        """
+
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(query, provider, provider_id)
+            if row:
+                return User(**dict(row))
+            return None
+
+    async def update_name(self, user_id: int, name: str) -> bool:
+        """
+        Update user display name.
+
+        Args:
+            user_id: User ID
+            name: New display name
+
+        Returns:
+            True if updated
+        """
+        query = """
+        UPDATE users SET name = $2, updated_at = NOW()
+        WHERE id = $1
+        RETURNING id
+        """
+
+        async with self._pool.acquire() as conn:
+            result = await conn.fetchrow(query, user_id, name)
             return result is not None

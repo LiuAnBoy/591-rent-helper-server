@@ -9,7 +9,7 @@ from typing import Optional
 from loguru import logger
 
 from src.channels.commands.base import BaseCommand, CommandResult
-from src.modules.bindings import BindingRepository
+from src.modules.providers import UserProviderRepository
 
 
 class StatusCommand(BaseCommand):
@@ -42,25 +42,25 @@ class StatusCommand(BaseCommand):
 
         service = context.get("service", "unknown") if context else "unknown"
 
-        repo = BindingRepository(self._pool)
-        binding = await repo.get_binding_by_service_id(
-            service=service,
-            service_id=user_id,
+        repo = UserProviderRepository(self._pool)
+        provider = await repo.find_by_provider(
+            provider=service,
+            provider_id=user_id,
         )
 
-        if not binding:
+        if not provider:
             return CommandResult.ok(
-                message="Not bound to any account yet.",
+                message="尚未綁定帳號。請點擊「開啟管理頁面」按鈕登入。",
                 title="status_unbound",
                 is_bound=False,
             )
 
         return CommandResult.ok(
-            message="Account is bound and active.",
+            message="帳號已綁定。",
             title="status_bound",
             is_bound=True,
             service=service,
             service_id=user_id,
-            enabled=binding.enabled,
-            created_at=binding.created_at.isoformat() if binding.created_at else None,
+            enabled=provider.notify_enabled,
+            created_at=provider.created_at.isoformat() if provider.created_at else None,
         )

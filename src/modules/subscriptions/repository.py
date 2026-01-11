@@ -178,7 +178,7 @@ class SubscriptionRepository:
 
     async def get_all_enabled(self) -> list[dict]:
         """
-        Get all enabled subscriptions with notification binding info.
+        Get all enabled subscriptions with notification provider info.
 
         Returns:
             List of all enabled subscription records with service and service_id
@@ -186,11 +186,11 @@ class SubscriptionRepository:
         query = """
         SELECT 
             s.*,
-            nb.service,
-            nb.service_id
+            up.provider AS service,
+            up.provider_id AS service_id
         FROM subscriptions s
-        LEFT JOIN notification_bindings nb 
-            ON s.user_id = nb.user_id AND nb.enabled = TRUE
+        LEFT JOIN user_providers up 
+            ON s.user_id = up.user_id AND up.notify_enabled = TRUE
         WHERE s.enabled = TRUE
         ORDER BY s.region, s.created_at DESC
         """
