@@ -145,6 +145,7 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
     try:
         # Find existing user by provider
         user = await user_repo.find_by_provider("telegram", provider_id)
+        logger.debug(f"find_by_provider result: {user}")
 
         if user:
             # Update provider data if user exists
