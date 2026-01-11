@@ -17,6 +17,8 @@ from src.channels.telegram.bot import TelegramBot
 from src.channels.telegram.formatter import TelegramFormatter, get_telegram_formatter
 from src.channels.commands import COMMANDS, BaseCommand, parse_command
 
+tg_log = logger.bind(module="TelegramBot")
+
 
 class TelegramHandler:
     """Handler for routing Telegram updates to commands."""
@@ -44,9 +46,9 @@ class TelegramHandler:
         """Register all available commands."""
         for name, command_class in COMMANDS.items():
             self._commands[name] = command_class(pool=self._pool)
-            logger.debug(f"Registered command: {name}")
+            tg_log.debug(f"Registered command: {name}")
 
-        logger.info(f"Registered {len(self._commands)} commands")
+        tg_log.info(f"Registered {len(self._commands)} commands")
 
     async def handle_update(self, update: Update) -> bool:
         """
@@ -59,7 +61,7 @@ class TelegramHandler:
             True if handled successfully
         """
         if not update.message:
-            logger.debug("Update has no message, skipping")
+            tg_log.debug("Update has no message, skipping")
             return True
 
         chat_id = update.message.chat_id
@@ -67,7 +69,7 @@ class TelegramHandler:
         user = update.message.from_user
 
         username = user.username or str(user.id) if user else "unknown"
-        logger.info(f"Received message from {username}: {text}")
+        tg_log.info(f"Received message from {username}: {text}")
 
         # Try to parse as command (supports /cmd, cmd, 中文指令)
         parsed = parse_command(text)
@@ -114,7 +116,7 @@ class TelegramHandler:
                 )
                 return True
             except Exception as e:
-                logger.error(f"Command {command_name} error: {e}")
+                tg_log.error(f"Command {command_name} error: {e}")
                 await self._bot.send_message(
                     chat_id, "❌ 指令執行失敗，請稍後再試"
                 )

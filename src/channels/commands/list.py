@@ -9,6 +9,8 @@ from typing import Optional
 from loguru import logger
 
 from src.channels.commands.base import BaseCommand, CommandResult
+
+cmd_log = logger.bind(module="BotCommand")
 from src.modules.providers import UserProviderRepository
 from src.modules.subscriptions import SubscriptionRepository
 
@@ -38,7 +40,7 @@ class ListCommand(BaseCommand):
             List of user's subscriptions
         """
         if not self._pool:
-            logger.error("Database pool not available for list command")
+            cmd_log.error("Database pool not available for list command")
             return CommandResult.fail("System error, please try again later")
 
         service = context.get("service", "unknown") if context else "unknown"

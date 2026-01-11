@@ -4,6 +4,9 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from src.api.dependencies import CurrentUser
+
+subs_log = logger.bind(module="Subscriptions")
+
 from src.connections.postgres import get_postgres
 from src.connections.redis import get_redis
 from src.modules.subscriptions import (
@@ -48,13 +51,13 @@ async def remove_subscription_from_redis(
         except Exception as e:
             if attempt < max_retries - 1:
                 wait_time = retry_delay * (2 ** attempt)
-                logger.warning(
+                subs_log.warning(
                     f"Redis remove failed (attempt {attempt + 1}/{max_retries}): {e}. "
                     f"Retrying in {wait_time}s..."
                 )
                 await asyncio.sleep(wait_time)
             else:
-                logger.error(
+                subs_log.error(
                     f"Redis remove failed after {max_retries} attempts: {e}. "
                     f"Subscription {subscription_id} may still exist in Redis."
                 )
@@ -99,7 +102,7 @@ async def create_subscription(
         # Sync all user subscriptions to Redis (includes provider info)
         await sync_user_subscriptions_to_redis(current_user.id)
 
-        logger.info(f"Created subscription {subscription['id']} for user {current_user.id}")
+        subs_log.info(f"Created subscription {subscription['id']} for user {current_user.id}")
 
         # Trigger instant notification in background
         provider_repo = UserProviderRepository(postgres.pool)
@@ -122,11 +125,11 @@ async def create_subscription(
                     service_id=active_provider.provider_id,
                 )
             )
-            logger.info(f"Triggered instant notify for subscription {subscription['id']}")
+            subs_log.info(f"Triggered instant notify for subscription {subscription['id']}")
 
         return {"success": True}
     except Exception as e:
-        logger.error(f"Failed to create subscription: {e}")
+        subs_log.error(f"Failed to create subscription: {e}")
         raise HTTPException(status_code=500, detail="建立訂閱失敗")
 
 
@@ -212,10 +215,10 @@ async def update_subscription(
         # Sync all user subscriptions to Redis (includes provider info)
         await sync_user_subscriptions_to_redis(current_user.id)
 
-        logger.info(f"Updated subscription {subscription_id}")
+        subs_log.info(f"Updated subscription {subscription_id}")
         return {"success": True}
     except Exception as e:
-        logger.error(f"Failed to update subscription: {e}")
+        subs_log.error(f"Failed to update subscription: {e}")
         raise HTTPException(status_code=500, detail="更新訂閱失敗")
 
 
@@ -248,10 +251,10 @@ async def delete_subscription(
         # Remove from Redis
         await remove_subscription_from_redis(existing["region"], subscription_id)
 
-        logger.info(f"Deleted subscription {subscription_id}")
+        subs_log.info(f"Deleted subscription {subscription_id}")
         return {"success": True}
     except Exception as e:
-        logger.error(f"Failed to delete subscription: {e}")
+        subs_log.error(f"Failed to delete subscription: {e}")
         raise HTTPException(status_code=500, detail="刪除訂閱失敗")
 
 
@@ -314,7 +317,7 @@ async def toggle_subscription(
                     service_id=active_provider.provider_id,
                 )
             )
-            logger.info(f"Triggered instant notify for re-enabled subscription {subscription_id}")
+            subs_log.info(f"Triggered instant notify for re-enabled subscription {subscription_id}")
 
-    logger.info(f"Toggled subscription {subscription_id} to {new_status}")
+    subs_log.info(f"Toggled subscription {subscription_id} to {new_status}")
     return {"success": True}

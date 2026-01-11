@@ -7,6 +7,8 @@ from loguru import logger
 
 from src.modules.providers.models import UserProvider
 
+provider_log = logger.bind(module="Provider")
+
 
 class UserProviderRepository:
     """Repository for user provider operations."""
@@ -99,7 +101,7 @@ class UserProviderRepository:
                 json.dumps(provider_data or {}),
                 notify_enabled,
             )
-            logger.info(f"Created provider binding: {provider}:{provider_id} -> user {user_id}")
+            provider_log.info(f"Created provider binding: {provider}:{provider_id} -> user {user_id}")
             return UserProvider(**dict(row))
 
     async def update_notify_enabled(
@@ -125,7 +127,7 @@ class UserProviderRepository:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(query, user_id, provider, enabled)
             if row:
-                logger.info(f"Updated notify_enabled for user {user_id} provider {provider}: {enabled}")
+                provider_log.info(f"Updated notify_enabled for user {user_id} provider {provider}: {enabled}")
                 return UserProvider(**dict(row))
             return None
 
@@ -176,7 +178,7 @@ class UserProviderRepository:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(query, user_id, provider)
             if row:
-                logger.info(f"Deleted provider binding: user {user_id} provider {provider}")
+                provider_log.info(f"Deleted provider binding: user {user_id} provider {provider}")
                 return True
             return False
 

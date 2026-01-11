@@ -9,6 +9,8 @@ from typing import Optional
 from loguru import logger
 
 from src.connections.postgres import get_postgres, PostgresConnection
+
+checker_log = logger.bind(module="Checker")
 from src.connections.redis import get_redis, RedisConnection
 from src.crawler.rent591 import Rent591Crawler
 from src.crawler.object_detail import ObjectDetailCrawler, get_detail_crawler
@@ -109,7 +111,7 @@ class Checker:
         # Sync to Redis
         await self._redis.sync_subscriptions(subscriptions)
 
-        logger.info(f"Synced {len(subscriptions)} subscriptions to Redis")
+        checker_log.info(f"Synced {len(subscriptions)} subscriptions to Redis")
         return len(subscriptions)
 
     def _needs_detail_fetch(self, subscriptions: list[dict]) -> bool:
@@ -216,7 +218,7 @@ class Checker:
         if not object_ids:
             return {}
 
-        logger.info(f"Fetching detail pages for {len(object_ids)} objects...")
+        checker_log.info(f"Fetching detail pages for {len(object_ids)} objects...")
         details = await self._detail_crawler.fetch_details_batch(object_ids)
 
         # Update listings with detail data
@@ -227,7 +229,7 @@ class Checker:
                 listing.gender = detail.get("gender", "all")
                 listing.pet_allowed = detail.get("pet_allowed")
                 listing.options = detail.get("options", [])
-                logger.debug(
+                checker_log.debug(
                     f"Updated {obj_id}: gender={listing.gender}, "
                     f"pet={listing.pet_allowed}, options={len(listing.options)}"
                 )
@@ -547,7 +549,7 @@ class Checker:
         if max_items is None:
             max_items = self.NORMAL_CRAWL_COUNT
 
-        logger.info(f"Checking region={region} | max_items={max_items}")
+        checker_log.info(f"Checking region={region} | max_items={max_items}")
 
         # Start crawler run tracking
         run_id = await self._postgres.start_crawler_run(region, section)
@@ -562,7 +564,7 @@ class Checker:
             )
 
             if not listings:
-                logger.warning("No objects fetched")
+                checker_log.warning("No objects fetched")
                 await self._postgres.finish_crawler_run(
                     run_id=run_id,
                     status="success",
@@ -579,7 +581,7 @@ class Checker:
                     "initialized_subs": [],
                 }
 
-            logger.info(f"Fetched {len(listings)} objects")
+            checker_log.info(f"Fetched {len(listings)} objects")
 
             # Step 2: Parse is_rooftop and save to PostgreSQL + Redis
             new_count = 0
@@ -598,7 +600,7 @@ class Checker:
 
             # Step 3: Find new IDs (not in seen set)
             new_ids = await self._redis.get_new_ids(region, fetched_ids)
-            logger.info(f"Found {len(new_ids)} new objects")
+            checker_log.info(f"Found {len(new_ids)} new objects")
 
             # Step 4: Add to seen set
             await self._redis.add_seen_ids(region, fetched_ids)
@@ -638,7 +640,7 @@ class Checker:
 
                     # Step 5b: Fetch detail pages for candidates
                     if candidates_for_detail:
-                        logger.info(
+                        checker_log.info(
                             f"Found {len(candidates_for_detail)} candidates needing detail page"
                         )
                         await self._fetch_and_update_details(
@@ -664,12 +666,12 @@ class Checker:
                         else:
                             # Initialized subscription - match and notify
                             matches.append((listing, [sub]))
-                            logger.info(f"Object {listing.id} matches subscription {sub_id}")
+                            checker_log.info(f"Object {listing.id} matches subscription {sub_id}")
 
                 # Mark uninitialized subscriptions as initialized
                 for sub_id in initialized_subs:
                     await self._redis.mark_subscription_initialized(sub_id)
-                    logger.info(f"Subscription {sub_id} initialized (first run, no notifications)")
+                    checker_log.info(f"Subscription {sub_id} initialized (first run, no notifications)")
 
                 # Step 6: Broadcast notifications
                 if matches and self._enable_broadcast and self._broadcaster:
@@ -681,7 +683,7 @@ class Checker:
                         listing_subs_map[listing.id][1].extend(subs)
 
                     grouped_matches = list(listing_subs_map.values())
-                    logger.info(f"Broadcasting {len(grouped_matches)} matches...")
+                    checker_log.info(f"Broadcasting {len(grouped_matches)} matches...")
                     broadcast_result = await self._broadcaster.broadcast(grouped_matches)
 
                     # Mark as notified in PostgreSQL
@@ -711,7 +713,7 @@ class Checker:
                 "initialized_subs": initialized_subs,
             }
 
-            logger.info(
+            checker_log.info(
                 f"Check complete: region={region} fetched={result['fetched']} "
                 f"new={result['new_count']} detail={detail_fetched} "
                 f"matches={len(matches)} initialized={len(initialized_subs)} "
@@ -721,7 +723,7 @@ class Checker:
             return result
 
         except Exception as e:
-            logger.error(f"Check failed: {e}")
+            checker_log.error(f"Check failed: {e}")
             await self._postgres.finish_crawler_run(
                 run_id=run_id,
                 status="failed",
@@ -745,10 +747,10 @@ class Checker:
         active_regions = await self._redis.get_active_regions()
 
         if not active_regions:
-            logger.info("No active regions with subscriptions")
+            checker_log.info("No active regions with subscriptions")
             return []
 
-        logger.info(f"Found {len(active_regions)} active regions: {active_regions}")
+        checker_log.info(f"Found {len(active_regions)} active regions: {active_regions}")
 
         results = []
         for region in sorted(active_regions):
@@ -756,7 +758,7 @@ class Checker:
                 result = await self.check(region=region)
                 results.append(result)
             except Exception as e:
-                logger.error(f"Failed to check region {region}: {e}")
+                checker_log.error(f"Failed to check region {region}: {e}")
                 results.append({
                     "region": region,
                     "error": str(e),

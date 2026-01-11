@@ -15,6 +15,8 @@ from src.crawler.rent591 import Rent591Crawler
 from src.jobs.broadcaster import get_broadcaster
 from src.modules.objects import ObjectRepository, RentalObject
 
+notify_log = logger.bind(module="Notify")
+
 
 class InstantNotifier:
     """
@@ -63,10 +65,10 @@ class InstantNotifier:
         sub_name = subscription.get("name", f"訂閱 {sub_id}")
 
         if not region:
-            logger.warning(f"Subscription {sub_id} has no region, skipping instant notify")
+            notify_log.warning(f"Subscription {sub_id} has no region, skipping instant notify")
             return {"checked": 0, "matched": 0, "notified": 0, "error": "no_region"}
 
-        logger.info(f"Instant notify check for subscription {sub_id}, region {region}")
+        notify_log.info(f"Instant notify check for subscription {sub_id}, region {region}")
 
         try:
             # Check if region has existing data
@@ -86,7 +88,7 @@ class InstantNotifier:
             # Mark subscription as initialized
             await self._redis.mark_subscription_initialized(sub_id)
 
-            logger.info(
+            notify_log.info(
                 f"Instant notify completed for sub {sub_id}: "
                 f"checked={result['checked']}, matched={result['matched']}, notified={result['notified']}"
             )
@@ -94,7 +96,7 @@ class InstantNotifier:
             return result
 
         except Exception as e:
-            logger.error(f"Instant notify failed for subscription {sub_id}: {e}")
+            notify_log.error(f"Instant notify failed for subscription {sub_id}: {e}")
             return {"checked": 0, "matched": 0, "notified": 0, "error": str(e)}
 
     async def notify_for_subscriptions_batch(
@@ -132,7 +134,7 @@ class InstantNotifier:
                     by_region[region] = []
                 by_region[region].append(sub)
 
-        logger.info(
+        notify_log.info(
             f"Batch notify for user {user_id}: "
             f"{len(subscriptions)} subscriptions across {len(by_region)} regions"
         )
@@ -156,9 +158,9 @@ class InstantNotifier:
                     await self._redis.mark_subscription_initialized(sub["id"])
 
             except Exception as e:
-                logger.error(f"Batch notify failed for region {region}: {e}")
+                notify_log.error(f"Batch notify failed for region {region}: {e}")
 
-        logger.info(
+        notify_log.info(
             f"Batch notify completed for user {user_id}: "
             f"checked={total_checked}, matched={total_matched}, notified={total_notified}"
         )
@@ -197,7 +199,7 @@ class InstantNotifier:
             # Region has data - fetch from DB
             repo = ObjectRepository(self._postgres.pool)
             objects = await repo.get_latest_by_region(region, self.FETCH_COUNT)
-            logger.info(f"Found {len(objects)} objects in DB for region {region}")
+            notify_log.info(f"Found {len(objects)} objects in DB for region {region}")
         else:
             # Region has no data - need to crawl
             crawler = Rent591Crawler(headless=True)
@@ -209,7 +211,7 @@ class InstantNotifier:
                     sort="posttime_desc",
                     max_items=self.FETCH_COUNT,
                 )
-                logger.info(f"Crawled {len(listings)} objects for region {region}")
+                notify_log.info(f"Crawled {len(listings)} objects for region {region}")
 
                 # Save to DB
                 repo = ObjectRepository(self._postgres.pool)
@@ -256,9 +258,9 @@ class InstantNotifier:
                         )
                         total_notified += 1
                     except Exception as e:
-                        logger.error(f"Failed to notify for object {obj.get('id')}: {e}")
+                        notify_log.error(f"Failed to notify for object {obj.get('id')}: {e}")
 
-            logger.debug(
+            notify_log.debug(
                 f"Subscription {sub.get('id')}: matched {len(matched_objects)} objects"
             )
 
@@ -284,7 +286,7 @@ class InstantNotifier:
         repo = ObjectRepository(self._postgres.pool)
         objects = await repo.get_latest_by_region(region, self.FETCH_COUNT)
 
-        logger.info(f"Found {len(objects)} objects in DB for region {region}")
+        notify_log.info(f"Found {len(objects)} objects in DB for region {region}")
 
         # Match and notify
         return await self._match_and_notify(
@@ -315,7 +317,7 @@ class InstantNotifier:
                 max_items=self.FETCH_COUNT,
             )
 
-            logger.info(f"Crawled {len(listings)} objects for region {region}")
+            notify_log.info(f"Crawled {len(listings)} objects for region {region}")
 
             # Save to DB and filter new ones
             repo = ObjectRepository(self._postgres.pool)
@@ -332,7 +334,7 @@ class InstantNotifier:
             if all_ids:
                 await self._redis.add_seen_ids(region, all_ids)
 
-            logger.info(f"Saved {len(new_objects)} new objects to DB")
+            notify_log.info(f"Saved {len(new_objects)} new objects to DB")
 
             # Match and notify (only new objects)
             # Convert RentalObject to dict for matching
@@ -366,7 +368,7 @@ class InstantNotifier:
                 matched.append(obj)
                 matched_indices.append(idx)
 
-        logger.info(f"Matched {len(matched)} objects for subscription {subscription.get('id')}")
+        notify_log.info(f"Matched {len(matched)} objects for subscription {subscription.get('id')}")
 
         # Send notifications
         notified = 0
@@ -387,7 +389,7 @@ class InstantNotifier:
                     )
                     notified += 1
                 except Exception as e:
-                    logger.error(f"Failed to notify for object {obj.get('id')}: {e}")
+                    notify_log.error(f"Failed to notify for object {obj.get('id')}: {e}")
 
         return {
             "checked": len(objects),

@@ -13,6 +13,8 @@ from config.settings import get_settings
 from src.channels.telegram import TelegramBot, get_telegram_formatter
 from src.modules.objects import RentalObject
 
+broadcast_log = logger.bind(module="Broadcast")
+
 
 class Broadcaster:
     """Broadcasts notifications to users via their bound channels."""
@@ -63,7 +65,7 @@ class Broadcaster:
             True if sent successfully, False otherwise
         """
         if not self.bot.is_configured:
-            logger.warning("Telegram bot not configured, cannot send notification")
+            broadcast_log.warning("Telegram bot not configured, cannot send notification")
             return False
 
         try:
@@ -82,11 +84,11 @@ class Broadcaster:
                 disable_web_page_preview=False,
             )
 
-            logger.info(f"Sent Telegram notification to {chat_id} for object {listing.id}")
+            broadcast_log.info(f"Sent Telegram notification to {chat_id} for object {listing.id}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to send Telegram notification to {chat_id}: {e}")
+            broadcast_log.error(f"Failed to send Telegram notification to {chat_id}: {e}")
             return False
 
     async def send_notification(
@@ -118,7 +120,7 @@ class Broadcaster:
         # elif service == "line":
         #     return await self.send_line_notification(...)
         else:
-            logger.warning(f"Unknown service: {service}")
+            broadcast_log.warning(f"Unknown service: {service}")
             return False
 
     async def broadcast(
@@ -150,7 +152,7 @@ class Broadcaster:
                 sub_name = sub.get("name", "")
 
                 if not service or not service_id:
-                    logger.debug(f"Skipping subscription {sub.get('id')} - no binding")
+                    broadcast_log.debug(f"Skipping subscription {sub.get('id')} - no binding")
                     continue
 
                 # Track by service
@@ -174,7 +176,7 @@ class Broadcaster:
                     failed += 1
                     by_service[service]["failed"] += 1
 
-        logger.info(
+        broadcast_log.info(
             f"Broadcast complete: {success}/{total} sent, {failed} failed"
         )
 

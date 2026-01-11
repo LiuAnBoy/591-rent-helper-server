@@ -9,6 +9,8 @@ from typing import Optional
 from loguru import logger
 
 from src.channels.commands.base import BaseCommand, CommandResult
+
+cmd_log = logger.bind(module="BotCommand")
 from src.modules.providers import UserProviderRepository, sync_user_subscriptions_to_redis
 
 
@@ -37,7 +39,7 @@ class PauseCommand(BaseCommand):
             Result indicating notifications are paused
         """
         if not self._pool:
-            logger.error("Database pool not available for pause command")
+            cmd_log.error("Database pool not available for pause command")
             return CommandResult.fail("系統錯誤，請稍後再試")
 
         service = context.get("service", "telegram") if context else "telegram"
@@ -66,7 +68,7 @@ class PauseCommand(BaseCommand):
         # Sync to Redis
         await sync_user_subscriptions_to_redis(provider.user_id)
 
-        logger.info(f"Paused notifications for user {provider.user_id} ({service}:{user_id})")
+        cmd_log.info(f"Paused notifications for user {provider.user_id} ({service}:{user_id})")
 
         return CommandResult.ok(
             message="已暫停通知。輸入 /resume 可恢復通知。",
@@ -102,7 +104,7 @@ class ResumeCommand(BaseCommand):
         from src.modules.subscriptions import SubscriptionRepository
 
         if not self._pool:
-            logger.error("Database pool not available for resume command")
+            cmd_log.error("Database pool not available for resume command")
             return CommandResult.fail("系統錯誤，請稍後再試")
 
         service = context.get("service", "telegram") if context else "telegram"
@@ -131,7 +133,7 @@ class ResumeCommand(BaseCommand):
         # Sync to Redis
         await sync_user_subscriptions_to_redis(provider.user_id)
 
-        logger.info(f"Resumed notifications for user {provider.user_id} ({service}:{user_id})")
+        cmd_log.info(f"Resumed notifications for user {provider.user_id} ({service}:{user_id})")
 
         # Trigger instant notification for all enabled subscriptions (batch mode)
         sub_repo = SubscriptionRepository(self._pool)
@@ -149,7 +151,7 @@ class ResumeCommand(BaseCommand):
                 )
             )
 
-            logger.info(f"Triggered batch instant notify for {len(subscriptions)} subscriptions")
+            cmd_log.info(f"Triggered batch instant notify for {len(subscriptions)} subscriptions")
 
         return CommandResult.ok(
             message="已恢復通知。有新物件時會立即通知你！",

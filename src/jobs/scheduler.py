@@ -14,6 +14,8 @@ from loguru import logger
 from config.settings import get_settings
 from src.jobs.checker import Checker
 
+scheduler_log = logger.bind(module="Scheduler")
+
 # Timezone for scheduler
 TZ = ZoneInfo("Asia/Taipei")
 
@@ -54,18 +56,18 @@ async def run_checker_job(skip_night: bool = False) -> None:
         is_night = crawler.night_start_hour <= current_hour < crawler.night_end_hour
 
         if is_night:
-            logger.debug(f"Skipping daytime job during night hours (hour={current_hour})")
+            scheduler_log.debug(f"Skipping daytime job during night hours (hour={current_hour})")
             return
 
     try:
-        logger.info("Running scheduled checker job...")
+        scheduler_log.info("Running scheduled checker job...")
         checker = get_checker()
 
         # Only check regions with active subscriptions
         results = await checker.check_active_regions()
 
         if not results:
-            logger.info("No active regions to check")
+            scheduler_log.info("No active regions to check")
             return
 
         for result in results:
@@ -73,22 +75,22 @@ async def run_checker_job(skip_night: bool = False) -> None:
             broadcast = result.get("broadcast", {})
             initialized_subs = result.get("initialized_subs", [])
 
-            logger.info(
+            scheduler_log.info(
                 f"Region {region}: {result.get('new_count', 0)} new, "
                 f"{len(result.get('matches', []))} matches, "
                 f"{broadcast.get('success', 0)} notified"
             )
             if initialized_subs:
-                logger.info(
+                scheduler_log.info(
                     f"  Initialized {len(initialized_subs)} subscriptions: "
                     f"{initialized_subs}"
                 )
     except Exception as e:
-        logger.error(f"Checker job failed: {e}")
+        scheduler_log.error(f"Checker job failed: {e}")
     finally:
         # Close browser to release memory
         await close_checker()
-        logger.info("Browser closed, memory released")
+        scheduler_log.info("Browser closed, memory released")
 
 
 def setup_jobs() -> None:
@@ -105,7 +107,7 @@ def setup_jobs() -> None:
     settings = get_settings()
     crawler = settings.crawler
 
-    logger.info(
+    scheduler_log.info(
         f"Scheduler started: "
         f"{crawler.night_end_hour:02d}:00-{crawler.night_start_hour:02d}:00 every {crawler.interval_minutes}min, "
         f"{crawler.night_start_hour:02d}:00-{crawler.night_end_hour:02d}:00 every {crawler.night_interval_minutes}min"
@@ -122,7 +124,7 @@ def setup_jobs() -> None:
         name=f"Daytime checker (every {crawler.interval_minutes} min)",
         replace_existing=True,
     )
-    logger.info(
+    scheduler_log.info(
         f"Daytime job: every {crawler.interval_minutes} minutes (interval-based)"
     )
 
@@ -150,7 +152,7 @@ def setup_jobs() -> None:
         name=f"Night checker (every {crawler.night_interval_minutes} min)",
         replace_existing=True,
     )
-    logger.info(
+    scheduler_log.info(
         f"Night job: minute={night_minutes}, hour={night_hours_expr} (fixed times)"
     )
 
@@ -163,17 +165,17 @@ def setup_jobs() -> None:
         name="Startup checker",
         replace_existing=True,
     )
-    logger.info("Startup job scheduled to run immediately")
+    scheduler_log.info("Startup job scheduled to run immediately")
 
 
 def start() -> None:
     """Start the scheduler."""
     setup_jobs()
     _scheduler.start()
-    logger.info("Scheduler started")
+    scheduler_log.info("Scheduler started")
 
 
 def shutdown() -> None:
     """Shutdown the scheduler."""
     _scheduler.shutdown(wait=False)
-    logger.info("Scheduler stopped")
+    scheduler_log.info("Scheduler stopped")

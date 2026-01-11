@@ -12,6 +12,8 @@ from config.settings import get_settings
 from src.channels.telegram import TelegramBot, TelegramHandler
 from src.connections.postgres import get_postgres
 
+webhook_log = logger.bind(module="Webhook")
+
 router = APIRouter(prefix="/webhook/telegram", tags=["Telegram"])
 
 # Telegram bot and handler instances
@@ -25,14 +27,14 @@ async def init_bot() -> Optional[TelegramBot]:
     settings = get_settings()
 
     if not settings.telegram.bot_token:
-        logger.warning("Telegram bot token not configured")
+        webhook_log.warning("Telegram bot token not configured")
         return None
 
     # Initialize bot
     _bot = TelegramBot.init(settings.telegram.bot_token)
 
     if not _bot.is_configured:
-        logger.warning("Telegram bot failed to initialize")
+        webhook_log.warning("Telegram bot failed to initialize")
         return None
 
     # Get database pool for handler
@@ -44,7 +46,7 @@ async def init_bot() -> Optional[TelegramBot]:
     # Log bot info
     if _bot.bot:
         bot_info = await _bot.bot.get_me()
-        logger.info(f"Telegram bot initialized: @{bot_info.username}")
+        webhook_log.info(f"Telegram bot initialized: @{bot_info.username}")
 
     return _bot
 
@@ -63,11 +65,11 @@ def get_handler() -> Optional[TelegramHandler]:
 async def telegram_webhook(request: Request) -> dict:
     """Handle Telegram webhook updates."""
     if not _bot or not _bot.is_configured:
-        logger.warning("Telegram bot not initialized")
+        webhook_log.warning("Telegram bot not initialized")
         return {"status": False, "error": "Bot not configured"}
 
     if not _handler:
-        logger.warning("Telegram handler not initialized")
+        webhook_log.warning("Telegram handler not initialized")
         return {"status": False, "error": "Handler not configured"}
 
     try:
@@ -80,7 +82,7 @@ async def telegram_webhook(request: Request) -> dict:
         return {"status": True}
 
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
+        webhook_log.error(f"Webhook error: {e}")
         return {"status": False, "error": str(e)}
 
 
@@ -100,10 +102,10 @@ async def setup_telegram_webhook() -> dict:
 
     try:
         await _bot.bot.set_webhook(url=full_url)
-        logger.info(f"Webhook set to: {full_url}")
+        webhook_log.info(f"Webhook set to: {full_url}")
         return {"status": True, "webhook_url": full_url}
     except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
+        webhook_log.error(f"Failed to set webhook: {e}")
         return {"status": False, "error": str(e)}
 
 
@@ -115,24 +117,24 @@ async def auto_setup_webhook() -> bool:
         True if setup successful, False otherwise
     """
     if not _bot or not _bot.bot:
-        logger.warning("Cannot auto-setup webhook: bot not configured")
+        webhook_log.warning("Cannot auto-setup webhook: bot not configured")
         return False
 
     settings = get_settings()
     webhook_url = settings.telegram.webhook_url
 
     if not webhook_url:
-        logger.warning("Cannot auto-setup webhook: TELEGRAM_WEBHOOK_URL not configured")
+        webhook_log.warning("Cannot auto-setup webhook: TELEGRAM_WEBHOOK_URL not configured")
         return False
 
     full_url = f"{webhook_url}/webhook/telegram"
 
     try:
         await _bot.bot.set_webhook(url=full_url)
-        logger.info(f"Webhook auto-setup complete: {full_url}")
+        webhook_log.info(f"Webhook auto-setup complete: {full_url}")
         return True
     except Exception as e:
-        logger.error(f"Failed to auto-setup webhook: {e}")
+        webhook_log.error(f"Failed to auto-setup webhook: {e}")
         return False
 
 
@@ -144,10 +146,10 @@ async def delete_telegram_webhook() -> dict:
 
     try:
         await _bot.bot.delete_webhook()
-        logger.info("Webhook deleted")
+        webhook_log.info("Webhook deleted")
         return {"status": True, "message": "Webhook deleted"}
     except Exception as e:
-        logger.error(f"Failed to delete webhook: {e}")
+        webhook_log.error(f"Failed to delete webhook: {e}")
         return {"status": False, "error": str(e)}
 
 
@@ -170,5 +172,5 @@ async def get_telegram_webhook_info() -> dict:
             },
         }
     except Exception as e:
-        logger.error(f"Failed to get webhook info: {e}")
+        webhook_log.error(f"Failed to get webhook info: {e}")
         return {"status": False, "error": str(e)}

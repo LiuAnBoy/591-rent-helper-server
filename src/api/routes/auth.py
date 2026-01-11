@@ -5,6 +5,9 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from src.connections.postgres import get_postgres
+
+auth_log = logger.bind(module="Auth")
+
 from src.modules.users import UserRepository
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -45,18 +48,18 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
     bot_token = settings.telegram.bot_token
 
     if not bot_token:
-        logger.error("TELEGRAM_BOT_TOKEN not configured")
+        auth_log.error("TELEGRAM_BOT_TOKEN not configured")
         raise HTTPException(status_code=500, detail="Telegram 登入未設定")
 
     # Debug logging
-    logger.debug(f"Received initData length: {len(data.initData)}")
-    logger.debug(f"initData preview: {data.initData[:100]}...")
+    auth_log.debug(f"Received initData length: {len(data.initData)}")
+    auth_log.debug(f"initData preview: {data.initData[:100]}...")
 
     # Verify and parse initData
     auth_data = verify_and_parse_init_data(data.initData, bot_token)
 
     if not auth_data:
-        logger.warning("Failed to verify/parse initData")
+        auth_log.warning("Failed to verify/parse initData")
         raise HTTPException(status_code=401, detail="Invalid Telegram auth data")
 
     telegram_user = auth_data.user
@@ -70,7 +73,7 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
     try:
         # Find existing user by provider
         user = await user_repo.find_by_provider("telegram", provider_id)
-        logger.debug(f"find_by_provider result: {user}")
+        auth_log.debug(f"find_by_provider result: {user}")
 
         if user:
             # Update provider data if user exists
@@ -82,7 +85,7 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
                 "photo_url": telegram_user.photo_url,
             }
             await provider_repo.update_provider_data(user.id, "telegram", provider_data)
-            logger.info(f"Telegram user logged in: {telegram_user.id}")
+            auth_log.info(f"Telegram user logged in: {telegram_user.id}")
         else:
             # Create new user from Telegram
             display_name = telegram_user.first_name
@@ -105,7 +108,7 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
                 provider_id=provider_id,
                 provider_data=provider_data,
             )
-            logger.info(f"New Telegram user created: {telegram_user.id} -> user {user.id}")
+            auth_log.info(f"New Telegram user created: {telegram_user.id} -> user {user.id}")
 
         # Create access token
         token, expires_in = user_repo.create_access_token(
@@ -135,5 +138,5 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Telegram login failed: {e}")
+        auth_log.error(f"Telegram login failed: {e}")
         raise HTTPException(status_code=500, detail="Telegram 登入失敗")

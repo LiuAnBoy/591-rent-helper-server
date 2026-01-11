@@ -12,6 +12,8 @@ from loguru import logger
 
 from config.settings import get_settings
 
+redis_log = logger.bind(module="Redis")
+
 
 class RedisConnection:
     """Redis connection manager."""
@@ -28,7 +30,7 @@ class RedisConnection:
 
     async def connect(self) -> None:
         """Connect to Redis."""
-        logger.info(f"Connecting to Redis at {self.settings.host}:{self.settings.port}")
+        redis_log.info(f"Connecting to Redis at {self.settings.host}:{self.settings.port}")
         self._client = redis.Redis(
             host=self.settings.host,
             port=self.settings.port,
@@ -38,13 +40,13 @@ class RedisConnection:
         )
         # Test connection
         await self._client.ping()
-        logger.info("Redis connected successfully")
+        redis_log.info("Redis connected successfully")
 
     async def close(self) -> None:
         """Close Redis connection."""
         if self._client:
             await self._client.close()
-            logger.info("Redis connection closed")
+            redis_log.info("Redis connection closed")
 
     @property
     def client(self) -> redis.Redis:
@@ -110,7 +112,7 @@ class RedisConnection:
         key = self._seen_key(region)
         await self.client.sadd(key, *[str(id_) for id_ in ids])
         await self.client.expire(key, self.TTL_SEEN_IDS)
-        logger.debug(f"Added {len(ids)} IDs to {key}")
+        redis_log.debug(f"Added {len(ids)} IDs to {key}")
 
     async def get_new_ids(self, region: int, ids: set[int]) -> set[int]:
         """
@@ -142,7 +144,7 @@ class RedisConnection:
         """Clear all seen IDs for a region (use carefully)."""
         key = self._seen_key(region)
         await self.client.delete(key)
-        logger.warning(f"Cleared all seen IDs for region {region}")
+        redis_log.warning(f"Cleared all seen IDs for region {region}")
 
     # ========== Object Operations ==========
 
@@ -157,7 +159,7 @@ class RedisConnection:
         key = self._object_key(object_id)
         await self.client.set(key, json.dumps(obj, ensure_ascii=False, default=str))
         await self.client.expire(key, self.TTL_OBJECT)
-        logger.debug(f"Saved object {object_id} to Redis")
+        redis_log.debug(f"Saved object {object_id} to Redis")
 
     async def save_objects(self, objects: list[dict]) -> None:
         """
@@ -172,7 +174,7 @@ class RedisConnection:
             pipe.set(key, json.dumps(obj, ensure_ascii=False, default=str))
             pipe.expire(key, self.TTL_OBJECT)
         await pipe.execute()
-        logger.debug(f"Saved {len(objects)} objects to Redis")
+        redis_log.debug(f"Saved {len(objects)} objects to Redis")
 
     async def get_object(self, object_id: int) -> Optional[dict]:
         """
@@ -243,7 +245,7 @@ class RedisConnection:
         key = self._subscription_initialized_key(subscription_id)
         await self.client.set(key, "1")
         await self.client.expire(key, self.TTL_INITIALIZED)
-        logger.debug(f"Marked subscription {subscription_id} as initialized")
+        redis_log.debug(f"Marked subscription {subscription_id} as initialized")
 
     async def clear_subscription_initialized(self, subscription_id: int) -> None:
         """
@@ -254,7 +256,7 @@ class RedisConnection:
         """
         key = self._subscription_initialized_key(subscription_id)
         await self.client.delete(key)
-        logger.debug(f"Cleared initialized flag for subscription {subscription_id}")
+        redis_log.debug(f"Cleared initialized flag for subscription {subscription_id}")
 
     async def get_uninitialized_subscriptions(
         self, subscriptions: list[dict]
@@ -305,11 +307,11 @@ class RedisConnection:
         # If re-enabling, clear initialized so it gets re-initialized
         if was_disabled:
             await self.clear_subscription_initialized(subscription["id"])
-            logger.info(f"Subscription {sub_id} re-enabled, will re-initialize")
+            redis_log.info(f"Subscription {sub_id} re-enabled, will re-initialize")
 
         # Store subscription as JSON
         await self.client.hset(key, sub_id, json.dumps(subscription, ensure_ascii=False, default=str))
-        logger.debug(f"Synced subscription {sub_id} to region {region}")
+        redis_log.debug(f"Synced subscription {sub_id} to region {region}")
 
     async def sync_subscriptions(self, subscriptions: list[dict]) -> None:
         """
@@ -338,7 +340,7 @@ class RedisConnection:
                 pipe.hset(key, mapping=subs)
         await pipe.execute()
 
-        logger.info(f"Synced {len(subscriptions)} subscriptions across {len(by_region)} regions")
+        redis_log.info(f"Synced {len(subscriptions)} subscriptions across {len(by_region)} regions")
 
     async def remove_subscription(self, region: int, subscription_id: int) -> None:
         """
@@ -350,7 +352,7 @@ class RedisConnection:
         """
         key = self._subscriptions_key(region)
         await self.client.hdel(key, str(subscription_id))
-        logger.debug(f"Removed subscription {subscription_id} from region {region}")
+        redis_log.debug(f"Removed subscription {subscription_id} from region {region}")
 
     async def get_subscriptions_by_region(self, region: int) -> list[dict]:
         """

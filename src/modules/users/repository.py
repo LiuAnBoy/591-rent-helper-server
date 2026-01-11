@@ -14,6 +14,8 @@ from loguru import logger
 from config.settings import get_settings
 from src.modules.users.models import User
 
+users_log = logger.bind(module="Users")
+
 
 class UserRepository:
     """Repository for user database operations."""
@@ -71,10 +73,10 @@ class UserRepository:
             payload = jwt.decode(token, secret_key, algorithms=["HS256"])
             return payload
         except jwt.ExpiredSignatureError:
-            logger.warning("Token expired")
+            users_log.warning("Token expired")
             return None
         except jwt.InvalidTokenError as e:
-            logger.warning(f"Invalid token: {e}")
+            users_log.warning(f"Invalid token: {e}")
             return None
 
     async def get_by_id(self, user_id: int) -> Optional[User]:
@@ -152,7 +154,7 @@ class UserRepository:
 
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(query, name)
-            logger.info(f"Created user from provider: {name}")
+            users_log.info(f"Created user from provider: {name}")
             return User(**dict(row))
 
     async def find_by_provider(self, provider: str, provider_id: str) -> Optional[User]:

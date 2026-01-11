@@ -12,6 +12,8 @@ from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 from src.jobs.parser import parse_detail_fields
 
+crawler_log = logger.bind(module="Crawler")
+
 
 class ObjectDetailCrawler:
     """
@@ -42,7 +44,7 @@ class ObjectDetailCrawler:
         if self._browser:
             return
 
-        logger.info(f"Starting ObjectDetailCrawler with {self.max_workers} workers")
+        crawler_log.info(f"Starting ObjectDetailCrawler with {self.max_workers} workers")
 
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(headless=True)
@@ -61,7 +63,7 @@ class ObjectDetailCrawler:
             page = await self._context.new_page()
             self._pages.append(page)
             self._page_locks.append(asyncio.Lock())
-            logger.debug(f"Created worker page {i + 1}/{self.max_workers}")
+            crawler_log.debug(f"Created worker page {i + 1}/{self.max_workers}")
 
         self._semaphore = asyncio.Semaphore(self.max_workers)
 
@@ -78,7 +80,7 @@ class ObjectDetailCrawler:
             self._playwright = None
         self._pages = []
         self._page_locks = []
-        logger.info("ObjectDetailCrawler closed")
+        crawler_log.info("ObjectDetailCrawler closed")
 
     async def _get_available_page(self) -> tuple[int, Page]:
         """Get an available page with its index."""
@@ -94,7 +96,7 @@ class ObjectDetailCrawler:
             data = await page.evaluate("window.__NUXT__?.data")
             return data
         except Exception as e:
-            logger.error(f"Failed to extract __NUXT__ data: {e}")
+            crawler_log.error(f"Failed to extract __NUXT__ data: {e}")
             return None
 
     async def fetch_detail(
@@ -132,7 +134,7 @@ class ObjectDetailCrawler:
             # Extract NUXT data
             nuxt_data = await self._extract_nuxt_data(page)
             if not nuxt_data:
-                logger.warning(f"No NUXT data found for object {object_id}")
+                crawler_log.warning(f"No NUXT data found for object {object_id}")
                 return None
 
             # Find detail data in NUXT data
@@ -145,13 +147,13 @@ class ObjectDetailCrawler:
                         break
 
             if not detail_data:
-                logger.warning(f"No detail data found for object {object_id}")
+                crawler_log.warning(f"No detail data found for object {object_id}")
                 return None
 
             # Parse fields
             result = parse_detail_fields(detail_data)
 
-            logger.debug(
+            crawler_log.debug(
                 f"Detail {object_id}: gender={result['gender']}, "
                 f"pet={result['pet_allowed']}, options={len(result['options'])} items"
             )
@@ -159,7 +161,7 @@ class ObjectDetailCrawler:
             return result
 
         except Exception as e:
-            logger.error(f"Failed to fetch detail for {object_id}: {e}")
+            crawler_log.error(f"Failed to fetch detail for {object_id}: {e}")
             return None
 
     async def _fetch_with_worker(
@@ -185,7 +187,7 @@ class ObjectDetailCrawler:
                 await asyncio.sleep(self.delay)
 
             progress["completed"] += 1
-            logger.info(
+            crawler_log.info(
                 f"[Worker {worker_id + 1}] Fetching detail "
                 f"{progress['completed']}/{progress['total']}: {object_id}"
             )
@@ -212,7 +214,7 @@ class ObjectDetailCrawler:
         if not self._browser:
             await self.start()
 
-        logger.info(
+        crawler_log.info(
             f"Fetching {len(object_ids)} detail pages "
             f"with {self.max_workers} workers..."
         )
@@ -241,13 +243,13 @@ class ObjectDetailCrawler:
         # Process results
         for result in task_results:
             if isinstance(result, Exception):
-                logger.error(f"Task failed: {result}")
+                crawler_log.error(f"Task failed: {result}")
                 continue
             obj_id, detail = result
             if detail:
                 results[obj_id] = detail
 
-        logger.info(
+        crawler_log.info(
             f"Fetched {len(results)}/{len(object_ids)} detail pages successfully"
         )
 

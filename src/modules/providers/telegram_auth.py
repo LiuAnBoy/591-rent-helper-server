@@ -10,6 +10,8 @@ from loguru import logger
 
 from src.modules.providers.models import TelegramAuthData, TelegramUser
 
+tgauth_log = logger.bind(module="TgAuth")
+
 
 def verify_init_data(init_data: str, bot_token: str) -> bool:
     """
@@ -31,7 +33,7 @@ def verify_init_data(init_data: str, bot_token: str) -> bool:
         # Extract and remove hash
         received_hash = parsed.pop("hash", "")
         if not received_hash:
-            logger.warning("No hash in initData")
+            tgauth_log.warning("No hash in initData")
             return False
 
         # Build data check string (sorted alphabetically)
@@ -56,12 +58,12 @@ def verify_init_data(init_data: str, bot_token: str) -> bool:
         is_valid = calculated_hash == received_hash
 
         if not is_valid:
-            logger.warning("Invalid initData hash")
+            tgauth_log.warning("Invalid initData hash")
 
         return is_valid
 
     except Exception as e:
-        logger.error(f"Error verifying initData: {e}")
+        tgauth_log.error(f"Error verifying initData: {e}")
         return False
 
 
@@ -81,7 +83,7 @@ def parse_init_data(init_data: str) -> Optional[TelegramAuthData]:
         # Parse user data (URL encoded JSON)
         user_str = parsed.get("user", [""])[0]
         if not user_str:
-            logger.warning("No user in initData")
+            tgauth_log.warning("No user in initData")
             return None
 
         user_data = json.loads(unquote(user_str))
@@ -101,7 +103,7 @@ def parse_init_data(init_data: str) -> Optional[TelegramAuthData]:
         )
 
     except Exception as e:
-        logger.error(f"Error parsing initData: {e}")
+        tgauth_log.error(f"Error parsing initData: {e}")
         return None
 
 
@@ -123,19 +125,19 @@ def verify_and_parse_init_data(
     """
     # Verify hash
     if not verify_init_data(init_data, bot_token):
-        logger.warning("verify_init_data returned False")
+        tgauth_log.warning("verify_init_data returned False")
         return None
 
     # Parse data
     auth_data = parse_init_data(init_data)
     if not auth_data:
-        logger.warning("parse_init_data returned None")
+        tgauth_log.warning("parse_init_data returned None")
         return None
 
     # Check expiry
     if auth_data.is_expired(max_age_seconds):
-        logger.warning(f"initData expired (auth_date: {auth_data.auth_date})")
+        tgauth_log.warning(f"initData expired (auth_date: {auth_data.auth_date})")
         return None
 
-    logger.debug(f"initData verified successfully for user {auth_data.user.id}")
+    tgauth_log.debug(f"initData verified successfully for user {auth_data.user.id}")
     return auth_data

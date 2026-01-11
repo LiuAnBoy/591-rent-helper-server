@@ -9,6 +9,8 @@ from src.modules.providers import UserProviderRepository
 from src.modules.subscriptions import SubscriptionRepository
 from src.modules.users import UserRepository, UserWithBindings
 
+users_log = logger.bind(module="Users")
+
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
@@ -51,7 +53,7 @@ async def get_current_user_profile(current_user: CurrentUser) -> dict:
     user_repo = UserRepository(postgres.pool)
     max_subs = await user_repo.get_role_limit(current_user.role)
 
-    logger.debug(f"Fetched profile for user {current_user.id}")
+    users_log.debug(f"Fetched profile for user {current_user.id}")
 
     return {
         "id": current_user.id,

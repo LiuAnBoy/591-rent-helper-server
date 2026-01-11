@@ -14,6 +14,8 @@ from playwright.async_api import async_playwright, Page, Browser
 
 from src.modules.objects import RentalObject
 
+crawler_log = logger.bind(module="Crawler")
+
 
 class Rent591Crawler:
     """591 rental website crawler using Playwright."""
@@ -35,7 +37,7 @@ class Rent591Crawler:
 
     async def start(self) -> None:
         """Start the browser."""
-        logger.info("Starting Playwright browser...")
+        crawler_log.info("Starting Playwright browser...")
         self._playwright = await async_playwright().start()
         self.browser = await self._playwright.chromium.launch(
             headless=self.headless,
@@ -45,7 +47,7 @@ class Rent591Crawler:
         # Set viewport size
         await self.page.set_viewport_size({"width": 1280, "height": 800})
 
-        logger.info("Browser started successfully")
+        crawler_log.info("Browser started successfully")
 
     async def close(self) -> None:
         """Close the browser."""
@@ -55,7 +57,7 @@ class Rent591Crawler:
             await self.browser.close()
         if self._playwright:
             await self._playwright.stop()
-        logger.info("Browser closed")
+        crawler_log.info("Browser closed")
 
     async def fetch_listings(
         self,
@@ -106,7 +108,7 @@ class Rent591Crawler:
                 first_row=first_row,
             )
 
-            logger.info(f"Fetching page {page_num}: {url}")
+            crawler_log.info(f"Fetching page {page_num}: {url}")
 
             # Navigate to page (use domcontentloaded to avoid timeout from ads/tracking scripts)
             await self.page.goto(url, wait_until="domcontentloaded")
@@ -118,7 +120,7 @@ class Rent591Crawler:
             data = await self._extract_nuxt_data()
 
             if not data:
-                logger.warning("No data found on page")
+                crawler_log.warning("No data found on page")
                 break
 
             # Parse items
@@ -126,14 +128,14 @@ class Rent591Crawler:
             total = self._find_total(data)
 
             if not items:
-                logger.info("No more items found")
+                crawler_log.info("No more items found")
                 break
 
             # Convert to RentalObject objects
             listings = self._parse_items(items)
             all_listings.extend(listings)
 
-            logger.info(
+            crawler_log.info(
                 f"Page {page_num}: Found {len(listings)} objects "
                 f"(Total so far: {len(all_listings)}/{total})"
             )
@@ -141,16 +143,16 @@ class Rent591Crawler:
             # Check max_items limit
             if max_items and len(all_listings) >= max_items:
                 all_listings = all_listings[:max_items]
-                logger.info(f"Reached max items limit: {max_items}")
+                crawler_log.info(f"Reached max items limit: {max_items}")
                 break
 
             # Check if we should continue
             if max_pages and page_num >= max_pages:
-                logger.info(f"Reached max pages limit: {max_pages}")
+                crawler_log.info(f"Reached max pages limit: {max_pages}")
                 break
 
             if first_row + self.PAGE_SIZE >= total:
-                logger.info("Reached last page")
+                crawler_log.info("Reached last page")
                 break
 
             # Move to next page
@@ -159,10 +161,10 @@ class Rent591Crawler:
 
             # Random delay to avoid rate limiting
             delay = random.uniform(2, 4)
-            logger.debug(f"Waiting {delay:.1f}s before next page...")
+            crawler_log.debug(f"Waiting {delay:.1f}s before next page...")
             await asyncio.sleep(delay)
 
-        logger.info(f"Crawling complete. Total objects: {len(all_listings)}")
+        crawler_log.info(f"Crawling complete. Total objects: {len(all_listings)}")
         return all_listings
 
     def _build_url(
@@ -212,7 +214,7 @@ class Rent591Crawler:
             )
         except Exception:
             # Fallback: wait a bit if no items found
-            logger.debug("No item selector found, waiting 2s...")
+            crawler_log.debug("No item selector found, waiting 2s...")
             await asyncio.sleep(2)
 
     async def _extract_nuxt_data(self) -> Optional[dict]:
@@ -221,7 +223,7 @@ class Rent591Crawler:
             data = await self.page.evaluate("window.__NUXT__?.data")
             return data
         except Exception as e:
-            logger.error(f"Failed to extract __NUXT__ data: {e}")
+            crawler_log.error(f"Failed to extract __NUXT__ data: {e}")
             return None
 
     def _find_items(self, data: dict) -> list[dict]:
@@ -261,7 +263,7 @@ class Rent591Crawler:
                 listing = RentalObject.model_validate(item)
                 listings.append(listing)
             except Exception as e:
-                logger.warning(f"Failed to parse item {item.get('id', '?')}: {e}")
+                crawler_log.warning(f"Failed to parse item {item.get('id', '?')}: {e}")
         return listings
 
 

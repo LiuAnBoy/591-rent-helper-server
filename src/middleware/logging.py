@@ -10,6 +10,8 @@ from fastapi import FastAPI, Request
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 
+http_log = logger.bind(module="HTTP")
+
 
 class LoggingMiddleware(BaseHTTPMiddleware):
     """Middleware to log HTTP requests."""
@@ -21,7 +23,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         duration_ms = (time.time() - start_time) * 1000
-        logger.info(
+        http_log.info(
             f"{request.method} {request.url.path} {response.status_code} ({duration_ms:.0f}ms)"
         )
 

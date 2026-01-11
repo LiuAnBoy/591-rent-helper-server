@@ -11,6 +11,8 @@ from loguru import logger
 from telegram import Bot
 from telegram.constants import ParseMode
 
+tg_log = logger.bind(module="TelegramBot")
+
 
 class TelegramBot:
     """Telegram bot wrapper for sending messages."""
@@ -39,11 +41,11 @@ class TelegramBot:
         if instance._bot is None:
             bot_token = token or os.getenv("TELEGRAM_BOT_TOKEN")
             if not bot_token:
-                logger.warning("TELEGRAM_BOT_TOKEN not set")
+                tg_log.warning("TELEGRAM_BOT_TOKEN not set")
                 return instance
 
             instance._bot = Bot(token=bot_token)
-            logger.info("Telegram bot initialized")
+            tg_log.info("Telegram bot initialized")
 
         return instance
 
@@ -84,7 +86,7 @@ class TelegramBot:
             True if sent successfully
         """
         if not self._bot:
-            logger.warning("Bot not configured, cannot send message")
+            tg_log.warning("Bot not configured, cannot send message")
             return False
 
         try:
@@ -97,7 +99,7 @@ class TelegramBot:
             )
             return True
         except Exception as e:
-            logger.error(f"Failed to send message to {chat_id}: {e}")
+            tg_log.error(f"Failed to send message to {chat_id}: {e}")
             return False
 
     async def send_photo(
@@ -120,7 +122,7 @@ class TelegramBot:
             True if sent successfully
         """
         if not self._bot:
-            logger.warning("Bot not configured, cannot send photo")
+            tg_log.warning("Bot not configured, cannot send photo")
             return False
 
         try:
@@ -132,7 +134,7 @@ class TelegramBot:
             )
             return True
         except Exception as e:
-            logger.error(f"Failed to send photo to {chat_id}: {e}")
+            tg_log.error(f"Failed to send photo to {chat_id}: {e}")
             return False
 
     async def send_listing_notification(

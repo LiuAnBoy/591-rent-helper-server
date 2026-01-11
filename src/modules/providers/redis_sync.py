@@ -10,6 +10,8 @@ from src.connections.postgres import get_postgres
 from src.connections.redis import get_redis
 from src.modules.subscriptions import SubscriptionRepository
 
+sync_log = logger.bind(module="Sync")
+
 
 async def sync_user_subscriptions_to_redis(user_id: int) -> int:
     """
@@ -39,12 +41,12 @@ async def sync_user_subscriptions_to_redis(user_id: int) -> int:
         # Count user's subscriptions
         user_subs = [s for s in all_subscriptions if s.get("user_id") == user_id]
 
-        logger.info(
+        sync_log.info(
             f"Synced subscriptions to Redis after provider change for user {user_id} "
             f"({len(user_subs)} user subs, {len(all_subscriptions)} total)"
         )
         return len(user_subs)
 
     except Exception as e:
-        logger.error(f"Failed to sync subscriptions to Redis: {e}")
+        sync_log.error(f"Failed to sync subscriptions to Redis: {e}")
         return 0

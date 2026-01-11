@@ -12,6 +12,8 @@ from loguru import logger
 
 from src.modules.objects.models import RentalObject
 
+objects_log = logger.bind(module="Objects")
+
 
 class ObjectRepository:
     """Repository for object database operations."""
@@ -126,7 +128,7 @@ class ObjectRepository:
             else:
                 updated_count += 1
 
-        logger.info(f"Saved objects: {new_count} new, {updated_count} updated")
+        objects_log.info(f"Saved objects: {new_count} new, {updated_count} updated")
         return new_count, updated_count
 
     async def get_by_id(self, object_id: int) -> Optional[dict]:

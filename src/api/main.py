@@ -22,9 +22,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 logger.remove()
 logger.add(
     sys.stderr,
-    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[module]: <12}</cyan> | <level>{message}</level>",
     level="DEBUG",
 )
+
+log = logger.bind(module="App")
 
 from src.api.routes import (
     auth_router,
@@ -45,9 +47,9 @@ async def sync_subscriptions_on_startup():
     try:
         checker = scheduler.get_checker()
         count = await checker.sync_subscriptions_to_redis()
-        logger.info(f"Startup: Synced {count} subscriptions to Redis")
+        log.info(f"Startup: Synced {count} subscriptions to Redis")
     except Exception as e:
-        logger.error(f"Failed to sync subscriptions on startup: {e}")
+        log.error(f"Failed to sync subscriptions on startup: {e}")
 
 
 @asynccontextmanager
@@ -68,7 +70,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     scheduler.shutdown()
     await scheduler.close_checker()
-    logger.info("Server stopped")
+    log.info("Server stopped")
 
 
 app = FastAPI(

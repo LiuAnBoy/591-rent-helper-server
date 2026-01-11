@@ -12,6 +12,8 @@ from loguru import logger
 from config.settings import get_settings
 from src.modules.objects import RentalObject
 
+pg_log = logger.bind(module="Postgres")
+
 
 class PostgresConnection:
     """PostgreSQL connection manager."""
@@ -23,7 +25,7 @@ class PostgresConnection:
 
     async def connect(self) -> None:
         """Connect to PostgreSQL."""
-        logger.info(f"Connecting to PostgreSQL at {self.settings.host}:{self.settings.port}")
+        pg_log.info(f"Connecting to PostgreSQL at {self.settings.host}:{self.settings.port}")
         self._pool = await asyncpg.create_pool(
             host=self.settings.host,
             port=self.settings.port,
@@ -33,13 +35,13 @@ class PostgresConnection:
             min_size=2,
             max_size=self.settings.pool_max,
         )
-        logger.info("PostgreSQL connected successfully")
+        pg_log.info("PostgreSQL connected successfully")
 
     async def close(self) -> None:
         """Close PostgreSQL connection pool."""
         if self._pool:
             await self._pool.close()
-            logger.info("PostgreSQL connection closed")
+            pg_log.info("PostgreSQL connection closed")
 
     @property
     def pool(self) -> asyncpg.Pool:
@@ -152,7 +154,7 @@ class PostgresConnection:
             else:
                 updated_count += 1
 
-        logger.info(f"Saved objects: {new_count} new, {updated_count} updated")
+        pg_log.info(f"Saved objects: {new_count} new, {updated_count} updated")
         return new_count, updated_count
 
     async def get_object(self, object_id: int) -> Optional[dict]:
