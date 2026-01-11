@@ -45,8 +45,7 @@ Authorization: Bearer <token>
 
 | 操作類型 | 成功回覆 | 失敗回覆 |
 | -------- | -------- | -------- |
-| 註冊 | `{"success": true}` | `{"success": false, "message": "..."}` |
-| 登入 | `{"token": "..."}` | `{"success": false, "message": "..."}` |
+| 登入 | `{"token": "...", "user": {...}}` | `{"detail": "..."}` |
 | 查詢資料 | 直接回傳資料 | `{"success": false, "message": "..."}` |
 | 新增/修改/刪除 | `{"success": true}` | `{"success": false, "message": "..."}` |
 
@@ -56,8 +55,7 @@ Authorization: Bearer <token>
 
 | 模組 | 端點 | 方法 | 🔒 | 說明 |
 |------|------|------|:--:|------|
-| 認證 | `/auth/register` | POST | | 註冊帳號 |
-|      | `/auth/login` | POST | | 登入 |
+| 認證 | `/auth/telegram` | POST | | Telegram Web App 登入 |
 | 使用者 | `/users/me` | GET | ✓ | 取得個人資料 |
 | 訂閱 | `/subscriptions` | GET | ✓ | 列出所有訂閱 |
 |      | `/subscriptions` | POST | ✓ | 新增訂閱 |
@@ -65,38 +63,42 @@ Authorization: Bearer <token>
 |      | `/subscriptions/{id}` | PUT | ✓ | 更新訂閱 |
 |      | `/subscriptions/{id}` | DELETE | ✓ | 刪除訂閱 |
 |      | `/subscriptions/{id}/toggle` | PATCH | ✓ | 啟用/停用訂閱 |
-| 綁定 | `/bindings/telegram` | POST | ✓ | 開始綁定（回傳綁定連結）|
-|      | `/bindings/telegram` | DELETE | ✓ | 解除綁定 |
-|      | `/bindings/telegram/toggle` | PATCH | ✓ | 啟用/停用通知 |
+| 綁定 | `/bindings/telegram/toggle` | PATCH | ✓ | 啟用/停用通知 |
 | 健康檢查 | `/health` | GET | | 健康檢查 |
 
 ---
 
 ## 認證 `/auth`
 
-### POST `/auth/register` - 註冊帳號
+### POST `/auth/telegram` - Telegram Web App 登入
+
+透過 Telegram Web App 的 initData 進行驗證登入，自動建立或取得用戶帳號。
 
 **Body:**
 
 | 欄位 | 類型 | 必填 | 說明 |
 |------|------|:----:|------|
-| `email` | string | ✓ | Email |
-| `password` | string | ✓ | 密碼 |
+| `initData` | string | ✓ | Telegram Web App initData 字串 |
 
-**Response:** `{"success": true}`
+**Response:**
 
----
-
-### POST `/auth/login` - 登入
-
-**Body:**
-
-| 欄位 | 類型 | 必填 | 說明 |
-|------|------|:----:|------|
-| `email` | string | ✓ | Email |
-| `password` | string | ✓ | 密碼 |
-
-**Response:** `{"token": "..."}`
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": 1,
+    "name": "John Doe",
+    "role": "user",
+    "providers": [
+      {
+        "provider": "telegram",
+        "provider_id": "123456789",
+        "notify_enabled": true
+      }
+    ]
+  }
+}
+```
 
 ---
 
@@ -267,34 +269,6 @@ Authorization: Bearer <token>
 ---
 
 ## 綁定 `/bindings`
-
-### POST `/bindings/telegram` - 開始 Telegram 綁定 🔒
-
-產生綁定碼並回傳 Telegram Deep Link。用戶點擊 `bind_url` 後會自動開啟 Telegram Bot 完成綁定。
-
-**Response:**
-
-```json
-{
-  "code": "ABC123",
-  "expires_in": 600,
-  "bind_url": "https://t.me/YourBot?start=BIND_ABC123"
-}
-```
-
-| 欄位 | 類型 | 說明 |
-|------|------|------|
-| `code` | string | 綁定碼（10 分鐘內有效）|
-| `expires_in` | int | 有效秒數 |
-| `bind_url` | string | Telegram 綁定連結（需設定 `TELEGRAM_BOT_USERNAME`）|
-
----
-
-### DELETE `/bindings/telegram` - 解除 Telegram 綁定 🔒
-
-**Response:** `{"success": true}`
-
----
 
 ### PATCH `/bindings/telegram/toggle` - 啟用/停用通知 🔒
 

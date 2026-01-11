@@ -196,15 +196,12 @@ uv run uvicorn src.api.main:app --reload
 
 | 模組     | 端點                        | 說明                        |
 | -------- | --------------------------- | --------------------------- |
-| 認證     | `POST /auth/register`       | 註冊帳號                    |
-|          | `POST /auth/login`          | 登入                        |
+| 認證     | `POST /auth/telegram`       | Telegram Web App 登入       |
 | 使用者   | `GET /users/me`             | 取得個人資料                |
 | 訂閱     | `GET /subscriptions`        | 列出所有訂閱                |
 |          | `POST /subscriptions`       | 新增訂閱（含即時通知）      |
 |          | `PATCH .../toggle`          | 啟用/停用訂閱               |
-| 綁定     | `POST /bindings/telegram`   | 開始綁定（含連結）          |
-|          | `DELETE /bindings/telegram` | 解除綁定                    |
-|          | `PATCH .../telegram/toggle` | 啟用/停用通知（含即時通知） |
+| 綁定     | `PATCH /bindings/telegram/toggle` | 啟用/停用通知（含即時通知） |
 | 健康檢查 | `GET /health`               | 健康檢查                    |
 
 ---
@@ -239,7 +236,9 @@ uv run uvicorn src.api.main:app --reload
 ├── config/
 │   └── settings.py              # 應用程式設定
 ├── migrations/
-│   └── init.sql                 # 資料庫初始化
+│   ├── init.sql                 # 資料庫初始化
+│   ├── 002_user_providers.sql   # 用戶 Provider 關聯
+│   └── 003_instant_notify_index.sql  # 即時通知索引
 ├── src/
 │   ├── api/
 │   │   ├── main.py              # FastAPI 應用程式
@@ -249,10 +248,11 @@ uv run uvicorn src.api.main:app --reload
 │   │   ├── commands/            # 平台無關的指令
 │   │   │   ├── base.py          # 指令基礎類別
 │   │   │   ├── registry.py      # 指令註冊表
-│   │   │   ├── start.py         # /start 指令（含自動綁定）
+│   │   │   ├── start.py         # /start 指令
 │   │   │   ├── help.py          # 幫助 指令
 │   │   │   ├── list.py          # 清單 指令
 │   │   │   ├── notify.py        # 開始通知/暫停通知 指令
+│   │   │   ├── status.py        # 狀態 指令
 │   │   │   └── command.py       # 指令 指令
 │   │   └── telegram/            # Telegram 實作
 │   │       ├── bot.py           # Bot 封裝
@@ -271,15 +271,18 @@ uv run uvicorn src.api.main:app --reload
 │   │   ├── instant_notify.py    # 即時通知
 │   │   └── parser.py            # 資料解析
 │   ├── middleware/
-│   │   ├── __init__.py          # Middleware 初始化
 │   │   └── cors.py              # CORS 設定
 │   ├── modules/
 │   │   ├── users/               # 使用者模組
+│   │   ├── providers/           # 登入提供者模組（Telegram 等）
 │   │   ├── subscriptions/       # 訂閱模組
-│   │   ├── bindings/            # 綁定模組
+│   │   ├── bindings/            # 綁定模組（通知開關同步）
 │   │   └── objects/             # 物件模組
 │   └── utils/
 │       └── mappings.py          # 常數對照表
+├── docs/
+│   ├── API.md                   # API 文件
+│   └── OPTIONS.md               # 訂閱條件選項
 ├── .env.example                 # 環境變數範本
 ├── deploy.sh                    # 部署腳本
 ├── docker-compose.yml           # Docker 編排
