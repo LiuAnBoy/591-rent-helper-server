@@ -158,3 +158,24 @@ class ObjectRepository:
         async with self._pool.acquire() as conn:
             result = await conn.fetchrow(query, object_id)
             return result is not None
+
+    async def get_latest_by_region(self, region: int, limit: int = 10) -> list[dict]:
+        """
+        Get latest objects for a specific region.
+
+        Args:
+            region: Region code (1=台北, 3=新北, etc.)
+            limit: Maximum number of objects to return
+
+        Returns:
+            List of object dictionaries, ordered by created_at DESC
+        """
+        query = """
+        SELECT * FROM objects
+        WHERE region = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        """
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(query, region, limit)
+            return [dict(row) for row in rows]

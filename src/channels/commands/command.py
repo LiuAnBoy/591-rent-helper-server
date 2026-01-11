@@ -36,7 +36,8 @@ class CommandListCommand(BaseCommand):
         commands = [
             {"name": "清單", "desc": "訂閱清單"},
             {"name": "幫助", "desc": "顯示說明"},
-            {"name": "管理", "desc": "管理頁面"},
+            {"name": "開始通知", "desc": "恢復接收通知"},
+            {"name": "暫停通知", "desc": "暫停接收通知"},
         ]
 
         return CommandResult.ok(

@@ -65,10 +65,9 @@ Authorization: Bearer <token>
 |      | `/subscriptions/{id}` | PUT | ✓ | 更新訂閱 |
 |      | `/subscriptions/{id}` | DELETE | ✓ | 刪除訂閱 |
 |      | `/subscriptions/{id}/toggle` | PATCH | ✓ | 啟用/停用訂閱 |
-| 綁定 | `/bindings/telegram` | GET | ✓ | 取得 Telegram 綁定狀態 |
-|      | `/bindings/telegram` | POST | ✓ | 開始綁定（回傳綁定連結）|
+| 綁定 | `/bindings/telegram` | POST | ✓ | 開始綁定（回傳綁定連結）|
 |      | `/bindings/telegram` | DELETE | ✓ | 解除綁定 |
-|      | `/bindings/telegram/toggle` | PATCH | ✓ | 啟用/停用綁定 |
+|      | `/bindings/telegram/toggle` | PATCH | ✓ | 啟用/停用通知 |
 | 健康檢查 | `/health` | GET | | 健康檢查 |
 
 ---
@@ -144,6 +143,8 @@ Authorization: Bearer <token>
 ## 訂閱 `/subscriptions`
 
 ### POST `/subscriptions` - 新增訂閱 🔒
+
+建立訂閱後會觸發即時通知，檢查現有物件並推播符合條件的結果。
 
 **Body:**
 
@@ -267,22 +268,6 @@ Authorization: Bearer <token>
 
 ## 綁定 `/bindings`
 
-### GET `/bindings/telegram` - 取得 Telegram 綁定狀態 🔒
-
-**Response:**
-
-```json
-{
-  "service": "telegram",
-  "is_bound": true,
-  "service_id": "123456789",
-  "enabled": true,
-  "created_at": "2025-01-10T12:00:00+08:00"
-}
-```
-
----
-
 ### POST `/bindings/telegram` - 開始 Telegram 綁定 🔒
 
 產生綁定碼並回傳 Telegram Deep Link。用戶點擊 `bind_url` 後會自動開啟 Telegram Bot 完成綁定。
@@ -311,7 +296,9 @@ Authorization: Bearer <token>
 
 ---
 
-### PATCH `/bindings/telegram/toggle` - 啟用/停用綁定 🔒
+### PATCH `/bindings/telegram/toggle` - 啟用/停用通知 🔒
+
+啟用時會觸發即時通知，檢查現有物件並推播符合條件的結果。
 
 **Query:**
 

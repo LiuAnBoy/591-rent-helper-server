@@ -110,6 +110,9 @@ async def create_subscription(
     Args:
         data: Subscription data
     """
+    import asyncio
+    from src.modules.providers import UserProviderRepository
+
     repo = await get_repository()
     postgres = await get_postgres()
     user_repo = UserRepository(postgres.pool)
@@ -134,6 +137,30 @@ async def create_subscription(
         await sync_subscription_to_redis(subscription)
 
         logger.info(f"Created subscription {subscription['id']} for user {current_user.id}")
+
+        # Trigger instant notification in background
+        provider_repo = UserProviderRepository(postgres.pool)
+        providers = await provider_repo.get_by_user(current_user.id)
+
+        # Find active provider with notifications enabled
+        active_provider = next(
+            (p for p in providers if p.notify_enabled),
+            None
+        )
+
+        if active_provider:
+            from src.jobs.instant_notify import notify_for_new_subscription
+
+            asyncio.create_task(
+                notify_for_new_subscription(
+                    user_id=current_user.id,
+                    subscription=subscription,
+                    service=active_provider.provider,
+                    service_id=active_provider.provider_id,
+                )
+            )
+            logger.info(f"Triggered instant notify for subscription {subscription['id']}")
+
         return {"success": True}
     except Exception as e:
         logger.error(f"Failed to create subscription: {e}")

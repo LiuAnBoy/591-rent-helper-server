@@ -258,6 +258,7 @@ CREATE INDEX IF NOT EXISTS idx_objects_gender ON objects(gender);
 CREATE INDEX IF NOT EXISTS idx_objects_pet_allowed ON objects(pet_allowed);
 CREATE INDEX IF NOT EXISTS idx_objects_first_seen_at ON objects(first_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_objects_is_active ON objects(is_active);
+CREATE INDEX IF NOT EXISTS idx_objects_region_created_at ON objects(region, created_at DESC);
 
 CREATE TRIGGER update_objects_updated_at
     BEFORE UPDATE ON objects

@@ -83,6 +83,20 @@ class RedisConnection:
         ids = await self.client.smembers(key)
         return {int(id_) for id_ in ids}
 
+    async def has_seen_ids(self, region: int) -> bool:
+        """
+        Check if a region has any seen IDs.
+
+        Args:
+            region: Region code
+
+        Returns:
+            True if region has seen_ids, False otherwise
+        """
+        key = self._seen_key(region)
+        count = await self.client.scard(key)
+        return count > 0
+
     async def add_seen_ids(self, region: int, ids: set[int]) -> None:
         """
         Add object IDs to the seen set with TTL.

@@ -194,13 +194,13 @@ class PostgresConnection:
         query = """
         SELECT
             s.*,
-            nb.service,
-            nb.service_id
+            up.provider AS service,
+            up.provider_id AS service_id
         FROM subscriptions s
-        JOIN notification_bindings nb ON s.user_id = nb.user_id
+        JOIN user_providers up ON s.user_id = up.user_id
         WHERE s.enabled = TRUE
-          AND nb.enabled = TRUE
-          AND nb.service_id IS NOT NULL
+          AND up.notify_enabled = TRUE
+          AND up.provider_id IS NOT NULL
           AND s.region = $1
 
           -- 區域 (NULL = 不限)

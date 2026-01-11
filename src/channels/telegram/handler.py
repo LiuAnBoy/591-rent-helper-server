@@ -150,7 +150,7 @@ class TelegramHandler:
             ]]
             return InlineKeyboardMarkup(keyboard)
 
-        if title in ("list_subscriptions", "list_empty", "manage"):
+        if title in ("help", "list_subscriptions", "list_empty"):
             keyboard = [[
                 InlineKeyboardButton(
                     "📱 開啟管理頁面",

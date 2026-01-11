@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 from src.channels.commands.start import StartCommand
 from src.channels.commands.help import HelpCommand
 from src.channels.commands.list import ListCommand
-from src.channels.commands.manage import ManageCommand
 from src.channels.commands.command import CommandListCommand
+from src.channels.commands.notify import PauseCommand, ResumeCommand
 
 
 # Command registry: name -> command class
@@ -28,10 +28,13 @@ COMMANDS: dict[str, type["BaseCommand"]] = {
     # List + alias
     "list": ListCommand,
     "清單": ListCommand,
-    # Manage
-    "管理": ManageCommand,
     # Command list
     "指令": CommandListCommand,
+    # Notification control + aliases
+    "pause": PauseCommand,
+    "暫停通知": PauseCommand,
+    "resume": ResumeCommand,
+    "開始通知": ResumeCommand,
 }
 
 

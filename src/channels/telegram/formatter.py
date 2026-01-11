@@ -52,19 +52,17 @@ class TelegramFormatter(BaseFormatter):
 
     def _format_welcome(self, result: CommandResult) -> str:
         """Format welcome message."""
-        steps = result.data.get("steps", [])
-
         lines = [
-            "👋 歡迎使用 591 租屋通知機器人！",
+            "👋 歡迎使用 591 租屋小幫手！",
             "",
-            "📋 收取通知步驟：",
+            "📋 接收通知技巧：",
+            "1️⃣ 點擊下方按鈕進入管理頁面",
+            "2️⃣ 設定篩選條件",
+            "完成以上步驟就可以等待收到物件通知囉 🎉",
+            "",
+            "💡 輸入 暫停通知 或 開始通知 控制通知開關",
+            "💡 輸入 幫助 或 指令 查看更多資訊",
         ]
-
-        for i, step in enumerate(steps, 1):
-            emoji = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"][i - 1] if i <= 5 else f"{i}."
-            lines.append(f"{emoji} {step}")
-
-        lines.append("\n💡 輸入 幫助 或 指令 查看更多")
 
         return "\n".join(lines)
 
@@ -167,7 +165,7 @@ class TelegramFormatter(BaseFormatter):
         kind_names = {1: "整層", 2: "獨套", 3: "分套", 4: "雅房"}
 
         for idx, sub in enumerate(subscriptions, 1):
-            status = "✅" if sub.get("enabled") else "⏸️"
+            status = "▶️" if sub.get("enabled") else "⏸️"
             name = sub.get("name", f"訂閱 {sub['id']}")
 
             # Build filter description
@@ -193,6 +191,9 @@ class TelegramFormatter(BaseFormatter):
                 lines.append(f"   {' '.join(filters)}")
 
         lines.append(f"\n共 {count} 個訂閱")
+        lines.append("")
+        lines.append("▶️ = 啟用中")
+        lines.append("⏸️ = 已暫停")
 
         return "\n".join(lines)
 
