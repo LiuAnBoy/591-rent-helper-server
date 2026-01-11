@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 from typing import Optional
-from urllib.parse import parse_qs, unquote
+from urllib.parse import parse_qs, parse_qsl, unquote
 
 from loguru import logger
 
@@ -25,27 +25,18 @@ def verify_init_data(init_data: str, bot_token: str) -> bool:
         True if valid, False otherwise
     """
     try:
-        # Parse without URL decoding values - we need original encoded values for hash
-        pairs = init_data.split("&")
-        data_dict = {}
-        for pair in pairs:
-            if "=" in pair:
-                key, value = pair.split("=", 1)
-                data_dict[key] = value
+        # Parse with URL decoding (parse_qsl decodes values automatically)
+        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
 
-        # Extract hash
-        received_hash = data_dict.get("hash", "")
+        # Extract and remove hash
+        received_hash = parsed.pop("hash", "")
         if not received_hash:
             logger.warning("No hash in initData")
             return False
 
-        # Build data check string (sorted alphabetically, without hash)
-        # Use original URL-encoded values
-        data_pairs = []
-        for key in sorted(data_dict.keys()):
-            if key != "hash":
-                data_pairs.append(f"{key}={data_dict[key]}")
-
+        # Build data check string (sorted alphabetically)
+        # Values are URL-decoded by parse_qsl
+        data_pairs = [f"{k}={v}" for k, v in sorted(parsed.items())]
         data_check_string = "\n".join(data_pairs)
 
         # Calculate secret key: HMAC-SHA256("WebAppData", bot_token)
@@ -65,8 +56,7 @@ def verify_init_data(init_data: str, bot_token: str) -> bool:
         is_valid = calculated_hash == received_hash
 
         if not is_valid:
-            logger.warning(f"Invalid initData hash")
-            logger.debug(f"data_check_string: {data_check_string[:100]}...")
+            logger.warning("Invalid initData hash")
 
         return is_valid
 
