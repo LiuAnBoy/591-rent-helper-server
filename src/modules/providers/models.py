@@ -3,7 +3,9 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+import json
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class UserProvider(BaseModel):
@@ -17,6 +19,14 @@ class UserProvider(BaseModel):
     notify_enabled: bool = Field(default=True, description="Whether to receive notifications")
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("provider_data", mode="before")
+    @classmethod
+    def parse_provider_data(cls, v):
+        """Parse provider_data from JSON string if needed."""
+        if isinstance(v, str):
+            return json.loads(v)
+        return v or {}
 
     @property
     def is_telegram(self) -> bool:
