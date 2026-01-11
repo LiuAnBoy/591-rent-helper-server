@@ -123,10 +123,15 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
         logger.error("TELEGRAM_BOT_TOKEN not configured")
         raise HTTPException(status_code=500, detail="Telegram 登入未設定")
 
+    # Debug logging
+    logger.debug(f"Received initData length: {len(data.initData)}")
+    logger.debug(f"initData preview: {data.initData[:100]}...")
+
     # Verify and parse initData
     auth_data = verify_and_parse_init_data(data.initData, bot_token)
 
     if not auth_data:
+        logger.warning("Failed to verify/parse initData")
         raise HTTPException(status_code=401, detail="Invalid Telegram auth data")
 
     telegram_user = auth_data.user

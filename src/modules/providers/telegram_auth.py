@@ -25,31 +25,37 @@ def verify_init_data(init_data: str, bot_token: str) -> bool:
         True if valid, False otherwise
     """
     try:
-        parsed = parse_qs(init_data)
+        # Parse without URL decoding values - we need original encoded values for hash
+        pairs = init_data.split("&")
+        data_dict = {}
+        for pair in pairs:
+            if "=" in pair:
+                key, value = pair.split("=", 1)
+                data_dict[key] = value
 
         # Extract hash
-        received_hash = parsed.get("hash", [""])[0]
+        received_hash = data_dict.get("hash", "")
         if not received_hash:
             logger.warning("No hash in initData")
             return False
 
         # Build data check string (sorted alphabetically, without hash)
+        # Use original URL-encoded values
         data_pairs = []
-        for key in sorted(parsed.keys()):
+        for key in sorted(data_dict.keys()):
             if key != "hash":
-                value = parsed[key][0]
-                data_pairs.append(f"{key}={value}")
+                data_pairs.append(f"{key}={data_dict[key]}")
 
         data_check_string = "\n".join(data_pairs)
 
-        # Calculate secret key: HMAC-SHA256(bot_token, "WebAppData")
+        # Calculate secret key: HMAC-SHA256("WebAppData", bot_token)
         secret_key = hmac.new(
             b"WebAppData",
             bot_token.encode(),
             hashlib.sha256
         ).digest()
 
-        # Calculate hash: HMAC-SHA256(data_check_string, secret_key)
+        # Calculate hash: HMAC-SHA256(secret_key, data_check_string)
         calculated_hash = hmac.new(
             secret_key,
             data_check_string.encode(),
@@ -59,7 +65,8 @@ def verify_init_data(init_data: str, bot_token: str) -> bool:
         is_valid = calculated_hash == received_hash
 
         if not is_valid:
-            logger.warning("Invalid initData hash")
+            logger.warning(f"Invalid initData hash")
+            logger.debug(f"data_check_string: {data_check_string[:100]}...")
 
         return is_valid
 
@@ -126,11 +133,13 @@ def verify_and_parse_init_data(
     """
     # Verify hash
     if not verify_init_data(init_data, bot_token):
+        logger.warning("verify_init_data returned False")
         return None
 
     # Parse data
     auth_data = parse_init_data(init_data)
     if not auth_data:
+        logger.warning("parse_init_data returned None")
         return None
 
     # Check expiry
@@ -138,4 +147,5 @@ def verify_and_parse_init_data(
         logger.warning(f"initData expired (auth_date: {auth_data.auth_date})")
         return None
 
+    logger.debug(f"initData verified successfully for user {auth_data.user.id}")
     return auth_data
