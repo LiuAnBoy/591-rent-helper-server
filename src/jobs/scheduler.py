@@ -124,9 +124,6 @@ def setup_jobs() -> None:
         name=f"Daytime checker (every {crawler.interval_minutes} min)",
         replace_existing=True,
     )
-    scheduler_log.info(
-        f"Daytime job: every {crawler.interval_minutes} minutes (interval-based)"
-    )
 
     # Nighttime job: fixed times (cron-based)
     def get_minute_expr(interval: int) -> str:
@@ -151,9 +148,6 @@ def setup_jobs() -> None:
         id="checker_job_night",
         name=f"Night checker (every {crawler.night_interval_minutes} min)",
         replace_existing=True,
-    )
-    scheduler_log.info(
-        f"Night job: minute={night_minutes}, hour={night_hours_expr} (fixed times)"
     )
 
     # Run immediately on startup
