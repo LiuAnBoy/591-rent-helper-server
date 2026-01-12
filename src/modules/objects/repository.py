@@ -250,6 +250,7 @@ class ObjectRepository:
             bathroom = COALESCE($15, bathroom),
             tags = $16,
             other = $17,
+            address = COALESCE($18, address),
             updated_at = NOW()
         WHERE id = $1
         RETURNING id
@@ -275,6 +276,7 @@ class ObjectRepository:
                 bathroom,
                 tags,
                 other_codes,
+                detail.get("address"),
             )
             return result is not None
 

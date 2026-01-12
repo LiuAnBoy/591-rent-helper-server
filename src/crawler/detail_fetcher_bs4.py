@@ -270,6 +270,23 @@ class DetailFetcherBs4:
                 tags.append(text)
         return tags
 
+    def _parse_address(self, soup: BeautifulSoup) -> Optional[str]:
+        """
+        Parse address from div.address span.load-map.
+
+        Args:
+            soup: BeautifulSoup parsed page
+
+        Returns:
+            Address string or None
+        """
+        addr_div = soup.find("div", class_="address")
+        if addr_div:
+            load_map = addr_div.find("span", class_="load-map")
+            if load_map:
+                return load_map.get_text(strip=True)
+        return None
+
     def _parse_detail_sync(self, object_id: int) -> Optional[dict]:
         """
         Synchronously fetch and parse a detail page.
@@ -318,6 +335,7 @@ class DetailFetcherBs4:
                 "is_rooftop": is_rooftop,
                 "layout_str": layout_str,
                 "tags": self._parse_tags(soup),
+                "address": self._parse_address(soup),
             }
 
             fetcher_log.debug(f"Parsed detail {object_id}")
