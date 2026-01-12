@@ -138,14 +138,20 @@ class Checker:
         checker_log.info(f"Fetching detail pages for {len(object_ids)} objects...")
         details = await self._detail_fetcher.fetch_details_batch(object_ids)
 
-        # Update objects in-memory for matching
+        # Update objects in-memory for matching and notification display
         objects_map = {obj.id: obj for obj in objects}
         for obj_id, detail in details.items():
             if obj_id in objects_map:
                 obj = objects_map[obj_id]
+                # Fields for matching
                 obj.gender = detail.get("gender", "all")
                 obj.pet_allowed = detail.get("pet_allowed")
                 obj.options = detail.get("options", [])
+                # Fields for notification display
+                obj.address = detail.get("address") or obj.address
+                obj.tags = detail.get("tags") or obj.tags
+                obj.layout_str = detail.get("layout_str") or obj.layout_str
+                obj.floor_name = detail.get("floor_str") or obj.floor_name
 
         # Update objects in database
         if details:
