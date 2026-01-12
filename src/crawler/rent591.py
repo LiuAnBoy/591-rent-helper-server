@@ -1,7 +1,7 @@
 """
 591 Rent Crawler Module.
 
-Handles fetching listings from 591 rental website using Playwright.
+Handles fetching rental objects from 591 website using Playwright.
 """
 
 import asyncio
@@ -59,7 +59,7 @@ class Rent591Crawler:
             await self._playwright.stop()
         crawler_log.info("Browser closed")
 
-    async def fetch_listings(
+    async def fetch_objects(
         self,
         region: int = 1,
         section: Optional[int] = None,
@@ -72,7 +72,7 @@ class Rent591Crawler:
         max_items: Optional[int] = None,
     ) -> list[RentalObject]:
         """
-        Fetch rental listings from 591.
+        Fetch rental objects from 591.
 
         Args:
             region: City code (1=Taipei, 3=New Taipei)
@@ -91,7 +91,7 @@ class Rent591Crawler:
         if not self.page:
             raise RuntimeError("Browser not started. Call start() first.")
 
-        all_listings: list[RentalObject] = []
+        all_objects: list[RentalObject] = []
         first_row = 0
         page_num = 1
 
@@ -132,17 +132,17 @@ class Rent591Crawler:
                 break
 
             # Convert to RentalObject objects
-            listings = self._parse_items(items)
-            all_listings.extend(listings)
+            objects = self._parse_items(items)
+            all_objects.extend(objects)
 
             crawler_log.info(
-                f"Page {page_num}: Found {len(listings)} objects "
-                f"(Total so far: {len(all_listings)}/{total})"
+                f"Page {page_num}: Found {len(objects)} objects "
+                f"(Total so far: {len(all_objects)}/{total})"
             )
 
             # Check max_items limit
-            if max_items and len(all_listings) >= max_items:
-                all_listings = all_listings[:max_items]
+            if max_items and len(all_objects) >= max_items:
+                all_objects = all_objects[:max_items]
                 crawler_log.info(f"Reached max items limit: {max_items}")
                 break
 
@@ -164,8 +164,8 @@ class Rent591Crawler:
             crawler_log.debug(f"Waiting {delay:.1f}s before next page...")
             await asyncio.sleep(delay)
 
-        crawler_log.info(f"Crawling complete. Total objects: {len(all_listings)}")
-        return all_listings
+        crawler_log.info(f"Crawling complete. Total objects: {len(all_objects)}")
+        return all_objects
 
     def _build_url(
         self,
@@ -207,7 +207,7 @@ class Rent591Crawler:
     async def _wait_for_content(self) -> None:
         """Wait for page content to load."""
         try:
-            # Wait for listing items to appear
+            # Wait for rental items to appear
             await self.page.wait_for_selector(
                 "[data-v-][class*='item']",
                 timeout=10000,
@@ -257,14 +257,14 @@ class Rent591Crawler:
 
     def _parse_items(self, items: list[dict]) -> list[RentalObject]:
         """Parse raw items into RentalObject objects."""
-        listings = []
+        objects = []
         for item in items:
             try:
-                listing = RentalObject.model_validate(item)
-                listings.append(listing)
+                obj = RentalObject.model_validate(item)
+                objects.append(obj)
             except Exception as e:
                 crawler_log.warning(f"Failed to parse item {item.get('id', '?')}: {e}")
-        return listings
+        return objects
 
 
 async def main():
@@ -274,18 +274,18 @@ async def main():
     try:
         await crawler.start()
 
-        # Fetch latest 10 listings from New Taipei City (region=3)
-        listings = await crawler.fetch_listings(
+        # Fetch latest 10 objects from New Taipei City (region=3)
+        objects = await crawler.fetch_objects(
             region=3,  # New Taipei City (新北市)
             max_items=10,  # Only get 10 items for quick check
         )
 
         print(f"\n{'='*60}")
-        print(f"Found {len(listings)} listings (sorted by newest)")
+        print(f"Found {len(objects)} objects (sorted by newest)")
         print(f"{'='*60}\n")
 
-        for listing in listings:
-            print(listing)
+        for obj in objects:
+            print(obj)
             print()
 
     finally:

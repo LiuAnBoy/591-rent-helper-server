@@ -468,7 +468,7 @@ class Checker:
 
         try:
             # Step 1: Crawl latest objects from list page
-            objects = await self._crawler.fetch_listings(
+            objects = await self._crawler.fetch_objects(
                 region=region,
                 section=section,
                 sort="posttime_desc",
