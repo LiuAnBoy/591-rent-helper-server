@@ -5,6 +5,7 @@ Lightweight alternative to Playwright for fetching rental detail pages.
 """
 
 import asyncio
+import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
@@ -12,10 +13,8 @@ import requests
 from bs4 import BeautifulSoup
 from loguru import logger
 
-from src.utils.mappings import (
-    SHAPE_NAME_TO_CODE,
-    convert_options_to_codes,
-)
+from src.utils.mappings import convert_options_to_codes
+from src.utils.parsers import parse_fitment, parse_shape
 
 fetcher_log = logger.bind(module="BS4")
 
@@ -157,10 +156,52 @@ class DetailFetcherBs4:
         Returns:
             Shape code (1-4) or None
         """
-        for name, code in SHAPE_NAME_TO_CODE.items():
-            if name in page_text:
-                return code
-        return None
+        return parse_shape(page_text)
+
+    def _parse_fitment(self, page_text: str) -> Optional[int]:
+        """
+        Parse fitment/decoration level from page text.
+
+        Args:
+            page_text: Full text content of the page
+
+        Returns:
+            Fitment code: 99 (new), 3 (mid-range), 4 (high-end), or None
+        """
+        return parse_fitment(page_text)
+
+    def _parse_breadcrumb(self, soup: BeautifulSoup) -> dict:
+        """
+        Parse region, section, kind from breadcrumb links.
+
+        Args:
+            soup: BeautifulSoup parsed page
+
+        Returns:
+            Dict with section, kind codes (if found)
+        """
+        result = {}
+        breadcrumb_links = soup.find_all("a", href=re.compile(r"region=\d+"))
+
+        for link in breadcrumb_links:
+            href = link.get("href", "")
+
+            # Extract region
+            region_match = re.search(r"region=(\d+)", href)
+            if region_match and "region" not in result:
+                result["region"] = int(region_match.group(1))
+
+            # Extract section (only if region is in this link)
+            section_match = re.search(r"section=(\d+)", href)
+            if section_match and region_match:
+                result["section"] = int(section_match.group(1))
+
+            # Extract kind (only if region is in this link)
+            kind_match = re.search(r"kind=(\d+)", href)
+            if kind_match and region_match:
+                result["kind"] = int(kind_match.group(1))
+
+        return result
 
     def _parse_options(self, page_text: str) -> list[str]:
         """
@@ -196,17 +237,23 @@ class DetailFetcherBs4:
             soup = BeautifulSoup(html, "html.parser")
             page_text = soup.get_text()
 
+            # Parse breadcrumb for section and kind
+            breadcrumb = self._parse_breadcrumb(soup)
+
             result = {
                 "gender": self._parse_gender(page_text),
                 "pet_allowed": self._parse_pet(page_text),
                 "shape": self._parse_shape(page_text),
                 "options": self._parse_options(page_text),
+                "fitment": self._parse_fitment(page_text),
+                "section": breadcrumb.get("section"),
+                "kind": breadcrumb.get("kind"),
             }
 
             fetcher_log.debug(
                 f"Parsed {object_id}: gender={result['gender']}, "
                 f"pet={result['pet_allowed']}, shape={result['shape']}, "
-                f"options={len(result['options'])} items"
+                f"fitment={result['fitment']}, options={len(result['options'])} items"
             )
 
             return result
@@ -228,6 +275,9 @@ class DetailFetcherBs4:
                 - pet_allowed: True | False | None
                 - shape: int | None (1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅)
                 - options: list[str] (equipment codes)
+                - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
+                - section: int | None (行政區代碼)
+                - kind: int | None (類型代碼)
         """
         if self._session is None:
             await self.start()

@@ -115,8 +115,11 @@ class DetailFetcherPlaywright:
             Dict with parsed detail fields or None if failed:
                 - gender: "boy" | "girl" | "all"
                 - pet_allowed: True | False | None
-                - shape: str | None
+                - shape: int | None (1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅)
                 - options: list[str] (equipment codes)
+                - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
+                - section: int | None (行政區代碼)
+                - kind: int | None (類型代碼)
         """
         if not self._browser:
             await self.start()

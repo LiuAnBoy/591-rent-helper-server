@@ -6,6 +6,8 @@ Parse fields from rental detail page data.
 
 from src.utils import convert_options_to_codes
 from src.utils.parsers.rule import parse_rule
+from src.utils.parsers.shape import parse_shape
+from src.utils.parsers.fitment import parse_fitment
 
 
 def parse_detail_fields(detail_data: dict) -> dict:
@@ -19,14 +21,20 @@ def parse_detail_fields(detail_data: dict) -> dict:
         dict with parsed fields:
             - gender: "boy" | "girl" | "all"
             - pet_allowed: True | False | None
-            - shape: str | None (building type)
+            - shape: int | None (1=公寓, 2=電梯, 3=透天, 4=別墅)
             - options: list[str] (equipment/facilities)
+            - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
+            - section: int | None (行政區代碼)
+            - kind: int | None (類型代碼)
     """
     result = {
         "gender": "all",
         "pet_allowed": None,
         "shape": None,
         "options": [],
+        "fitment": None,
+        "section": None,
+        "kind": None,
     }
 
     # Parse service fields
@@ -43,11 +51,27 @@ def parse_detail_fields(detail_data: dict) -> dict:
         if facility:
             result["options"] = convert_options_to_codes(facility)
 
-    # Parse shape from info array
+    # Parse info array for shape and fitment
     info = detail_data.get("info", [])
     for item in info:
-        if item.get("key") == "shape":
-            result["shape"] = item.get("value")
-            break
+        key = item.get("key")
+        value = item.get("value")
+
+        if key == "shape" and value:
+            # Convert shape name to code
+            result["shape"] = parse_shape(value)
+
+        elif key == "fitment" and value:
+            # Convert fitment name to code
+            result["fitment"] = parse_fitment(value)
+
+    # Parse breadcrumb for section and kind
+    breadcrumb = detail_data.get("breadcrumb", [])
+    for crumb in breadcrumb:
+        query = crumb.get("query", {})
+        if "section" in query:
+            result["section"] = int(query["section"])
+        if "kind" in query:
+            result["kind"] = int(query["kind"])
 
     return result

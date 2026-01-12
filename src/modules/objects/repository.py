@@ -181,3 +181,79 @@ class ObjectRepository:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(query, region, limit)
             return [dict(row) for row in rows]
+
+    async def update_from_detail(self, object_id: int, detail: dict) -> bool:
+        """
+        Update object with detail page data.
+
+        Only updates fields that are available from detail page:
+            - gender: "boy" | "girl" | "all"
+            - pet_allowed: True | False | None
+            - shape: int | None (1=公寓, 2=電梯, 3=透天, 4=別墅)
+            - options: list[str] (equipment codes)
+            - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
+            - section: int | None (only if not already set)
+            - kind: int | None (only if not already set)
+
+        Args:
+            object_id: Object ID to update
+            detail: Detail data from detail fetcher
+
+        Returns:
+            True if updated, False if object not found
+        """
+        query = """
+        UPDATE objects SET
+            gender = $2,
+            pet_allowed = $3,
+            shape = $4,
+            options = $5,
+            fitment = $6,
+            section = COALESCE(section, $7),
+            kind = COALESCE(kind, $8),
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING id
+        """
+
+        async with self._pool.acquire() as conn:
+            result = await conn.fetchrow(
+                query,
+                object_id,
+                detail.get("gender", "all"),
+                detail.get("pet_allowed"),
+                detail.get("shape"),
+                detail.get("options", []),
+                detail.get("fitment"),
+                detail.get("section"),
+                detail.get("kind"),
+            )
+            return result is not None
+
+    async def update_from_details_batch(
+        self,
+        details: dict[int, dict],
+    ) -> tuple[int, int]:
+        """
+        Update multiple objects with detail page data.
+
+        Args:
+            details: Dict mapping object_id to detail data
+
+        Returns:
+            Tuple of (updated_count, not_found_count)
+        """
+        updated_count = 0
+        not_found_count = 0
+
+        for object_id, detail in details.items():
+            if await self.update_from_detail(object_id, detail):
+                updated_count += 1
+            else:
+                not_found_count += 1
+
+        objects_log.info(
+            f"Updated from detail: {updated_count} updated, "
+            f"{not_found_count} not found"
+        )
+        return updated_count, not_found_count

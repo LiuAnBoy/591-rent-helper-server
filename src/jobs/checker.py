@@ -13,11 +13,11 @@ from src.connections.postgres import PostgresConnection, get_postgres
 checker_log = logger.bind(module="Checker")
 from src.connections.redis import RedisConnection, get_redis
 from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
-from src.crawler.rent591 import Rent591Crawler
+from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
 from src.jobs.broadcaster import Broadcaster, get_broadcaster
-from src.utils.parsers import parse_is_rooftop
-from src.modules.objects import RentalObject
+from src.modules.objects import ObjectRepository, RentalObject
 from src.utils import convert_options_to_codes
+from src.utils.parsers import parse_is_rooftop
 
 
 class Checker:
@@ -40,8 +40,8 @@ class Checker:
         self,
         postgres: Optional[PostgresConnection] = None,
         redis: Optional[RedisConnection] = None,
-        crawler: Optional[Rent591Crawler] = None,
-        detail_crawler: Optional[DetailFetcher] = None,
+        list_fetcher: Optional[ListFetcher] = None,
+        detail_fetcher: Optional[DetailFetcher] = None,
         broadcaster: Optional[Broadcaster] = None,
         enable_broadcast: bool = True,
         detail_max_workers: int = 3,
@@ -52,20 +52,21 @@ class Checker:
         Args:
             postgres: PostgreSQL connection (will be created if not provided)
             redis: Redis connection (will be created if not provided)
-            crawler: Crawler instance (will be created if not provided)
-            detail_crawler: Detail fetcher with bs4 + Playwright fallback
+            list_fetcher: List fetcher instance (will be created if not provided)
+            detail_fetcher: Detail fetcher with bs4 + Playwright fallback
             broadcaster: Broadcaster instance (will be created if not provided)
             enable_broadcast: Whether to send notifications (default True)
             detail_max_workers: Max parallel workers for detail page fetching
         """
         self._postgres = postgres
         self._redis = redis
-        self._crawler = crawler
-        self._detail_crawler = detail_crawler
+        self._list_fetcher = list_fetcher
+        self._detail_fetcher = detail_fetcher
         self._broadcaster = broadcaster
         self._enable_broadcast = enable_broadcast
         self._detail_max_workers = detail_max_workers
-        self._owns_crawler = False
+        self._owns_fetcher = False
+        self._object_repo: Optional[ObjectRepository] = None
 
     async def _ensure_connections(self) -> None:
         """Ensure all connections are established."""
@@ -73,24 +74,26 @@ class Checker:
             self._postgres = await get_postgres()
         if self._redis is None:
             self._redis = await get_redis()
-        if self._crawler is None:
-            self._crawler = Rent591Crawler(headless=True)
-            self._owns_crawler = True
-            await self._crawler.start()
-        if self._detail_crawler is None:
-            self._detail_crawler = get_detail_fetcher(
+        if self._object_repo is None:
+            self._object_repo = ObjectRepository(self._postgres.pool)
+        if self._list_fetcher is None:
+            self._list_fetcher = get_list_fetcher(headless=True)
+            self._owns_fetcher = True
+            await self._list_fetcher.start()
+        if self._detail_fetcher is None:
+            self._detail_fetcher = get_detail_fetcher(
                 playwright_max_workers=self._detail_max_workers
             )
-            await self._detail_crawler.start()
+            await self._detail_fetcher.start()
         if self._broadcaster is None and self._enable_broadcast:
             self._broadcaster = get_broadcaster()
 
     async def close(self) -> None:
         """Close owned resources."""
-        if self._owns_crawler and self._crawler:
-            await self._crawler.close()
-        if self._detail_crawler:
-            await self._detail_crawler.close()
+        if self._owns_fetcher and self._list_fetcher:
+            await self._list_fetcher.close()
+        if self._detail_fetcher:
+            await self._detail_fetcher.close()
 
     async def sync_subscriptions_to_redis(self) -> int:
         """
@@ -120,10 +123,10 @@ class Checker:
         object_ids: list[int],
     ) -> dict[int, dict]:
         """
-        Fetch detail pages and update rental objects.
+        Fetch detail pages and update rental objects in DB.
 
         Args:
-            objects: List of RentalObject to update
+            objects: List of RentalObject to update (in-memory)
             object_ids: IDs to fetch details for
 
         Returns:
@@ -133,9 +136,9 @@ class Checker:
             return {}
 
         checker_log.info(f"Fetching detail pages for {len(object_ids)} objects...")
-        details = await self._detail_crawler.fetch_details_batch(object_ids)
+        details = await self._detail_fetcher.fetch_details_batch(object_ids)
 
-        # Update objects with detail data
+        # Update objects in-memory for matching
         objects_map = {obj.id: obj for obj in objects}
         for obj_id, detail in details.items():
             if obj_id in objects_map:
@@ -147,6 +150,10 @@ class Checker:
                     f"Updated {obj_id}: gender={obj.gender}, "
                     f"pet={obj.pet_allowed}, options={len(obj.options)}"
                 )
+
+        # Update objects in database
+        if details:
+            await self._object_repo.update_from_details_batch(details)
 
         return details
 
@@ -466,7 +473,7 @@ class Checker:
 
         try:
             # Step 1: Crawl latest objects from list page
-            objects = await self._crawler.fetch_objects(
+            objects = await self._list_fetcher.fetch_objects(
                 region=region,
                 section=section,
                 sort="posttime_desc",

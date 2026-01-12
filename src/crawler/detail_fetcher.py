@@ -21,6 +21,15 @@ class DetailFetcher:
 
     Uses bs4 as primary method (fast, lightweight).
     Falls back to Playwright when bs4 fails (stable, reliable).
+
+    Both fetchers return the same field format:
+        - gender: "boy" | "girl" | "all"
+        - pet_allowed: True | False | None
+        - shape: int | None (1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅)
+        - options: list[str] (equipment codes)
+        - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
+        - section: int | None (行政區代碼)
+        - kind: int | None (類型代碼)
     """
 
     def __init__(

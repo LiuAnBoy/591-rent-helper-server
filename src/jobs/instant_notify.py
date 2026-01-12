@@ -11,7 +11,7 @@ from loguru import logger
 
 from src.connections.postgres import get_postgres
 from src.connections.redis import get_redis
-from src.crawler.rent591 import Rent591Crawler
+from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
 from src.jobs.broadcaster import get_broadcaster
 from src.modules.objects import ObjectRepository, RentalObject
 
@@ -202,11 +202,11 @@ class InstantNotifier:
             notify_log.info(f"Found {len(objects)} objects in DB for region {region}")
         else:
             # Region has no data - need to crawl
-            crawler = Rent591Crawler(headless=True)
-            await crawler.start()
+            fetcher = get_list_fetcher()
+            await fetcher.start()
 
             try:
-                listings = await crawler.fetch_listings(
+                listings = await fetcher.fetch_objects(
                     region=region,
                     sort="posttime_desc",
                     max_items=self.FETCH_COUNT,
@@ -229,7 +229,7 @@ class InstantNotifier:
                 objects = [self._rental_object_to_dict(obj) for obj in listings]
 
             finally:
-                await crawler.close()
+                await fetcher.close()
 
         # Match objects against ALL subscriptions for this region
         total_matched = 0
@@ -305,13 +305,13 @@ class InstantNotifier:
         """
         region = subscription["region"]
 
-        # Initialize crawler
-        crawler = Rent591Crawler(headless=True)
-        await crawler.start()
+        # Initialize fetcher
+        fetcher = get_list_fetcher()
+        await fetcher.start()
 
         try:
             # Crawl listings
-            listings = await crawler.fetch_listings(
+            listings = await fetcher.fetch_objects(
                 region=region,
                 sort="posttime_desc",
                 max_items=self.FETCH_COUNT,
@@ -346,7 +346,7 @@ class InstantNotifier:
             )
 
         finally:
-            await crawler.close()
+            await fetcher.close()
 
     async def _match_and_notify(
         self,
