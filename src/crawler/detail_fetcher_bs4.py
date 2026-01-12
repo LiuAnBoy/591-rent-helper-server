@@ -290,11 +290,7 @@ class DetailFetcherBs4:
                 "is_rooftop": is_rooftop,
             }
 
-            fetcher_log.debug(
-                f"Parsed {object_id}: gender={result['gender']}, "
-                f"pet={result['pet_allowed']}, floor={result['floor_str']}, "
-                f"fitment={result['fitment']}, options={len(result['options'])} items"
-            )
+            fetcher_log.debug(f"Parsed detail {object_id}")
 
             return result
 

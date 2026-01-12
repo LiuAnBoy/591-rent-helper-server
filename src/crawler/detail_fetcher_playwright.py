@@ -158,10 +158,7 @@ class DetailFetcherPlaywright:
 
             result = parse_detail_fields(detail_data)
 
-            fetcher_log.debug(
-                f"Detail {object_id}: gender={result['gender']}, "
-                f"pet={result['pet_allowed']}, options={len(result['options'])} items"
-            )
+            fetcher_log.debug(f"Parsed detail {object_id}")
 
             return result
 
