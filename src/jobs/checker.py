@@ -352,9 +352,9 @@ class Checker:
             tags_as_codes = convert_options_to_codes(obj_tags)
             # Combine all equipment codes
             all_equipment = set(code.lower() for code in obj_options + tags_as_codes)
-
-            option_matched = self._match_options(sub["options"], all_equipment)
-            if not option_matched:
+            sub_options = set(o.lower() for o in sub["options"])
+            # All subscription options must be present in object (AND logic)
+            if not sub_options <= all_equipment:
                 return False
 
         return True
@@ -421,24 +421,6 @@ class Checker:
         if floor_max is not None and obj_floor > floor_max:
             return False
         return True
-
-    def _match_options(self, sub_options: list[str], obj_options: set[str]) -> bool:
-        """
-        Match subscription equipment options against object options.
-
-        Both subscription and object store options as codes (e.g., "cold", "washer").
-
-        Args:
-            sub_options: Subscription options like ["cold", "washer", "bed"]
-            obj_options: Object's options as codes (lowercased)
-
-        Returns:
-            True if at least one option matches (OR logic)
-        """
-        for option in sub_options:
-            if option.lower() in obj_options:
-                return True
-        return False
 
     async def _match_subscriptions_in_redis(
         self, region: int, obj: dict
