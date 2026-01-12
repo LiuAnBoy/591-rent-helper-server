@@ -134,22 +134,17 @@ class DetailFetcherBs4:
             return "girl"
         return "all"
 
-    def _parse_pet(self, page_text: str) -> Optional[bool]:
+    def _parse_pet_from_tags(self, tags: list[str]) -> bool:
         """
-        Parse pet policy from page text.
+        Parse pet policy from tags.
 
         Args:
-            page_text: Full text content of the page
+            tags: List of tag strings from the page
 
         Returns:
-            True (allowed) | False (not allowed) | None (unknown)
+            True if "可養寵物" in tags, False otherwise
         """
-        # Check negative first (「不可養寵物」contains「可養寵」)
-        if "不可養寵" in page_text or "禁養寵" in page_text:
-            return False
-        elif "可養寵物" in page_text or "可養寵" in page_text:
-            return True
-        return None
+        return "可養寵物" in tags
 
     def _parse_shape(self, page_text: str) -> Optional[int]:
         """
@@ -322,9 +317,12 @@ class DetailFetcherBs4:
                 if layout_match:
                     layout_str = layout_match.group(1)
 
+            # Parse tags first (used for pet_allowed)
+            tags = self._parse_tags(soup)
+
             result = {
                 "gender": self._parse_gender(page_text),
-                "pet_allowed": self._parse_pet(page_text),
+                "pet_allowed": self._parse_pet_from_tags(tags),
                 "shape": self._parse_shape(page_text),
                 "options": self._parse_options(page_text),
                 "fitment": self._parse_fitment(page_text),
@@ -335,7 +333,7 @@ class DetailFetcherBs4:
                 "total_floor": total_floor,
                 "is_rooftop": is_rooftop,
                 "layout_str": layout_str,
-                "tags": self._parse_tags(soup),
+                "tags": tags,
                 "address": self._parse_address(soup),
             }
 
@@ -357,7 +355,7 @@ class DetailFetcherBs4:
         Returns:
             Dict with parsed detail fields or None if failed:
                 - gender: "boy" | "girl" | "all"
-                - pet_allowed: True | False | None
+                - pet_allowed: bool (True if tag contains 養寵/可寵, else False)
                 - shape: int | None (1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅)
                 - options: list[str] (equipment codes)
                 - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
