@@ -252,6 +252,24 @@ class DetailFetcherBs4:
                 found_facilities.append(facility)
         return convert_options_to_codes(found_facilities)
 
+    def _parse_tags(self, soup: BeautifulSoup) -> list[str]:
+        """
+        Parse feature tags from span.label-item elements.
+
+        Args:
+            soup: BeautifulSoup parsed page
+
+        Returns:
+            List of Chinese tag names (e.g., ["近捷運", "可養寵物", ...])
+        """
+        tags = []
+        label_items = soup.find_all("span", class_="label-item")
+        for item in label_items:
+            text = item.get_text(strip=True)
+            if text:
+                tags.append(text)
+        return tags
+
     def _parse_detail_sync(self, object_id: int) -> Optional[dict]:
         """
         Synchronously fetch and parse a detail page.
@@ -299,6 +317,7 @@ class DetailFetcherBs4:
                 "total_floor": total_floor,
                 "is_rooftop": is_rooftop,
                 "layout_str": layout_str,
+                "tags": self._parse_tags(soup),
             }
 
             fetcher_log.debug(f"Parsed detail {object_id}")

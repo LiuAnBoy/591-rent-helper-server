@@ -228,6 +228,10 @@ class ObjectRepository:
             if bath_match:
                 bathroom = int(bath_match.group(1))
 
+        # Convert tags to other codes
+        tags = detail.get("tags", [])
+        other_codes = convert_other_to_codes(tags) if tags else []
+
         query = """
         UPDATE objects SET
             gender = $2,
@@ -244,6 +248,8 @@ class ObjectRepository:
             layout_str = COALESCE($13, layout_str),
             layout = COALESCE($14, layout),
             bathroom = COALESCE($15, bathroom),
+            tags = $16,
+            other = $17,
             updated_at = NOW()
         WHERE id = $1
         RETURNING id
@@ -267,6 +273,8 @@ class ObjectRepository:
                 layout_str,
                 layout_num,
                 bathroom,
+                tags,
+                other_codes,
             )
             return result is not None
 
