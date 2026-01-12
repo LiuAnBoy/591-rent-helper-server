@@ -35,7 +35,7 @@ class Checker:
 
     # Crawl settings
     INIT_CRAWL_COUNT = 5    # Items to crawl on first run (no notify)
-    NORMAL_CRAWL_COUNT = 10  # Items to crawl on normal run
+    NORMAL_CRAWL_COUNT = 30  # Items to crawl on normal run
 
     def __init__(
         self,
