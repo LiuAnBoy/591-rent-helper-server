@@ -153,22 +153,24 @@ class ListFetcherBs4:
                 floor_str = floor_match.group(1)
                 floor, total_floor, is_rooftop = parse_floor(floor_str)
 
-            # Get kind name (first span in item-info-txt)
+            # Get kind_name, layout_str, address from item-info-txt spans
             kind_name = None
-            kind_elem = elem.select_one(".item-info-txt span")
-            if kind_elem:
-                kind_name = kind_elem.get_text(strip=True)
-
-            # Get address from item-info-txt spans
+            layout_str = None
             address = None
             txt_elem = elem.select_one(".item-info-txt")
             if txt_elem:
                 spans = txt_elem.find_all("span")
                 for span in spans:
                     span_text = span.get_text(strip=True)
-                    if "區" in span_text and ("-" in span_text or "路" in span_text or "街" in span_text):
+                    # First span is kind_name (整層住家, 獨立套房, etc.)
+                    if kind_name is None and span_text in ["整層住家", "獨立套房", "分租套房", "雅房"]:
+                        kind_name = span_text
+                    # Layout pattern: X房X廳, X房, or 開放格局
+                    elif layout_str is None and (re.match(r"^\d+房", span_text) or span_text == "開放格局"):
+                        layout_str = span_text
+                    # Address contains 區 and street info
+                    elif address is None and "區" in span_text and ("-" in span_text or "路" in span_text or "街" in span_text):
                         address = span_text
-                        break
 
             # Get tags
             tags = []
@@ -190,6 +192,7 @@ class ListFetcherBs4:
                 floor=floor,
                 total_floor=total_floor,
                 is_rooftop=is_rooftop,
+                layout_str=layout_str,
                 kind_name=kind_name,
                 address=address,
                 tags=tags,

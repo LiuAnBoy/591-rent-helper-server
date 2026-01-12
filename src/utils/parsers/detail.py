@@ -44,6 +44,7 @@ def parse_detail_fields(detail_data: dict) -> dict:
         "floor": None,
         "total_floor": None,
         "is_rooftop": False,
+        "layout_str": None,
     }
 
     # Parse service fields
@@ -91,5 +92,10 @@ def parse_detail_fields(detail_data: dict) -> dict:
         result["floor"] = floor
         result["total_floor"] = total_floor
         result["is_rooftop"] = is_rooftop
+
+    # Parse layout_str (e.g., "3房2廳2衛")
+    layout_str = detail_data.get("layoutStr") or detail_data.get("layout_str")
+    if layout_str:
+        result["layout_str"] = layout_str
 
     return result

@@ -62,12 +62,15 @@ class ObjectRepository:
             # Parse price to integer
             price_int = int(obj.price.replace(",", "")) if obj.price else 0
 
-            # Extract layout number from string (e.g., "2房1廳" -> 2)
+            # Extract layout number from string (e.g., "2房1廳" -> 2, "開放格局" -> 0)
             layout_num = None
             if obj.layout_str:
-                match = re.search(r"(\d+)房", obj.layout_str)
-                if match:
-                    layout_num = int(match.group(1))
+                if obj.layout_str == "開放格局":
+                    layout_num = 0
+                else:
+                    match = re.search(r"(\d+)房", obj.layout_str)
+                    if match:
+                        layout_num = int(match.group(1))
 
             # Parse floor info from floor_name
             floor_str = obj.floor_name if hasattr(obj, "floor_name") else None
@@ -198,6 +201,9 @@ class ObjectRepository:
             - floor: int | None (current floor)
             - total_floor: int | None (total floors)
             - is_rooftop: bool (rooftop addition)
+            - layout_str: str | None (e.g., "3房2廳2衛")
+            - layout: int | None (room count from layout_str)
+            - bathroom: int | None (bathroom count from layout_str)
 
         Args:
             object_id: Object ID to update
@@ -206,6 +212,21 @@ class ObjectRepository:
         Returns:
             True if updated, False if object not found
         """
+        # Parse layout and bathroom from layout_str (e.g., "3房2廳2衛" or "開放格局")
+        layout_str = detail.get("layout_str")
+        layout_num = None
+        bathroom = None
+        if layout_str:
+            if layout_str == "開放格局":
+                layout_num = 0
+            else:
+                room_match = re.search(r"(\d+)房", layout_str)
+                if room_match:
+                    layout_num = int(room_match.group(1))
+            bath_match = re.search(r"(\d+)衛", layout_str)
+            if bath_match:
+                bathroom = int(bath_match.group(1))
+
         query = """
         UPDATE objects SET
             gender = $2,
@@ -219,6 +240,9 @@ class ObjectRepository:
             floor = COALESCE($10, floor),
             total_floor = COALESCE($11, total_floor),
             is_rooftop = COALESCE($12, is_rooftop),
+            layout_str = COALESCE($13, layout_str),
+            layout = COALESCE($14, layout),
+            bathroom = COALESCE($15, bathroom),
             updated_at = NOW()
         WHERE id = $1
         RETURNING id
@@ -239,6 +263,9 @@ class ObjectRepository:
                 detail.get("floor"),
                 detail.get("total_floor"),
                 detail.get("is_rooftop"),
+                layout_str,
+                layout_num,
+                bathroom,
             )
             return result is not None
 

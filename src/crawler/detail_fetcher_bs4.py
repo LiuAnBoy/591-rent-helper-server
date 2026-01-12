@@ -276,6 +276,16 @@ class DetailFetcherBs4:
             # Parse floor info
             floor_str, floor, total_floor, is_rooftop = self._parse_floor(soup)
 
+            # Parse layout_str (e.g., "3房2廳2衛" or "開放格局")
+            # Must have at least 房+廳 or 房+衛 to avoid matching "591房"
+            layout_str = None
+            if "開放格局" in page_text:
+                layout_str = "開放格局"
+            else:
+                layout_match = re.search(r"(\d+房\d+廳\d*衛?|\d+房\d+衛)", page_text)
+                if layout_match:
+                    layout_str = layout_match.group(1)
+
             result = {
                 "gender": self._parse_gender(page_text),
                 "pet_allowed": self._parse_pet(page_text),
@@ -288,6 +298,7 @@ class DetailFetcherBs4:
                 "floor": floor,
                 "total_floor": total_floor,
                 "is_rooftop": is_rooftop,
+                "layout_str": layout_str,
             }
 
             fetcher_log.debug(f"Parsed detail {object_id}")

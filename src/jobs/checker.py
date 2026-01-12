@@ -515,8 +515,9 @@ class Checker:
             new_ids = await self._redis.get_new_ids(region, fetched_ids)
             checker_log.info(f"Found {len(new_ids)} new objects")
 
-            # Step 4: Add to seen set
-            await self._redis.add_seen_ids(region, fetched_ids)
+            # Step 4: Add only new IDs to seen set (others already exist)
+            if new_ids:
+                await self._redis.add_seen_ids(region, new_ids)
 
             # Step 5: Match subscriptions and notify
             matches = []
