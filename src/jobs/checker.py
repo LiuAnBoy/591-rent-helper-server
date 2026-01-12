@@ -14,7 +14,7 @@ checker_log = logger.bind(module="Checker")
 from src.connections.redis import RedisConnection, get_redis
 from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
-from src.jobs.broadcaster import Broadcaster, get_broadcaster
+from src.jobs.broadcaster import Broadcaster, ErrorType, get_broadcaster
 from src.modules.objects import ObjectRepository, RentalObject
 from src.utils import convert_options_to_codes, convert_other_to_codes
 from src.utils.parsers import parse_is_rooftop
@@ -495,6 +495,13 @@ class Checker:
 
             if not objects:
                 checker_log.warning("No objects fetched")
+                # Notify admin about list fetch failure
+                if self._broadcaster:
+                    await self._broadcaster.notify_admin(
+                        error_type=ErrorType.LIST_FETCH_FAILED,
+                        region=region,
+                        details="BS4 和 Playwright 都無法抓取列表頁",
+                    )
                 await self._postgres.finish_crawler_run(
                     run_id=run_id,
                     status="success",
@@ -535,6 +542,16 @@ class Checker:
                 checker_log.info(f"Fetching detail for {len(new_object_ids)} new objects")
                 details = await self._detail_fetcher.fetch_details_batch(new_object_ids)
                 detail_fetched = len(details)
+
+                # Notify admin if some detail fetches failed
+                failed_detail_count = len(new_object_ids) - detail_fetched
+                if failed_detail_count > 0 and self._broadcaster:
+                    failed_ids = [oid for oid in new_object_ids if oid not in details]
+                    await self._broadcaster.notify_admin(
+                        error_type=ErrorType.DETAIL_FETCH_FAILED,
+                        region=region,
+                        details=f"共 {failed_detail_count} 個物件詳情頁抓取失敗\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
+                    )
 
                 # Step 4: Process each new object (merge + save + redis)
                 for obj in new_objects:
@@ -588,6 +605,14 @@ class Checker:
                     checker_log.info(f"Broadcasting {len(grouped_matches)} matches...")
                     broadcast_result = await self._broadcaster.broadcast(grouped_matches)
 
+                    # Notify admin if some broadcasts failed
+                    if broadcast_result.get("failed", 0) > 0:
+                        await self._broadcaster.notify_admin(
+                            error_type=ErrorType.BROADCAST_ERROR,
+                            region=region,
+                            details=f"推播失敗: {broadcast_result['failed']}/{broadcast_result['total']}",
+                        )
+
                     # Mark as notified in PostgreSQL
                     for obj, subs in grouped_matches:
                         for sub in subs:
@@ -635,6 +660,24 @@ class Checker:
 
         except Exception as e:
             checker_log.error(f"Check failed: {e}")
+
+            # Notify admin about the error
+            if self._broadcaster:
+                # Classify error type
+                error_str = str(e).lower()
+                if "postgres" in error_str or "database" in error_str or "sql" in error_str:
+                    error_type = ErrorType.DB_ERROR
+                elif "redis" in error_str:
+                    error_type = ErrorType.REDIS_ERROR
+                else:
+                    error_type = ErrorType.UNKNOWN_ERROR
+
+                await self._broadcaster.notify_admin(
+                    error_type=error_type,
+                    region=region,
+                    details=str(e)[:500],  # Limit error message length
+                )
+
             await self._postgres.finish_crawler_run(
                 run_id=run_id,
                 status="failed",

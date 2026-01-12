@@ -5,6 +5,8 @@ Manages all configuration via environment variables using pydantic-settings.
 """
 
 from functools import lru_cache
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,6 +56,7 @@ class TelegramSettings(BaseSettings):
 
     bot_token: str = ""
     webhook_url: str = ""  # TELEGRAM_WEBHOOK_URL
+    admin_id: Optional[str] = None  # Admin ID for error notifications
 
 
 class CrawlerSettings(BaseSettings):

@@ -5,6 +5,8 @@ Sends notifications to subscribed users via their bound channels.
 """
 
 import asyncio
+from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 from loguru import logger
@@ -15,6 +17,28 @@ from src.channels.telegram import TelegramBot, get_telegram_formatter
 from src.modules.objects import RentalObject
 
 broadcast_log = logger.bind(module="Broadcast")
+
+# Region code to name mapping
+REGION_NAMES = {
+    1: "台北市",
+    3: "新北市",
+}
+
+
+class ErrorType(Enum):
+    """Crawler error types for admin notifications."""
+
+    LIST_FETCH_FAILED = ("LIST_FETCH_FAILED", "列表頁抓取失敗", "🔴")
+    DETAIL_FETCH_FAILED = ("DETAIL_FETCH_FAILED", "詳情頁抓取失敗", "🟡")
+    DB_ERROR = ("DB_ERROR", "資料庫錯誤", "🔴")
+    REDIS_ERROR = ("REDIS_ERROR", "Redis 錯誤", "🔴")
+    BROADCAST_ERROR = ("BROADCAST_ERROR", "推播發送失敗", "🟡")
+    UNKNOWN_ERROR = ("UNKNOWN_ERROR", "未知錯誤", "🔴")
+
+    def __init__(self, code: str, description: str, severity: str):
+        self.code = code
+        self.description = description
+        self.severity = severity
 
 
 class Broadcaster:
@@ -122,6 +146,59 @@ class Broadcaster:
         #     return await self.send_line_notification(...)
         else:
             broadcast_log.warning(f"Unknown service: {service}")
+            return False
+
+    async def notify_admin(
+        self,
+        error_type: ErrorType,
+        region: Optional[int] = None,
+        details: Optional[str] = None,
+    ) -> bool:
+        """
+        Send error notification to admin.
+
+        Args:
+            error_type: Type of error
+            region: Region code (optional)
+            details: Additional error details (optional)
+
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        admin_id = self.settings.admin_id
+        if not admin_id:
+            broadcast_log.debug("No admin_id configured, skipping error notification")
+            return False
+
+        if not self.bot.is_configured:
+            broadcast_log.warning("Telegram bot not configured, cannot send admin notification")
+            return False
+
+        # Build message
+        region_name = REGION_NAMES.get(region, f"Region {region}") if region else "N/A"
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        message = (
+            f"⚠️ <b>爬蟲警告</b>\n\n"
+            f"類型: <code>{error_type.code}</code>\n"
+            f"說明: {error_type.description} {error_type.severity}\n"
+            f"區域: {region_name}\n"
+            f"時間: {timestamp}"
+        )
+
+        if details:
+            message += f"\n\n詳情:\n<pre>{self._escape_html(details)}</pre>"
+
+        try:
+            await self.bot.bot.send_message(
+                chat_id=admin_id,
+                text=message,
+                parse_mode=ParseMode.HTML,
+            )
+            broadcast_log.info(f"Sent admin notification: {error_type.code}")
+            return True
+        except Exception as e:
+            broadcast_log.error(f"Failed to send admin notification: {e}")
             return False
 
     async def broadcast(
