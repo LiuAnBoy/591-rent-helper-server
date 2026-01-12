@@ -76,6 +76,16 @@ OTHER_NAME_TO_CODE: dict[str, str] = {
     # lease - 短租
     "短租": "lease",
     "可短期租賃": "lease",
+    # social-housing - 社會住宅
+    "社會住宅": "social-housing",
+    # rental-subsidy - 租金補貼
+    "租金補貼": "rental-subsidy",
+    # elderly-friendly - 高齡友善
+    "高齡友善": "elderly-friendly",
+    # tax-deductible - 可報稅
+    "可報稅": "tax-deductible",
+    # naturalization - 可入籍
+    "可入籍": "naturalization",
 }
 
 
