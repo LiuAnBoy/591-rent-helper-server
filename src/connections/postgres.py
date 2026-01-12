@@ -11,6 +11,7 @@ from loguru import logger
 
 from config.settings import get_settings
 from src.modules.objects import RentalObject
+from src.utils.mappings import convert_other_to_codes
 
 pg_log = logger.bind(module="Postgres")
 
@@ -120,7 +121,7 @@ class PostgresConnection:
                 None,                                                      # $16 floor
                 floor_str,                                                 # $17
                 None,                                                      # $18 bathroom
-                obj.tags or [],                                            # $19 other (TODO: convert)
+                convert_other_to_codes(obj.tags or []),                    # $19 other
                 [],                                                        # $20 options
                 None,                                                      # $21 fitment
                 obj.tags or [],                                            # $22 tags

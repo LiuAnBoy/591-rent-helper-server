@@ -256,8 +256,8 @@ class Checker:
         if sub.get("other"):
             obj_other = set(code.lower() for code in (obj.get("other", []) or []))
             sub_other = set(f.lower() for f in sub["other"])
-            # Check if any subscription feature matches object's other
-            if not obj_other & sub_other:
+            # All subscription features must be present in object
+            if not sub_other <= obj_other:
                 return False
 
         # Options (設備) - check obj.options (detail page) and obj.tags (list page)
