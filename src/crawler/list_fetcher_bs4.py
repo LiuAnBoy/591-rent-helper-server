@@ -99,32 +99,32 @@ class ListFetcherBs4:
         Parse a single item element into RentalObject.
 
         Args:
-            elem: BeautifulSoup element
+            elem: BeautifulSoup element (div.item)
             region: Region code
 
         Returns:
             RentalObject or None if parsing fails
         """
         try:
-            # Get ID from data-bind attribute
-            data_bind = elem.get("data-bind")
-            if not data_bind:
+            # Get ID from link URL (e.g., https://rent.591.com.tw/20503183)
+            link = elem.find("a", href=re.compile(r"rent\.591\.com\.tw/\d+"))
+            if not link:
                 return None
 
-            # Parse data-bind JSON-like string
-            id_match = re.search(r"id:\s*['\"]?(\d+)", str(data_bind))
+            href = link.get("href", "")
+            id_match = re.search(r"/(\d+)$", href)
             if not id_match:
                 return None
 
             obj_id = int(id_match.group(1))
+            url = href
 
-            # Get title and URL
-            title_link = elem.select_one("a[href*='/rent/']")
-            title = title_link.get_text(strip=True) if title_link else ""
-            url = title_link.get("href") if title_link else None
+            # Get title
+            title_elem = elem.select_one(".item-info-title a")
+            title = title_elem.get_text(strip=True) if title_elem else ""
 
             # Get price
-            price_elem = elem.select_one("[class*='price']")
+            price_elem = elem.select_one(".item-info-price")
             price = "0"
             price_unit = "元/月"
             if price_elem:
@@ -136,41 +136,47 @@ class ListFetcherBs4:
                 if unit_match:
                     price_unit = unit_match.group(1)
 
-            # Get area
+            # Get area and floor from text
+            text = elem.get_text()
+
             area = None
-            area_match = re.search(r"([\d.]+)\s*坪", elem.get_text())
+            area_match = re.search(r"([\d.]+)\s*坪", text)
             if area_match:
                 area = float(area_match.group(1))
 
-            # Get floor
             floor_str = None
             floor = None
             total_floor = None
             is_rooftop = False
-            floor_match = re.search(r"(\d+F/\d+F|B\d+/\d+F|頂[加樓])", elem.get_text())
+            floor_match = re.search(r"(\d+F/\d+F|B\d+/\d+F|頂[加樓])", text)
             if floor_match:
                 floor_str = floor_match.group(1)
                 floor, total_floor, is_rooftop = parse_floor(floor_str)
 
-            # Get kind name
+            # Get kind name (first span in item-info-txt)
             kind_name = None
-            info_spans = elem.select("[class*='info'] span, [class*='txt'] span")
-            if info_spans:
-                kind_name = info_spans[0].get_text(strip=True)
+            kind_elem = elem.select_one(".item-info-txt span")
+            if kind_elem:
+                kind_name = kind_elem.get_text(strip=True)
 
-            # Get address
+            # Get address from item-info-txt spans
             address = None
-            addr_elem = elem.select_one("[class*='place'], [class*='address']")
-            if addr_elem:
-                address = addr_elem.get_text(strip=True)
+            txt_elem = elem.select_one(".item-info-txt")
+            if txt_elem:
+                spans = txt_elem.find_all("span")
+                for span in spans:
+                    span_text = span.get_text(strip=True)
+                    if "區" in span_text and ("-" in span_text or "路" in span_text or "街" in span_text):
+                        address = span_text
+                        break
 
             # Get tags
             tags = []
-            tag_elems = elem.select("[class*='tag'] span, [class*='label']")
+            tag_elems = elem.select(".item-info-tag span")
             for tag in tag_elems:
-                text = tag.get_text(strip=True)
-                if text:
-                    tags.append(text)
+                tag_text = tag.get_text(strip=True)
+                if tag_text:
+                    tags.append(tag_text)
 
             return RentalObject(
                 id=obj_id,
@@ -245,14 +251,11 @@ class ListFetcherBs4:
 
             soup = BeautifulSoup(resp.text, "html.parser")
 
-            # Try to find item elements
-            items = soup.find_all(attrs={"data-bind": True})
-            if not items:
-                # Fallback: try other selectors
-                items = soup.find_all("div", class_=re.compile(r"item.*info"))
+            # Find item containers (div.item)
+            items = soup.find_all("div", class_="item")
 
             if not items:
-                fetcher_log.warning("No items found in HTML (591 requires JavaScript)")
+                fetcher_log.warning("No items found in HTML (591 may require JavaScript)")
                 return []
 
             objects = []
