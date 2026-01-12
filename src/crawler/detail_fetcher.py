@@ -104,10 +104,16 @@ class DetailFetcher:
         for attempt in range(self._max_retries):
             result = await self._bs4_fetcher.fetch_detail(object_id)
             if result:
-                return result
-            fetcher_log.warning(
-                f"bs4 attempt {attempt + 1}/{self._max_retries} failed for {object_id}"
-            )
+                # Check if we got meaningful data (tags should not be empty)
+                if result.get("tags"):
+                    return result
+                fetcher_log.warning(
+                    f"bs4 attempt {attempt + 1}/{self._max_retries} returned empty tags for {object_id}"
+                )
+            else:
+                fetcher_log.warning(
+                    f"bs4 attempt {attempt + 1}/{self._max_retries} failed for {object_id}"
+                )
 
         # Fallback to Playwright
         fetcher_log.warning(f"BS4 failed, falling back to Playwright for {object_id}")

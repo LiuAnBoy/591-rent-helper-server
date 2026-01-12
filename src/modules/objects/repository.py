@@ -77,6 +77,12 @@ class ObjectRepository:
             floor_str = obj.floor_name if hasattr(obj, "floor_name") else None
             floor, total_floor, is_rooftop = parse_floor(floor_str)
 
+            # Use object values (merged from detail) or fallback to parsed values
+            final_floor = obj.floor if obj.floor is not None else floor
+            final_total_floor = obj.total_floor if obj.total_floor is not None else total_floor
+            final_is_rooftop = obj.is_rooftop if obj.is_rooftop else is_rooftop
+            final_bathroom = obj.bathroom if obj.bathroom is not None else None
+
             result = await conn.fetchrow(
                 query,
                 obj.id,                                                    # $1
@@ -92,22 +98,22 @@ class ObjectRepository:
                 obj.price_per,                                             # $11
                 layout_num,                                                # $12
                 obj.layout_str,                                            # $13
-                None,                                                      # $14 shape
+                obj.shape,                                                 # $14 shape (from detail)
                 obj.area,                                                  # $15
-                floor,                                                     # $16 floor (INTEGER)
+                final_floor,                                               # $16 floor (INTEGER)
                 floor_str,                                                 # $17 floor_str
-                total_floor,                                               # $18 total_floor
-                None,                                                      # $19 bathroom
+                final_total_floor,                                         # $18 total_floor
+                final_bathroom,                                            # $19 bathroom (from detail)
                 convert_other_to_codes(obj.tags or []),                    # $20 other
-                [],                                                        # $21 options
-                None,                                                      # $22 fitment
+                obj.options or [],                                         # $21 options (from detail)
+                obj.fitment,                                               # $22 fitment (from detail)
                 obj.tags or [],                                            # $23 tags
                 obj.surrounding.type if obj.surrounding else None,         # $24
                 obj.surrounding.desc if obj.surrounding else None,         # $25
                 obj.surrounding.distance if obj.surrounding else None,     # $26
-                is_rooftop,                                                # $27
-                "all",                                                     # $28 gender
-                None,                                                      # $29 pet_allowed
+                final_is_rooftop,                                          # $27 is_rooftop
+                obj.gender or "all",                                       # $28 gender (from detail)
+                obj.pet_allowed,                                           # $29 pet_allowed (from detail)
             )
             return result["inserted"]
 
@@ -184,125 +190,3 @@ class ObjectRepository:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(query, region, limit)
             return [dict(row) for row in rows]
-
-    async def update_from_detail(self, object_id: int, detail: dict) -> bool:
-        """
-        Update object with detail page data.
-
-        Only updates fields that are available from detail page:
-            - gender: "boy" | "girl" | "all"
-            - pet_allowed: True | False | None
-            - shape: int | None (1=公寓, 2=電梯, 3=透天, 4=別墅)
-            - options: list[str] (equipment codes)
-            - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
-            - section: int | None (only if not already set)
-            - kind: int | None (only if not already set)
-            - floor_str: str | None (e.g., "5F/7F")
-            - floor: int | None (current floor)
-            - total_floor: int | None (total floors)
-            - is_rooftop: bool (rooftop addition)
-            - layout_str: str | None (e.g., "3房2廳2衛")
-            - layout: int | None (room count from layout_str)
-            - bathroom: int | None (bathroom count from layout_str)
-
-        Args:
-            object_id: Object ID to update
-            detail: Detail data from detail fetcher
-
-        Returns:
-            True if updated, False if object not found
-        """
-        # Parse layout and bathroom from layout_str (e.g., "3房2廳2衛" or "開放格局")
-        layout_str = detail.get("layout_str")
-        layout_num = None
-        bathroom = None
-        if layout_str:
-            if layout_str == "開放格局":
-                layout_num = 0
-            else:
-                room_match = re.search(r"(\d+)房", layout_str)
-                if room_match:
-                    layout_num = int(room_match.group(1))
-            bath_match = re.search(r"(\d+)衛", layout_str)
-            if bath_match:
-                bathroom = int(bath_match.group(1))
-
-        # Convert tags to other codes
-        tags = detail.get("tags", [])
-        other_codes = convert_other_to_codes(tags) if tags else []
-
-        query = """
-        UPDATE objects SET
-            gender = $2,
-            pet_allowed = $3,
-            shape = $4,
-            options = $5,
-            fitment = $6,
-            section = COALESCE(section, $7),
-            kind = COALESCE(kind, $8),
-            floor_str = COALESCE($9, floor_str),
-            floor = COALESCE($10, floor),
-            total_floor = COALESCE($11, total_floor),
-            is_rooftop = COALESCE($12, is_rooftop),
-            layout_str = COALESCE($13, layout_str),
-            layout = COALESCE($14, layout),
-            bathroom = COALESCE($15, bathroom),
-            tags = $16,
-            other = $17,
-            address = COALESCE($18, address),
-            updated_at = NOW()
-        WHERE id = $1
-        RETURNING id
-        """
-
-        async with self._pool.acquire() as conn:
-            result = await conn.fetchrow(
-                query,
-                object_id,
-                detail.get("gender", "all"),
-                detail.get("pet_allowed"),
-                detail.get("shape"),
-                detail.get("options", []),
-                detail.get("fitment"),
-                detail.get("section"),
-                detail.get("kind"),
-                detail.get("floor_str"),
-                detail.get("floor"),
-                detail.get("total_floor"),
-                detail.get("is_rooftop"),
-                layout_str,
-                layout_num,
-                bathroom,
-                tags,
-                other_codes,
-                detail.get("address"),
-            )
-            return result is not None
-
-    async def update_from_details_batch(
-        self,
-        details: dict[int, dict],
-    ) -> tuple[int, int]:
-        """
-        Update multiple objects with detail page data.
-
-        Args:
-            details: Dict mapping object_id to detail data
-
-        Returns:
-            Tuple of (updated_count, not_found_count)
-        """
-        updated_count = 0
-        not_found_count = 0
-
-        for object_id, detail in details.items():
-            if await self.update_from_detail(object_id, detail):
-                updated_count += 1
-            else:
-                not_found_count += 1
-
-        objects_log.info(
-            f"Updated from detail: {updated_count} updated, "
-            f"{not_found_count} not found"
-        )
-        return updated_count, not_found_count

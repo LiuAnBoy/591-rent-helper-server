@@ -16,7 +16,7 @@ from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
 from src.jobs.broadcaster import Broadcaster, get_broadcaster
 from src.modules.objects import ObjectRepository, RentalObject
-from src.utils import convert_options_to_codes
+from src.utils import convert_options_to_codes, convert_other_to_codes
 from src.utils.parsers import parse_is_rooftop
 
 
@@ -117,61 +117,93 @@ class Checker:
         checker_log.info(f"Synced {len(subscriptions)} subscriptions to Redis")
         return len(subscriptions)
 
-    async def _fetch_and_update_details(
+    def _merge_detail_to_object(
         self,
-        objects: list[RentalObject],
-        object_ids: list[int],
-    ) -> dict[int, dict]:
+        obj: RentalObject,
+        detail: Optional[dict],
+    ) -> RentalObject:
         """
-        Fetch detail pages and update rental objects in DB.
+        Merge detail page data into RentalObject.
 
         Args:
-            objects: List of RentalObject to update (in-memory)
-            object_ids: IDs to fetch details for
+            obj: RentalObject from list page
+            detail: Detail data from detail fetcher (can be None)
 
         Returns:
-            Dict mapping object_id to detail data
+            Updated RentalObject with merged data
         """
-        if not object_ids:
-            return {}
+        import re
 
-        checker_log.info(f"Fetching detail pages for {len(object_ids)} objects...")
-        details = await self._detail_fetcher.fetch_details_batch(object_ids)
+        if not detail:
+            return obj
 
-        # Update objects in-memory for matching and notification display
-        objects_map = {obj.id: obj for obj in objects}
-        for obj_id, detail in details.items():
-            if obj_id in objects_map:
-                obj = objects_map[obj_id]
-                # Fields for matching
-                obj.gender = detail.get("gender", "all")
-                obj.pet_allowed = detail.get("pet_allowed")
-                obj.options = detail.get("options", [])
-                obj.shape = detail.get("shape")
-                # Fields for notification display
-                obj.address = detail.get("address") or obj.address
-                obj.tags = detail.get("tags") or obj.tags
-                obj.layout_str = detail.get("layout_str") or obj.layout_str
-                obj.floor_name = detail.get("floor_str") or obj.floor_name
-                obj.floor = detail.get("floor") or obj.floor
-                obj.total_floor = detail.get("total_floor") or obj.total_floor
-                obj.is_rooftop = detail.get("is_rooftop", False) or obj.is_rooftop
-                obj.fitment = detail.get("fitment")
-                obj.section = detail.get("section") or obj.section
-                obj.kind = detail.get("kind") or obj.kind
-                # Parse bathroom from layout_str
-                layout_str = detail.get("layout_str")
-                if layout_str:
-                    import re
-                    bath_match = re.search(r"(\d+)衛", layout_str)
-                    if bath_match:
-                        obj.bathroom = int(bath_match.group(1))
+        # Fields for matching
+        obj.gender = detail.get("gender", "all")
+        # pet_allowed: None means not specified, default to False
+        obj.pet_allowed = detail.get("pet_allowed") if detail.get("pet_allowed") is not None else False
+        obj.options = detail.get("options", [])
+        obj.shape = detail.get("shape")
+        obj.fitment = detail.get("fitment")
 
-        # Update objects in database
-        if details:
-            await self._object_repo.update_from_details_batch(details)
+        # Fields for notification display
+        obj.address = detail.get("address") or obj.address
+        obj.tags = detail.get("tags") or obj.tags
+        # Convert tags to other codes for matching
+        if obj.tags:
+            obj.other = convert_other_to_codes(obj.tags)
+        obj.layout_str = detail.get("layout_str") or obj.layout_str
+        obj.floor_name = detail.get("floor_str") or obj.floor_name
+        obj.floor = detail.get("floor") or obj.floor
+        obj.total_floor = detail.get("total_floor") or obj.total_floor
+        obj.is_rooftop = detail.get("is_rooftop", False) or obj.is_rooftop
+        obj.section = detail.get("section") or obj.section
+        obj.kind = detail.get("kind") or obj.kind
 
-        return details
+        # Parse bathroom from layout_str
+        layout_str = detail.get("layout_str")
+        if layout_str:
+            bath_match = re.search(r"(\d+)衛", layout_str)
+            if bath_match:
+                obj.bathroom = int(bath_match.group(1))
+
+        return obj
+
+    async def _process_new_object(
+        self,
+        obj: RentalObject,
+        detail: Optional[dict],
+        region: int,
+    ) -> RentalObject:
+        """
+        Process a new object: merge detail, save to DB, update Redis.
+
+        Args:
+            obj: RentalObject from list page
+            detail: Detail data from detail fetcher (can be None)
+            region: Region code for Redis operations
+
+        Returns:
+            Processed RentalObject
+        """
+        # 1. Merge detail data into object
+        obj = self._merge_detail_to_object(obj, detail)
+
+        # 2. Parse is_rooftop from floor_name if not set from detail
+        if not obj.is_rooftop:
+            obj.is_rooftop = parse_is_rooftop(obj.floor_name)
+
+        # 3. Save to DB (single complete write)
+        await self._object_repo.save(obj)
+
+        # 4. Add to Redis seen set
+        await self._redis.add_seen_ids(region, {obj.id})
+
+        # 5. Save to Redis object cache
+        await self._redis.save_objects([obj.model_dump()])
+
+        checker_log.debug(f"Processed new object {obj.id}")
+
+        return obj
 
     def _match_object_to_subscription(self, obj: dict, sub: dict) -> bool:
         """
@@ -440,14 +472,16 @@ class Checker:
         """
         Check for new objects in a region.
 
-        Flow:
-        1. Crawl list page → get basic object data
-        2. Parse is_rooftop from floor_name
-        3. Save to PostgreSQL + Redis
-        4. Find new IDs
-        5. Fetch detail pages for ALL new objects
-        6. Full matching
-        7. Push notifications
+        Optimized Flow:
+        1. Crawl list page (BS4 → Playwright fallback)
+        2. Redis filter: find new IDs only
+        3. For each new object:
+           - Fetch detail (BS4 → Playwright fallback)
+           - Merge list + detail data
+           - Save to DB (single write)
+           - Update Redis (seen set + object cache)
+        4. Subscription matching
+        5. Push notifications
 
         Args:
             region: City code (1=Taipei, 3=New Taipei)
@@ -469,7 +503,7 @@ class Checker:
         run_id = await self._postgres.start_crawler_run(region, section)
 
         try:
-            # Step 1: Crawl latest objects from list page
+            # Step 1: Crawl list page (with fallback)
             objects = await self._list_fetcher.fetch_objects(
                 region=region,
                 section=section,
@@ -495,58 +529,48 @@ class Checker:
                     "initialized_subs": [],
                 }
 
-            checker_log.info(f"Fetched {len(objects)} objects")
+            checker_log.info(f"Fetched {len(objects)} objects from list")
 
-            # Step 2: Parse is_rooftop and save to PostgreSQL + Redis
-            new_count = 0
-            fetched_ids = set()
-
-            for obj in objects:
-                fetched_ids.add(obj.id)
-
-                # Parse is_rooftop from floor_name (can be done from list page)
-                obj.is_rooftop = parse_is_rooftop(obj.floor_name)
-
-                # Save to PostgreSQL
-                is_new = await self._postgres.save_object(obj)
-                if is_new:
-                    new_count += 1
-
-            # Step 3: Find new IDs (not in seen set)
+            # Step 2: Redis filter - find new IDs (don't save to DB yet)
+            fetched_ids = {obj.id for obj in objects}
             new_ids = await self._redis.get_new_ids(region, fetched_ids)
             checker_log.info(f"Found {len(new_ids)} new objects")
 
-            # Step 4: Add only new IDs to seen set (others already exist)
-            if new_ids:
-                await self._redis.add_seen_ids(region, new_ids)
-
-            # Step 5: Match subscriptions and notify
+            # Initialize result variables
             matches = []
             init_matches = []
             initialized_subs = []
             broadcast_result = {"total": 0, "success": 0, "failed": 0}
             detail_fetched = 0
+            processed_objects = []
 
             if new_ids:
-                # Get all subscriptions for this region
-                all_subs = await self._redis.get_subscriptions_by_region(region)
+                # Get new objects only
+                new_objects = [obj for obj in objects if obj.id in new_ids]
+                new_object_ids = [obj.id for obj in new_objects]
 
-                # Separate initialized and uninitialized subscriptions
+                # Step 3: Fetch detail pages for new objects (batch with fallback)
+                checker_log.info(f"Fetching detail for {len(new_object_ids)} new objects")
+                details = await self._detail_fetcher.fetch_details_batch(new_object_ids)
+                detail_fetched = len(details)
+
+                # Step 4: Process each new object (merge + save + redis)
+                for obj in new_objects:
+                    detail = details.get(obj.id)  # May be None if detail fetch failed
+                    processed_obj = await self._process_new_object(obj, detail, region)
+                    processed_objects.append(processed_obj)
+
+                checker_log.info(
+                    f"Processed {len(processed_objects)} objects "
+                    f"({detail_fetched} with detail)"
+                )
+
+                # Step 5: Subscription matching
+                all_subs = await self._redis.get_subscriptions_by_region(region)
                 uninitialized_subs = await self._redis.get_uninitialized_subscriptions(all_subs)
                 uninitialized_ids = {sub["id"] for sub in uninitialized_subs}
 
-                # Get new objects only
-                new_objects = [obj for obj in objects if obj.id in new_ids]
-
-                # Fetch detail pages for ALL new objects
-                if new_objects:
-                    new_object_ids = [obj.id for obj in new_objects]
-                    checker_log.info(f"Fetching detail for {len(new_object_ids)} new objects")
-                    await self._fetch_and_update_details(new_objects, new_object_ids)
-                    detail_fetched = len(new_object_ids)
-
-                # Full matching with updated data
-                for obj in new_objects:
+                for obj in processed_objects:
                     obj_data = obj.model_dump()
 
                     for sub in all_subs:
@@ -600,16 +624,12 @@ class Checker:
                                 else:
                                     raise
 
-            # Step 7: Save updated objects to Redis (with detail data)
-            objects_to_cache = [obj.model_dump() for obj in objects]
-            await self._redis.save_objects(objects_to_cache)
-
             # Finish crawler run
             await self._postgres.finish_crawler_run(
                 run_id=run_id,
                 status="success",
                 total_fetched=len(objects),
-                new_objects=new_count,
+                new_objects=len(new_ids),
             )
 
             result = {
