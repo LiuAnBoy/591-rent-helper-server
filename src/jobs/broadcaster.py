@@ -167,8 +167,19 @@ class Broadcaster:
         if not tasks:
             return {"total": 0, "success": 0, "failed": 0, "by_service": {}}
 
-        # Run all notifications concurrently
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Limit concurrent notifications (Telegram rate limit ~30/sec, use 10 to be safe)
+        MAX_CONCURRENT = 10
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+
+        async def limited_task(task):
+            async with semaphore:
+                return await task
+
+        # Run notifications with concurrency limit
+        results = await asyncio.gather(
+            *[limited_task(t) for t in tasks],
+            return_exceptions=True
+        )
 
         # Process results
         success = 0
