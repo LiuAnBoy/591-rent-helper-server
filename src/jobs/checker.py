@@ -146,10 +146,6 @@ class Checker:
                 obj.gender = detail.get("gender", "all")
                 obj.pet_allowed = detail.get("pet_allowed")
                 obj.options = detail.get("options", [])
-                checker_log.debug(
-                    f"Updated {obj_id}: gender={obj.gender}, "
-                    f"pet={obj.pet_allowed}, options={len(obj.options)}"
-                )
 
         # Update objects in database
         if details:

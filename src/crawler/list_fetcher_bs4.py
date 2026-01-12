@@ -263,6 +263,7 @@ class ListFetcherBs4:
                 obj = self._parse_item(elem, region)
                 if obj:
                     objects.append(obj)
+                    fetcher_log.debug(f"Parsed {obj.id} {obj.title[:30]}")
                     if max_items and len(objects) >= max_items:
                         break
 
