@@ -7,12 +7,16 @@ so this fetcher may fail and fallback to Playwright is expected.
 """
 
 import re
+import urllib3
 from typing import Optional
 from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup
 from loguru import logger
+
+# Suppress SSL warnings for 591's certificate issues
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from src.modules.objects import RentalObject, Surrounding
 from src.utils.parsers import parse_floor

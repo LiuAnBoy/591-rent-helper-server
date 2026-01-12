@@ -6,12 +6,16 @@ Lightweight alternative to Playwright for fetching rental detail pages.
 
 import asyncio
 import re
+import urllib3
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
 from loguru import logger
+
+# Suppress SSL warnings for 591's certificate issues
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from src.utils.mappings import convert_options_to_codes
 from src.utils.parsers import parse_fitment, parse_floor, parse_shape
