@@ -194,8 +194,9 @@ CREATE TABLE IF NOT EXISTS objects (
     area            DECIMAL(10, 2),             -- 坪數
 
     -- ========== 樓層 floor ==========
-    floor           VARCHAR(20),                -- 樓層代碼 ('1_1', '2_6', '6_12', '13_')
+    floor           INTEGER,                    -- 樓層數字
     floor_str       VARCHAR(50),                -- 原始樓層字串 (3F/5F)
+    total_floor     INTEGER,                    -- 總樓層
 
     -- ========== 衛浴 bathroom ==========
     -- 1=1衛, 2=2衛, 3=3衛, 4+=4衛以上
@@ -235,10 +236,7 @@ CREATE TABLE IF NOT EXISTS objects (
     updated_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
     -- ========== 狀態 ==========
-    is_active       BOOLEAN DEFAULT TRUE,       -- 物件是否還在線上
-
-    -- ========== 原始資料 (備用) ==========
-    raw_data        JSONB
+    is_active       BOOLEAN DEFAULT TRUE        -- 物件是否還在線上
 );
 
 -- 索引
@@ -249,6 +247,7 @@ CREATE INDEX IF NOT EXISTS idx_objects_layout ON objects(layout);
 CREATE INDEX IF NOT EXISTS idx_objects_shape ON objects(shape);
 CREATE INDEX IF NOT EXISTS idx_objects_area ON objects(area);
 CREATE INDEX IF NOT EXISTS idx_objects_floor ON objects(floor);
+CREATE INDEX IF NOT EXISTS idx_objects_total_floor ON objects(total_floor);
 CREATE INDEX IF NOT EXISTS idx_objects_bathroom ON objects(bathroom);
 CREATE INDEX IF NOT EXISTS idx_objects_fitment ON objects(fitment);
 CREATE INDEX IF NOT EXISTS idx_objects_other ON objects USING GIN(other);
@@ -323,7 +322,42 @@ GROUP BY s.id, s.name, s.region, s.section, u.id, u.name;
 
 -- 活躍物件視圖 (最近 7 天)
 CREATE OR REPLACE VIEW recent_objects AS
-SELECT * FROM objects
+SELECT
+    id,
+    title,
+    url,
+    region,
+    section,
+    address,
+    kind,
+    kind_name,
+    price,
+    price_unit,
+    price_per,
+    layout,
+    layout_str,
+    shape,
+    area,
+    floor,
+    floor_str,
+    total_floor,
+    bathroom,
+    other,
+    options,
+    fitment,
+    tags,
+    surrounding_type,
+    surrounding_desc,
+    surrounding_distance,
+    first_seen_at,
+    last_seen_at,
+    created_at,
+    updated_at,
+    is_active,
+    is_rooftop,
+    gender,
+    pet_allowed
+FROM objects
 WHERE first_seen_at > NOW() - INTERVAL '7 days'
   AND is_active = TRUE
 ORDER BY first_seen_at DESC;

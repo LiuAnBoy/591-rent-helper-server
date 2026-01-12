@@ -24,7 +24,6 @@ class RentalObject(BaseModel):
     id: int
 
     # Basic info
-    type: Optional[int] = None
     kind: Optional[int] = None
     kind_name: Optional[str] = None
     title: str
@@ -33,9 +32,7 @@ class RentalObject(BaseModel):
     # Price
     price: str
     price_unit: Optional[str] = Field(default="元/月")
-    price_has_carport: Optional[int] = None
     price_per: Optional[float] = None
-    price_per_unit: Optional[str] = None
 
     @field_validator("price_per", mode="before")
     @classmethod
@@ -58,8 +55,9 @@ class RentalObject(BaseModel):
     floor: Optional[int] = Field(default=None, description="樓層 (0=頂加, 負數=地下)")
     total_floor: Optional[int] = Field(default=None, description="總樓層數")
     area: Optional[float] = None
-    area_name: Optional[str] = None
+    shape: Optional[int] = Field(default=None, description="建物型態 (1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅)")
     layout_str: Optional[str] = Field(default=None, alias="layoutStr")
+    bathroom: Optional[int] = Field(default=None, description="衛浴數量")
     fitment: Optional[int] = Field(default=None, description="裝潢代號 (99=新, 3=中檔, 4=高檔)")
 
     # Location
@@ -73,15 +71,6 @@ class RentalObject(BaseModel):
 
     # Surrounding
     surrounding: Optional[Surrounding] = None
-
-    # Extra flags
-    community_name: Optional[str] = None
-    community_id: Optional[int] = None
-    social_house: Optional[int] = None
-    mvip: Optional[int] = None
-    preferred: Optional[int] = None
-    good_house: Optional[int] = None
-    labels: list[str] = Field(default_factory=list)
 
     # Detail page fields (parsed from detail page)
     is_rooftop: bool = Field(default=False, description="是否頂樓加蓋 (from floor_name)")
@@ -104,6 +93,6 @@ class RentalObject(BaseModel):
             f"[{self.id}] {self.title}\n"
             f"    💰 {self.price} {self.price_unit or ''}\n"
             f"    📍 {self.address or 'N/A'}\n"
-            f"    🏠 {self.kind_name or 'N/A'} | {self.area_name or 'N/A'} | {self.layout_str or 'N/A'}\n"
+            f"    🏠 {self.kind_name or 'N/A'} | {self.area or 'N/A'}坪 | {self.layout_str or 'N/A'}\n"
             f"    🏷️  {', '.join(self.tags) if self.tags else 'N/A'}"
         )

@@ -147,11 +147,25 @@ class Checker:
                 obj.gender = detail.get("gender", "all")
                 obj.pet_allowed = detail.get("pet_allowed")
                 obj.options = detail.get("options", [])
+                obj.shape = detail.get("shape")
                 # Fields for notification display
                 obj.address = detail.get("address") or obj.address
                 obj.tags = detail.get("tags") or obj.tags
                 obj.layout_str = detail.get("layout_str") or obj.layout_str
                 obj.floor_name = detail.get("floor_str") or obj.floor_name
+                obj.floor = detail.get("floor") or obj.floor
+                obj.total_floor = detail.get("total_floor") or obj.total_floor
+                obj.is_rooftop = detail.get("is_rooftop", False) or obj.is_rooftop
+                obj.fitment = detail.get("fitment")
+                obj.section = detail.get("section") or obj.section
+                obj.kind = detail.get("kind") or obj.kind
+                # Parse bathroom from layout_str
+                layout_str = detail.get("layout_str")
+                if layout_str:
+                    import re
+                    bath_match = re.search(r"(\d+)衛", layout_str)
+                    if bath_match:
+                        obj.bathroom = int(bath_match.group(1))
 
         # Update objects in database
         if details:
