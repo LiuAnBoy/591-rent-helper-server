@@ -5,6 +5,7 @@ Primary: bs4 (fast, lightweight)
 Fallback: Playwright (stable, reliable)
 """
 
+import asyncio
 from typing import Optional
 
 from loguru import logger
@@ -149,40 +150,25 @@ class DetailFetcher:
 
         fetcher_log.info(f"Fetching {len(object_ids)} detail pages...")
 
-        # Try bs4 for all objects
-        bs4_results = await self._bs4_fetcher.fetch_details_batch(object_ids)
+        # Use unified fetch_detail for each object (has retry + fallback)
+        tasks = [self.fetch_detail(oid) for oid in object_ids]
+        results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Filter results with valid tags (non-empty)
+        # Process results
         results = {}
-        for oid, data in bs4_results.items():
-            if data.get("tags"):
-                results[oid] = data
+        failed_count = 0
+        for oid, result in zip(object_ids, results_list):
+            if isinstance(result, Exception):
+                fetcher_log.error(f"Fetch failed for {oid}: {result}")
+                failed_count += 1
+            elif result:
+                results[oid] = result
             else:
-                fetcher_log.warning(f"BS4 returned empty tags for {oid}")
-
-        # Collect failed IDs (not in results or empty tags)
-        failed_ids = [oid for oid in object_ids if oid not in results]
-
-        if failed_ids:
-            fetcher_log.warning(
-                f"BS4 failed for {len(failed_ids)} objects, "
-                f"falling back to Playwright..."
-            )
-            await self._ensure_playwright()
-            playwright_results = await self._playwright_fetcher.fetch_details_batch(
-                failed_ids
-            )
-            results.update(playwright_results)
-
-            # Check for objects that failed both fetchers
-            still_failed = [oid for oid in failed_ids if oid not in playwright_results]
-            if still_failed:
-                fetcher_log.error(
-                    f"All fetchers failed for {len(still_failed)} objects: {still_failed}"
-                )
+                failed_count += 1
 
         fetcher_log.info(
-            f"Fetched {len(results)}/{len(object_ids)} detail pages successfully"
+            f"Fetched {len(results)}/{len(object_ids)} detail pages "
+            f"({failed_count} failed)"
         )
 
         return results
