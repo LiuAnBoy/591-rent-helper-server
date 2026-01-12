@@ -5,9 +5,10 @@ Parse fields from rental detail page data.
 """
 
 from src.utils import convert_options_to_codes
+from src.utils.parsers.fitment import parse_fitment
+from src.utils.parsers.floor import parse_floor
 from src.utils.parsers.rule import parse_rule
 from src.utils.parsers.shape import parse_shape
-from src.utils.parsers.fitment import parse_fitment
 
 
 def parse_detail_fields(detail_data: dict) -> dict:
@@ -26,6 +27,10 @@ def parse_detail_fields(detail_data: dict) -> dict:
             - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
             - section: int | None (行政區代碼)
             - kind: int | None (類型代碼)
+            - floor_str: str | None (e.g., "5F/7F")
+            - floor: int | None (current floor)
+            - total_floor: int | None (total floors)
+            - is_rooftop: bool (rooftop addition)
     """
     result = {
         "gender": "all",
@@ -35,6 +40,10 @@ def parse_detail_fields(detail_data: dict) -> dict:
         "fitment": None,
         "section": None,
         "kind": None,
+        "floor_str": None,
+        "floor": None,
+        "total_floor": None,
+        "is_rooftop": False,
     }
 
     # Parse service fields
@@ -73,5 +82,14 @@ def parse_detail_fields(detail_data: dict) -> dict:
             result["section"] = int(query["section"])
         if "kind" in query:
             result["kind"] = int(query["kind"])
+
+    # Parse floor info from floor_name field (e.g., "5F/7F")
+    floor_name = detail_data.get("floor_name")
+    if floor_name:
+        result["floor_str"] = floor_name
+        floor, total_floor, is_rooftop = parse_floor(floor_name)
+        result["floor"] = floor
+        result["total_floor"] = total_floor
+        result["is_rooftop"] = is_rooftop
 
     return result

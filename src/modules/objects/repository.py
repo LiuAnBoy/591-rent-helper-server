@@ -194,6 +194,10 @@ class ObjectRepository:
             - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
             - section: int | None (only if not already set)
             - kind: int | None (only if not already set)
+            - floor_str: str | None (e.g., "5F/7F")
+            - floor: int | None (current floor)
+            - total_floor: int | None (total floors)
+            - is_rooftop: bool (rooftop addition)
 
         Args:
             object_id: Object ID to update
@@ -211,6 +215,10 @@ class ObjectRepository:
             fitment = $6,
             section = COALESCE(section, $7),
             kind = COALESCE(kind, $8),
+            floor_str = COALESCE($9, floor_str),
+            floor = COALESCE($10, floor),
+            total_floor = COALESCE($11, total_floor),
+            is_rooftop = COALESCE($12, is_rooftop),
             updated_at = NOW()
         WHERE id = $1
         RETURNING id
@@ -227,6 +235,10 @@ class ObjectRepository:
                 detail.get("fitment"),
                 detail.get("section"),
                 detail.get("kind"),
+                detail.get("floor_str"),
+                detail.get("floor"),
+                detail.get("total_floor"),
+                detail.get("is_rooftop"),
             )
             return result is not None
 

@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 from loguru import logger
 
 from src.utils.mappings import convert_options_to_codes
-from src.utils.parsers import parse_fitment, parse_shape
+from src.utils.parsers import parse_fitment, parse_floor, parse_shape
 
 fetcher_log = logger.bind(module="BS4")
 
@@ -170,6 +170,35 @@ class DetailFetcherBs4:
         """
         return parse_fitment(page_text)
 
+    def _parse_floor(self, soup: BeautifulSoup) -> tuple[Optional[str], Optional[int], Optional[int], bool]:
+        """
+        Parse floor info from HTML.
+
+        Args:
+            soup: BeautifulSoup parsed page
+
+        Returns:
+            (floor_str, floor, total_floor, is_rooftop)
+        """
+        # Look for floor pattern in span elements (e.g., <span>5F/7F</span>)
+        floor_pattern = re.compile(r'\d+F/\d+F|B\d+/\d+F|頂[層樓]加蓋')
+
+        for elem in soup.find_all("span"):
+            text = elem.get_text(strip=True)
+            if floor_pattern.match(text):
+                floor, total_floor, is_rooftop = parse_floor(text)
+                return text, floor, total_floor, is_rooftop
+
+        # Fallback: search in all text
+        page_text = soup.get_text()
+        matches = floor_pattern.findall(page_text)
+        if matches:
+            floor_str = matches[0]
+            floor, total_floor, is_rooftop = parse_floor(floor_str)
+            return floor_str, floor, total_floor, is_rooftop
+
+        return None, None, None, False
+
     def _parse_breadcrumb(self, soup: BeautifulSoup) -> dict:
         """
         Parse region, section, kind from breadcrumb links.
@@ -240,6 +269,9 @@ class DetailFetcherBs4:
             # Parse breadcrumb for section and kind
             breadcrumb = self._parse_breadcrumb(soup)
 
+            # Parse floor info
+            floor_str, floor, total_floor, is_rooftop = self._parse_floor(soup)
+
             result = {
                 "gender": self._parse_gender(page_text),
                 "pet_allowed": self._parse_pet(page_text),
@@ -248,11 +280,15 @@ class DetailFetcherBs4:
                 "fitment": self._parse_fitment(page_text),
                 "section": breadcrumb.get("section"),
                 "kind": breadcrumb.get("kind"),
+                "floor_str": floor_str,
+                "floor": floor,
+                "total_floor": total_floor,
+                "is_rooftop": is_rooftop,
             }
 
             fetcher_log.debug(
                 f"Parsed {object_id}: gender={result['gender']}, "
-                f"pet={result['pet_allowed']}, shape={result['shape']}, "
+                f"pet={result['pet_allowed']}, floor={result['floor_str']}, "
                 f"fitment={result['fitment']}, options={len(result['options'])} items"
             )
 
@@ -278,6 +314,10 @@ class DetailFetcherBs4:
                 - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
                 - section: int | None (行政區代碼)
                 - kind: int | None (類型代碼)
+                - floor_str: str | None (e.g., "5F/7F")
+                - floor: int | None (current floor)
+                - total_floor: int | None (total floors)
+                - is_rooftop: bool (rooftop addition)
         """
         if self._session is None:
             await self.start()
