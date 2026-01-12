@@ -1,28 +1,28 @@
 """
 Listing Checker Module.
 
-Checks for new listings and triggers notifications.
+Checks for new objects and triggers notifications.
 """
 
 from typing import Optional
 
 from loguru import logger
 
-from src.connections.postgres import get_postgres, PostgresConnection
+from src.connections.postgres import PostgresConnection, get_postgres
 
 checker_log = logger.bind(module="Checker")
-from src.connections.redis import get_redis, RedisConnection
+from src.connections.redis import RedisConnection, get_redis
+from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.rent591 import Rent591Crawler
-from src.crawler.object_detail import ObjectDetailCrawler, get_detail_crawler
 from src.jobs.broadcaster import Broadcaster, get_broadcaster
-from src.utils import convert_options_to_codes
 from src.jobs.parser import parse_is_rooftop
 from src.modules.objects import RentalObject
+from src.utils import convert_options_to_codes
 
 
 class Checker:
     """
-    Checker for new rental listings.
+    Checker for new rental objects.
 
     Workflow:
     1. Get active regions from Redis subscriptions
@@ -41,7 +41,7 @@ class Checker:
         postgres: Optional[PostgresConnection] = None,
         redis: Optional[RedisConnection] = None,
         crawler: Optional[Rent591Crawler] = None,
-        detail_crawler: Optional[ObjectDetailCrawler] = None,
+        detail_crawler: Optional[DetailFetcher] = None,
         broadcaster: Optional[Broadcaster] = None,
         enable_broadcast: bool = True,
         detail_max_workers: int = 3,
@@ -53,7 +53,7 @@ class Checker:
             postgres: PostgreSQL connection (will be created if not provided)
             redis: Redis connection (will be created if not provided)
             crawler: Crawler instance (will be created if not provided)
-            detail_crawler: Detail page crawler (will be created if not provided)
+            detail_crawler: Detail fetcher with bs4 + Playwright fallback
             broadcaster: Broadcaster instance (will be created if not provided)
             enable_broadcast: Whether to send notifications (default True)
             detail_max_workers: Max parallel workers for detail page fetching
@@ -78,8 +78,8 @@ class Checker:
             self._owns_crawler = True
             await self._crawler.start()
         if self._detail_crawler is None:
-            self._detail_crawler = await get_detail_crawler(
-                max_workers=self._detail_max_workers
+            self._detail_crawler = get_detail_fetcher(
+                playwright_max_workers=self._detail_max_workers
             )
             await self._detail_crawler.start()
         if self._broadcaster is None and self._enable_broadcast:
@@ -114,102 +114,16 @@ class Checker:
         checker_log.info(f"Synced {len(subscriptions)} subscriptions to Redis")
         return len(subscriptions)
 
-    def _needs_detail_fetch(self, subscriptions: list[dict]) -> bool:
-        """
-        Check if any subscription requires detail page fields.
-
-        Args:
-            subscriptions: List of subscription dicts
-
-        Returns:
-            True if any subscription has gender, pet_required, or options set
-        """
-        for sub in subscriptions:
-            if sub.get("gender") or sub.get("pet_required") or sub.get("options"):
-                return True
-        return False
-
-    def _basic_match_object_to_subscription(self, obj: dict, sub: dict) -> bool:
-        """
-        Basic matching without detail page fields (gender, pet).
-        Used for initial filtering before fetching detail pages.
-
-        Returns:
-            True if object passes basic criteria
-        """
-        # Price range
-        if sub.get("price_min") is not None or sub.get("price_max") is not None:
-            obj_price = obj.get("price", 0)
-            if isinstance(obj_price, str):
-                obj_price = int(obj_price.replace(",", "")) if obj_price else 0
-
-            if sub.get("price_min") is not None and obj_price < sub["price_min"]:
-                return False
-            if sub.get("price_max") is not None and obj_price > sub["price_max"]:
-                return False
-
-        # Kind (property type)
-        if sub.get("kind"):
-            obj_kind = obj.get("kind")
-            if obj_kind is not None and obj_kind not in sub["kind"]:
-                return False
-
-        # Section (district)
-        if sub.get("section"):
-            obj_section = obj.get("section")
-            if obj_section is not None and obj_section not in sub["section"]:
-                return False
-
-        # Area range
-        if sub.get("area_min") is not None or sub.get("area_max") is not None:
-            obj_area = obj.get("area", 0) or 0
-            if sub.get("area_min") is not None and obj_area < float(sub["area_min"]):
-                return False
-            if sub.get("area_max") is not None and obj_area > float(sub["area_max"]):
-                return False
-
-        # Layout
-        if sub.get("layout"):
-            layout_str = obj.get("layout_str", "") or ""
-            obj_rooms = self._extract_room_count(layout_str)
-            if obj_rooms is not None:
-                matched = False
-                for required in sub["layout"]:
-                    if required == 4 and obj_rooms >= 4:
-                        matched = True
-                        break
-                    elif obj_rooms == required:
-                        matched = True
-                        break
-                if not matched:
-                    return False
-
-        # Floor
-        if sub.get("floor"):
-            floor_name = obj.get("floor_name", "") or ""
-            obj_floor = self._extract_floor_number(floor_name)
-            if obj_floor is not None:
-                matched = self._match_floor(obj_floor, sub["floor"])
-                if not matched:
-                    return False
-
-        # Exclude rooftop addition (can check from list page)
-        if sub.get("exclude_rooftop"):
-            if obj.get("is_rooftop"):
-                return False
-
-        return True
-
     async def _fetch_and_update_details(
         self,
-        listings: list[RentalObject],
+        objects: list[RentalObject],
         object_ids: list[int],
     ) -> dict[int, dict]:
         """
-        Fetch detail pages and update listing objects.
+        Fetch detail pages and update rental objects.
 
         Args:
-            listings: List of RentalObject to update
+            objects: List of RentalObject to update
             object_ids: IDs to fetch details for
 
         Returns:
@@ -221,17 +135,17 @@ class Checker:
         checker_log.info(f"Fetching detail pages for {len(object_ids)} objects...")
         details = await self._detail_crawler.fetch_details_batch(object_ids)
 
-        # Update listings with detail data
-        listings_map = {l.id: l for l in listings}
+        # Update objects with detail data
+        objects_map = {obj.id: obj for obj in objects}
         for obj_id, detail in details.items():
-            if obj_id in listings_map:
-                listing = listings_map[obj_id]
-                listing.gender = detail.get("gender", "all")
-                listing.pet_allowed = detail.get("pet_allowed")
-                listing.options = detail.get("options", [])
+            if obj_id in objects_map:
+                obj = objects_map[obj_id]
+                obj.gender = detail.get("gender", "all")
+                obj.pet_allowed = detail.get("pet_allowed")
+                obj.options = detail.get("options", [])
                 checker_log.debug(
-                    f"Updated {obj_id}: gender={listing.gender}, "
-                    f"pet={listing.pet_allowed}, options={len(listing.options)}"
+                    f"Updated {obj_id}: gender={obj.gender}, "
+                    f"pet={obj.pet_allowed}, options={len(obj.options)}"
                 )
 
         return details
@@ -522,18 +436,16 @@ class Checker:
         force_notify: bool = False,
     ) -> dict:
         """
-        Check for new listings in a region.
+        Check for new objects in a region.
 
         Flow:
         1. Crawl list page → get basic object data
         2. Parse is_rooftop from floor_name
         3. Save to PostgreSQL + Redis
         4. Find new IDs
-        5. Basic matching (filter candidates)
-        6. Fetch detail pages for candidates (if needed)
-        7. Update objects with detail data (gender, pet_allowed, options)
-        8. Full matching
-        9. Push notifications
+        5. Fetch detail pages for ALL new objects
+        6. Full matching
+        7. Push notifications
 
         Args:
             region: City code (1=Taipei, 3=New Taipei)
@@ -555,15 +467,15 @@ class Checker:
         run_id = await self._postgres.start_crawler_run(region, section)
 
         try:
-            # Step 1: Crawl latest listings from list page
-            listings = await self._crawler.fetch_listings(
+            # Step 1: Crawl latest objects from list page
+            objects = await self._crawler.fetch_listings(
                 region=region,
                 section=section,
                 sort="posttime_desc",
                 max_items=max_items,
             )
 
-            if not listings:
+            if not objects:
                 checker_log.warning("No objects fetched")
                 await self._postgres.finish_crawler_run(
                     run_id=run_id,
@@ -581,20 +493,20 @@ class Checker:
                     "initialized_subs": [],
                 }
 
-            checker_log.info(f"Fetched {len(listings)} objects")
+            checker_log.info(f"Fetched {len(objects)} objects")
 
             # Step 2: Parse is_rooftop and save to PostgreSQL + Redis
             new_count = 0
             fetched_ids = set()
 
-            for listing in listings:
-                fetched_ids.add(listing.id)
+            for obj in objects:
+                fetched_ids.add(obj.id)
 
                 # Parse is_rooftop from floor_name (can be done from list page)
-                listing.is_rooftop = parse_is_rooftop(listing.floor_name)
+                obj.is_rooftop = parse_is_rooftop(obj.floor_name)
 
                 # Save to PostgreSQL
-                is_new = await self._postgres.save_object(listing)
+                is_new = await self._postgres.save_object(obj)
                 if is_new:
                     new_count += 1
 
@@ -620,38 +532,19 @@ class Checker:
                 uninitialized_subs = await self._redis.get_uninitialized_subscriptions(all_subs)
                 uninitialized_ids = {sub["id"] for sub in uninitialized_subs}
 
-                # Check if any subscription needs detail page fields
-                needs_detail = self._needs_detail_fetch(all_subs)
+                # Get new objects only
+                new_objects = [obj for obj in objects if obj.id in new_ids]
 
-                # Get new listings only
-                new_listings = [l for l in listings if l.id in new_ids]
+                # Fetch detail pages for ALL new objects
+                if new_objects:
+                    new_object_ids = [obj.id for obj in new_objects]
+                    checker_log.info(f"Fetching detail for {len(new_object_ids)} new objects")
+                    await self._fetch_and_update_details(new_objects, new_object_ids)
+                    detail_fetched = len(new_object_ids)
 
-                # Step 5a: Basic matching to find candidates
-                candidates_for_detail = set()
-                if needs_detail:
-                    for listing in new_listings:
-                        obj_data = listing.model_dump()
-                        for sub in all_subs:
-                            # Only check subs that need detail page fields
-                            if sub.get("gender") or sub.get("pet_required") or sub.get("options"):
-                                if self._basic_match_object_to_subscription(obj_data, sub):
-                                    candidates_for_detail.add(listing.id)
-                                    break
-
-                    # Step 5b: Fetch detail pages for candidates
-                    if candidates_for_detail:
-                        checker_log.info(
-                            f"Found {len(candidates_for_detail)} candidates needing detail page"
-                        )
-                        await self._fetch_and_update_details(
-                            new_listings,
-                            list(candidates_for_detail),
-                        )
-                        detail_fetched = len(candidates_for_detail)
-
-                # Step 5c: Full matching with updated data
-                for listing in new_listings:
-                    obj_data = listing.model_dump()
+                # Full matching with updated data
+                for obj in new_objects:
+                    obj_data = obj.model_dump()
 
                     for sub in all_subs:
                         if not self._match_object_to_subscription(obj_data, sub):
@@ -660,13 +553,13 @@ class Checker:
                         sub_id = sub["id"]
                         if sub_id in uninitialized_ids:
                             # Uninitialized subscription - match but don't notify
-                            init_matches.append((listing, sub))
+                            init_matches.append((obj, sub))
                             if sub_id not in initialized_subs:
                                 initialized_subs.append(sub_id)
                         else:
                             # Initialized subscription - match and notify
-                            matches.append((listing, [sub]))
-                            checker_log.info(f"Object {listing.id} matches subscription {sub_id}")
+                            matches.append((obj, [sub]))
+                            checker_log.info(f"Object {obj.id} matches subscription {sub_id}")
 
                 # Mark uninitialized subscriptions as initialized
                 for sub_id in initialized_subs:
@@ -675,37 +568,37 @@ class Checker:
 
                 # Step 6: Broadcast notifications
                 if matches and self._enable_broadcast and self._broadcaster:
-                    # Group matches by listing
-                    listing_subs_map: dict[int, tuple[RentalObject, list[dict]]] = {}
-                    for listing, subs in matches:
-                        if listing.id not in listing_subs_map:
-                            listing_subs_map[listing.id] = (listing, [])
-                        listing_subs_map[listing.id][1].extend(subs)
+                    # Group matches by object
+                    object_subs_map: dict[int, tuple[RentalObject, list[dict]]] = {}
+                    for obj, subs in matches:
+                        if obj.id not in object_subs_map:
+                            object_subs_map[obj.id] = (obj, [])
+                        object_subs_map[obj.id][1].extend(subs)
 
-                    grouped_matches = list(listing_subs_map.values())
+                    grouped_matches = list(object_subs_map.values())
                     checker_log.info(f"Broadcasting {len(grouped_matches)} matches...")
                     broadcast_result = await self._broadcaster.broadcast(grouped_matches)
 
                     # Mark as notified in PostgreSQL
-                    for listing, subs in grouped_matches:
+                    for obj, subs in grouped_matches:
                         for sub in subs:
-                            await self._postgres.mark_notified(sub["id"], listing.id)
+                            await self._postgres.mark_notified(sub["id"], obj.id)
 
             # Step 7: Save updated objects to Redis (with detail data)
-            objects_to_cache = [l.model_dump() for l in listings]
+            objects_to_cache = [obj.model_dump() for obj in objects]
             await self._redis.save_objects(objects_to_cache)
 
             # Finish crawler run
             await self._postgres.finish_crawler_run(
                 run_id=run_id,
                 status="success",
-                total_fetched=len(listings),
+                total_fetched=len(objects),
                 new_objects=new_count,
             )
 
             result = {
                 "region": region,
-                "fetched": len(listings),
+                "fetched": len(objects),
                 "new_count": len(new_ids),
                 "detail_fetched": detail_fetched,
                 "matches": matches,

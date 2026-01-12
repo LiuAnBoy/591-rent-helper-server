@@ -1,7 +1,7 @@
 """
-Object Detail Crawler.
+Detail fetcher using Playwright browser automation.
 
-Fetches detail page data for rental objects with parallel processing support.
+Reliable fallback for fetching rental detail pages when bs4 fails.
 """
 
 import asyncio
@@ -10,21 +10,19 @@ from typing import Optional
 from loguru import logger
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
-from src.jobs.parser import parse_detail_fields
-
-crawler_log = logger.bind(module="Crawler")
+fetcher_log = logger.bind(module="Playwright")
 
 
-class ObjectDetailCrawler:
+class DetailFetcherPlaywright:
     """
-    Crawler for fetching rental object detail pages.
+    Detail fetcher using Playwright browser automation.
 
     Supports parallel fetching using multiple browser pages.
     """
 
     def __init__(self, max_workers: int = 3, delay: float = 0.3):
         """
-        Initialize the detail crawler.
+        Initialize the Playwright detail fetcher.
 
         Args:
             max_workers: Maximum concurrent requests
@@ -44,7 +42,9 @@ class ObjectDetailCrawler:
         if self._browser:
             return
 
-        crawler_log.info(f"Starting ObjectDetailCrawler with {self.max_workers} workers")
+        fetcher_log.info(
+            f"Starting DetailFetcherPlaywright with {self.max_workers} workers"
+        )
 
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(headless=True)
@@ -63,7 +63,7 @@ class ObjectDetailCrawler:
             page = await self._context.new_page()
             self._pages.append(page)
             self._page_locks.append(asyncio.Lock())
-            crawler_log.debug(f"Created worker page {i + 1}/{self.max_workers}")
+            fetcher_log.debug(f"Created worker page {i + 1}/{self.max_workers}")
 
         self._semaphore = asyncio.Semaphore(self.max_workers)
 
@@ -80,7 +80,7 @@ class ObjectDetailCrawler:
             self._playwright = None
         self._pages = []
         self._page_locks = []
-        crawler_log.info("ObjectDetailCrawler closed")
+        fetcher_log.info("DetailFetcherPlaywright closed")
 
     async def _get_available_page(self) -> tuple[int, Page]:
         """Get an available page with its index."""
@@ -96,7 +96,7 @@ class ObjectDetailCrawler:
             data = await page.evaluate("window.__NUXT__?.data")
             return data
         except Exception as e:
-            crawler_log.error(f"Failed to extract __NUXT__ data: {e}")
+            fetcher_log.error(f"Failed to extract __NUXT__ data: {e}")
             return None
 
     async def fetch_detail(
@@ -134,7 +134,7 @@ class ObjectDetailCrawler:
             # Extract NUXT data
             nuxt_data = await self._extract_nuxt_data(page)
             if not nuxt_data:
-                crawler_log.warning(f"No NUXT data found for object {object_id}")
+                fetcher_log.warning(f"No NUXT data found for object {object_id}")
                 return None
 
             # Find detail data in NUXT data
@@ -147,13 +147,15 @@ class ObjectDetailCrawler:
                         break
 
             if not detail_data:
-                crawler_log.warning(f"No detail data found for object {object_id}")
+                fetcher_log.warning(f"No detail data found for object {object_id}")
                 return None
 
-            # Parse fields
+            # Parse fields (import here to avoid circular import)
+            from src.jobs.parser import parse_detail_fields
+
             result = parse_detail_fields(detail_data)
 
-            crawler_log.debug(
+            fetcher_log.debug(
                 f"Detail {object_id}: gender={result['gender']}, "
                 f"pet={result['pet_allowed']}, options={len(result['options'])} items"
             )
@@ -161,7 +163,7 @@ class ObjectDetailCrawler:
             return result
 
         except Exception as e:
-            crawler_log.error(f"Failed to fetch detail for {object_id}: {e}")
+            fetcher_log.error(f"Failed to fetch detail for {object_id}: {e}")
             return None
 
     async def _fetch_with_worker(
@@ -187,7 +189,7 @@ class ObjectDetailCrawler:
                 await asyncio.sleep(self.delay)
 
             progress["completed"] += 1
-            crawler_log.info(
+            fetcher_log.info(
                 f"[Worker {worker_id + 1}] Fetching detail "
                 f"{progress['completed']}/{progress['total']}: {object_id}"
             )
@@ -214,9 +216,9 @@ class ObjectDetailCrawler:
         if not self._browser:
             await self.start()
 
-        crawler_log.info(
+        fetcher_log.info(
             f"Fetching {len(object_ids)} detail pages "
-            f"with {self.max_workers} workers..."
+            f"with {self.max_workers} Playwright workers..."
         )
 
         results = {}
@@ -243,38 +245,40 @@ class ObjectDetailCrawler:
         # Process results
         for result in task_results:
             if isinstance(result, Exception):
-                crawler_log.error(f"Task failed: {result}")
+                fetcher_log.error(f"Task failed: {result}")
                 continue
             obj_id, detail = result
             if detail:
                 results[obj_id] = detail
 
-        crawler_log.info(
-            f"Fetched {len(results)}/{len(object_ids)} detail pages successfully"
+        fetcher_log.info(
+            f"Playwright fetched {len(results)}/{len(object_ids)} detail pages"
         )
 
         return results
 
 
 # Singleton instance
-_detail_crawler: Optional[ObjectDetailCrawler] = None
+_playwright_fetcher: Optional[DetailFetcherPlaywright] = None
 
 
-async def get_detail_crawler(
+def get_playwright_fetcher(
     max_workers: int = 3,
     delay: float = 0.3,
-) -> ObjectDetailCrawler:
+) -> DetailFetcherPlaywright:
     """
-    Get or create the singleton detail crawler instance.
+    Get or create the singleton Playwright fetcher instance.
 
     Args:
         max_workers: Maximum concurrent requests
         delay: Delay between requests per worker
 
     Returns:
-        ObjectDetailCrawler instance
+        DetailFetcherPlaywright instance
     """
-    global _detail_crawler
-    if _detail_crawler is None:
-        _detail_crawler = ObjectDetailCrawler(max_workers=max_workers, delay=delay)
-    return _detail_crawler
+    global _playwright_fetcher
+    if _playwright_fetcher is None:
+        _playwright_fetcher = DetailFetcherPlaywright(
+            max_workers=max_workers, delay=delay
+        )
+    return _playwright_fetcher

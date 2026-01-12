@@ -11,7 +11,8 @@ dependencies = [
     # Browser Automation
     "playwright>=1.40.0",
     # HTTP Client
-    "httpx>=0.27.0",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
     # PostgreSQL
     "asyncpg>=0.29.0",
     "sqlalchemy[asyncio]>=2.0.0",
