@@ -172,14 +172,6 @@ class ListFetcherBs4:
                     elif address is None and "區" in span_text and ("-" in span_text or "路" in span_text or "街" in span_text):
                         address = span_text
 
-            # Get tags
-            tags = []
-            tag_elems = elem.select(".item-info-tag span")
-            for tag in tag_elems:
-                tag_text = tag.get_text(strip=True)
-                if tag_text:
-                    tags.append(tag_text)
-
             return RentalObject(
                 id=obj_id,
                 title=title,
@@ -195,7 +187,6 @@ class ListFetcherBs4:
                 layout_str=layout_str,
                 kind_name=kind_name,
                 address=address,
-                tags=tags,
             )
 
         except Exception as e:

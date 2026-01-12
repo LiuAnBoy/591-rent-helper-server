@@ -45,6 +45,7 @@ def parse_detail_fields(detail_data: dict) -> dict:
         "total_floor": None,
         "is_rooftop": False,
         "layout_str": None,
+        "tags": [],
     }
 
     # Parse service fields
@@ -57,11 +58,20 @@ def parse_detail_fields(detail_data: dict) -> dict:
         result["pet_allowed"] = parsed["pet_allowed"]
 
         # Parse facility for equipment/options (convert to codes)
+        # NUXT format: [{"key": "fridge", "active": 1, "name": "冰箱"}, ...]
+        # BS4 format: ["冰箱", "洗衣機", ...]
         facility = service.get("facility", [])
         if facility:
-            result["options"] = convert_options_to_codes(facility)
+            if isinstance(facility[0], dict):
+                # NUXT format - extract names from active facilities
+                active_names = [f.get("name") for f in facility if f.get("active") == 1]
+                result["options"] = convert_options_to_codes(active_names)
+            else:
+                # BS4 format - list of strings
+                result["options"] = convert_options_to_codes(facility)
 
-    # Parse info array for shape and fitment
+    # Parse info array for shape, fitment, floor, layout
+    # NUXT format: [{"name": "格局", "value": "3房2廳2衛", "key": "layout"}, ...]
     info = detail_data.get("info", [])
     for item in info:
         key = item.get("key")
@@ -75,27 +85,48 @@ def parse_detail_fields(detail_data: dict) -> dict:
             # Convert fitment name to code
             result["fitment"] = parse_fitment(value)
 
+        elif key == "floor" and value:
+            # Parse floor info (e.g., "2F/14F")
+            result["floor_str"] = value
+            floor, total_floor, is_rooftop = parse_floor(value)
+            result["floor"] = floor
+            result["total_floor"] = total_floor
+            result["is_rooftop"] = is_rooftop
+
+        elif key == "layout" and value:
+            # Layout string (e.g., "3房2廳2衛")
+            result["layout_str"] = value
+
     # Parse breadcrumb for section and kind
+    # NUXT format: [{"name": "中山區", "id": 3, "query": "section", "link": "..."}, ...]
     breadcrumb = detail_data.get("breadcrumb", [])
     for crumb in breadcrumb:
-        query = crumb.get("query", {})
-        if "section" in query:
-            result["section"] = int(query["section"])
-        if "kind" in query:
-            result["kind"] = int(query["kind"])
+        query_type = crumb.get("query")
+        crumb_id = crumb.get("id")
+        if query_type == "section" and crumb_id:
+            result["section"] = int(crumb_id)
+        elif query_type == "kind" and crumb_id:
+            result["kind"] = int(crumb_id)
 
-    # Parse floor info from floor_name field (e.g., "5F/7F")
-    floor_name = detail_data.get("floor_name")
-    if floor_name:
-        result["floor_str"] = floor_name
-        floor, total_floor, is_rooftop = parse_floor(floor_name)
-        result["floor"] = floor
-        result["total_floor"] = total_floor
-        result["is_rooftop"] = is_rooftop
+    # Fallback: Parse floor info from floor_name field (if not set from info array)
+    if not result["floor_str"]:
+        floor_name = detail_data.get("floor_name")
+        if floor_name:
+            result["floor_str"] = floor_name
+            floor, total_floor, is_rooftop = parse_floor(floor_name)
+            result["floor"] = floor
+            result["total_floor"] = total_floor
+            result["is_rooftop"] = is_rooftop
 
-    # Parse layout_str (e.g., "3房2廳2衛")
-    layout_str = detail_data.get("layoutStr") or detail_data.get("layout_str")
-    if layout_str:
-        result["layout_str"] = layout_str
+    # Fallback: Parse layout_str (if not set from info array)
+    if not result["layout_str"]:
+        layout_str = detail_data.get("layoutStr") or detail_data.get("layout_str")
+        if layout_str:
+            result["layout_str"] = layout_str
+
+    # Parse tags (e.g., [{"id": 2, "value": "近捷運"}, ...])
+    tags = detail_data.get("tags", [])
+    if tags:
+        result["tags"] = [tag.get("value") for tag in tags if tag.get("value")]
 
     return result
