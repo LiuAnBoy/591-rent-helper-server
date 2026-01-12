@@ -47,11 +47,11 @@ class ObjectRepository:
             floor, floor_str, total_floor, bathroom, other, options,
             fitment, tags,
             surrounding_type, surrounding_desc, surrounding_distance,
-            is_rooftop, gender, pet_allowed, raw_data
+            is_rooftop, gender, pet_allowed
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
             $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-            $21, $22, $23, $24, $25, $26, $27, $28, $29, $30
+            $21, $22, $23, $24, $25, $26, $27, $28, $29
         )
         ON CONFLICT (id) DO UPDATE SET
             last_seen_at = NOW(),
@@ -98,7 +98,7 @@ class ObjectRepository:
                 floor_str,                                                 # $17 floor_str
                 total_floor,                                               # $18 total_floor
                 None,                                                      # $19 bathroom
-                convert_other_to_codes(obj.tags or []),                     # $20 other
+                convert_other_to_codes(obj.tags or []),                    # $20 other
                 [],                                                        # $21 options
                 None,                                                      # $22 fitment
                 obj.tags or [],                                            # $23 tags
@@ -108,7 +108,6 @@ class ObjectRepository:
                 is_rooftop,                                                # $27
                 "all",                                                     # $28 gender
                 None,                                                      # $29 pet_allowed
-                None,                                                      # $30 raw_data
             )
             return result["inserted"]
 
