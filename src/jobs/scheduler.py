@@ -88,9 +88,8 @@ async def run_checker_job(skip_night: bool = False) -> None:
     except Exception as e:
         scheduler_log.error(f"Checker job failed: {e}")
     finally:
-        # Close browser to release memory
+        # Close fetchers to release resources
         await close_checker()
-        scheduler_log.info("Browser closed, memory released")
 
 
 def setup_jobs() -> None:
