@@ -582,7 +582,20 @@ class Checker:
                     # Mark as notified in PostgreSQL
                     for obj, subs in grouped_matches:
                         for sub in subs:
-                            await self._postgres.mark_notified(sub["id"], obj.id)
+                            try:
+                                await self._postgres.mark_notified(sub["id"], obj.id)
+                            except Exception as e:
+                                # Handle stale subscription (exists in Redis but not in PostgreSQL)
+                                if "foreign key constraint" in str(e).lower():
+                                    checker_log.warning(
+                                        f"Stale subscription {sub['id']} found in Redis "
+                                        f"(not in PostgreSQL). Removing from cache..."
+                                    )
+                                    await self._redis.remove_subscription(
+                                        sub.get("region", region), sub["id"]
+                                    )
+                                else:
+                                    raise
 
             # Step 7: Save updated objects to Redis (with detail data)
             objects_to_cache = [obj.model_dump() for obj in objects]
