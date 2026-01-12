@@ -23,6 +23,16 @@ from src.utils.parsers import parse_floor
 
 fetcher_log = logger.bind(module="BS4")
 
+# Kind name to code mapping
+KIND_NAME_TO_CODE = {
+    "整層住家": 1,
+    "獨立套房": 2,
+    "分租套房": 3,
+    "雅房": 4,
+    "車位": 8,
+    "其他": 24,
+}
+
 
 class ListFetcherBs4:
     """
@@ -163,7 +173,7 @@ class ListFetcherBs4:
                 for span in spans:
                     span_text = span.get_text(strip=True)
                     # First span is kind_name (整層住家, 獨立套房, etc.)
-                    if kind_name is None and span_text in ["整層住家", "獨立套房", "分租套房", "雅房"]:
+                    if kind_name is None and span_text in ["整層住家", "獨立套房", "分租套房", "雅房", "車位", "其他"]:
                         kind_name = span_text
                     # Layout pattern: X房X廳, X房, or 開放格局
                     elif layout_str is None and (re.match(r"^\d+房", span_text) or span_text == "開放格局"):
@@ -172,11 +182,15 @@ class ListFetcherBs4:
                     elif address is None and "區" in span_text and ("-" in span_text or "路" in span_text or "街" in span_text):
                         address = span_text
 
+            # Convert kind_name to kind code
+            kind = KIND_NAME_TO_CODE.get(kind_name) if kind_name else None
+
             return RentalObject(
                 id=obj_id,
                 title=title,
                 url=url,
                 region=region,
+                kind=kind,
                 price=price,
                 price_unit=price_unit,
                 area=area,
