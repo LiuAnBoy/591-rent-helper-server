@@ -36,12 +36,12 @@ class SubscriptionRepository:
         INSERT INTO subscriptions (
             user_id, name, region, section, kind,
             price_min, price_max, layout, shape,
-            area_min, area_max, floor, bathroom,
+            area_min, area_max, floor_min, floor_max, bathroom,
             features, options, fitment,
             exclude_rooftop, gender, pet_required
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9,
-            $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+            $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
         )
         RETURNING *
         """
@@ -59,7 +59,8 @@ class SubscriptionRepository:
                 data.get("shape"),
                 data.get("area_min"),
                 data.get("area_max"),
-                data.get("floor"),
+                data.get("floor_min"),
+                data.get("floor_max"),
                 data.get("bathroom"),
                 data.get("features"),
                 data.get("options"),

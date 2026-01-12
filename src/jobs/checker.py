@@ -15,7 +15,7 @@ from src.connections.redis import RedisConnection, get_redis
 from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.rent591 import Rent591Crawler
 from src.jobs.broadcaster import Broadcaster, get_broadcaster
-from src.jobs.parser import parse_is_rooftop
+from src.utils.parsers import parse_is_rooftop
 from src.modules.objects import RentalObject
 from src.utils import convert_options_to_codes
 
@@ -219,15 +219,13 @@ class Checker:
                 if not matched:
                     return False
 
-        # Floor (樓層) - extract floor from floor_name like "3F/10F" or "B1/10F"
-        if sub.get("floor"):
-            floor_name = obj.get("floor_name", "") or ""
-            obj_floor = self._extract_floor_number(floor_name)
-            if obj_floor is not None:
-                # sub.floor is like ["1_1", "2_6", "6_12", "13_"]
-                matched = self._match_floor(obj_floor, sub["floor"])
-                if not matched:
-                    return False
+        # Floor (樓層) - use floor_min/floor_max for numeric comparison
+        floor_min = sub.get("floor_min")
+        floor_max = sub.get("floor_max")
+        if floor_min is not None or floor_max is not None:
+            obj_floor = obj.get("floor")
+            if not self._match_floor(obj_floor, floor_min, floor_max):
+                return False
 
         # Exclude rooftop addition (排除頂樓加蓋)
         if sub.get("exclude_rooftop"):
@@ -315,31 +313,31 @@ class Checker:
             return int(match.group(1))
         return None
 
-    def _match_floor(self, obj_floor: int, floor_ranges: list[str]) -> bool:
+    def _match_floor(
+        self,
+        obj_floor: Optional[int],
+        floor_min: Optional[int],
+        floor_max: Optional[int],
+    ) -> bool:
         """
-        Match object floor against subscription floor ranges.
+        Match object floor against subscription floor range.
 
         Args:
-            obj_floor: Object's floor number
-            floor_ranges: List like ["1_1", "2_6", "6_12", "13_"]
+            obj_floor: Object's floor number (0=rooftop, negative=basement)
+            floor_min: Minimum floor (inclusive), None = no limit
+            floor_max: Maximum floor (inclusive), None = no limit
 
         Returns:
-            True if floor matches any range
+            True if floor matches the range
         """
-        for range_str in floor_ranges:
-            if range_str == "1_1":  # 1樓
-                if obj_floor == 1:
-                    return True
-            elif range_str == "2_6":  # 2-6層
-                if 2 <= obj_floor <= 6:
-                    return True
-            elif range_str == "6_12":  # 6-12層
-                if 6 <= obj_floor <= 12:
-                    return True
-            elif range_str == "13_":  # 12樓以上
-                if obj_floor >= 13:
-                    return True
-        return False
+        if obj_floor is None:
+            return True  # No floor info, don't filter
+
+        if floor_min is not None and obj_floor < floor_min:
+            return False
+        if floor_max is not None and obj_floor > floor_max:
+            return False
+        return True
 
     def _match_features(
         self, features: list[str], obj_tags: set[str], obj: dict

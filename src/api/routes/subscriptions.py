@@ -15,6 +15,7 @@ from src.modules.subscriptions import (
     SubscriptionResponse,
     SubscriptionListResponse,
     SubscriptionRepository,
+    parse_floor_ranges,
 )
 from src.modules.users import UserRepository
 from src.modules.providers import sync_user_subscriptions_to_redis
@@ -208,6 +209,13 @@ async def update_subscription(
     update_data = data.model_dump(exclude_unset=True)
     if not update_data:
         return {"success": True}
+
+    # Convert floor list to floor_min/floor_max for storage
+    if "floor" in update_data:
+        floor_list = update_data.pop("floor")
+        floor_min, floor_max = parse_floor_ranges(floor_list)
+        update_data["floor_min"] = floor_min
+        update_data["floor_max"] = floor_max
 
     try:
         subscription = await repo.update(subscription_id, update_data)

@@ -150,8 +150,8 @@ class DetailFetcherPlaywright:
                 fetcher_log.warning(f"No detail data found for object {object_id}")
                 return None
 
-            # Parse fields (import here to avoid circular import)
-            from src.jobs.parser import parse_detail_fields
+            # Parse detail fields
+            from src.utils.parsers import parse_detail_fields
 
             result = parse_detail_fields(detail_data)
 

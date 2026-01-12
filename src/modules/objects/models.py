@@ -55,6 +55,8 @@ class RentalObject(BaseModel):
 
     # Space info
     floor_name: Optional[str] = None
+    floor: Optional[int] = Field(default=None, description="樓層 (0=頂加, 負數=地下)")
+    total_floor: Optional[int] = Field(default=None, description="總樓層數")
     area: Optional[float] = None
     area_name: Optional[str] = None
     layout_str: Optional[str] = Field(default=None, alias="layoutStr")

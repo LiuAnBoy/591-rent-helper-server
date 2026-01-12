@@ -456,6 +456,17 @@ class InstantNotifier:
                 if not matched:
                     return False
 
+        # Floor range
+        floor_min = sub.get("floor_min")
+        floor_max = sub.get("floor_max")
+        if floor_min is not None or floor_max is not None:
+            obj_floor = obj.get("floor")
+            if obj_floor is not None:
+                if floor_min is not None and obj_floor < floor_min:
+                    return False
+                if floor_max is not None and obj_floor > floor_max:
+                    return False
+
         # Exclude rooftop addition
         if sub.get("exclude_rooftop"):
             if obj.get("is_rooftop"):

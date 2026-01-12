@@ -11,6 +11,7 @@ from asyncpg import Pool
 from loguru import logger
 
 from src.modules.objects.models import RentalObject
+from src.utils.parsers import parse_floor
 
 objects_log = logger.bind(module="Objects")
 
@@ -42,14 +43,14 @@ class ObjectRepository:
             id, title, url, region, section, address,
             kind, kind_name, price, price_unit, price_per,
             layout, layout_str, shape, area,
-            floor, floor_str, bathroom, features, options,
+            floor, floor_str, total_floor, bathroom, features, options,
             fitment, tags,
             surrounding_type, surrounding_desc, surrounding_distance,
             is_rooftop, gender, pet_allowed, raw_data
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
             $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-            $21, $22, $23, $24, $25, $26, $27, $28, $29
+            $21, $22, $23, $24, $25, $26, $27, $28, $29, $30
         )
         ON CONFLICT (id) DO UPDATE SET
             last_seen_at = NOW(),
@@ -68,11 +69,9 @@ class ObjectRepository:
                 if match:
                     layout_num = int(match.group(1))
 
-            # Detect rooftop from floor_name
-            is_rooftop = False
+            # Parse floor info from floor_name
             floor_str = obj.floor_name if hasattr(obj, "floor_name") else None
-            if floor_str and "頂" in floor_str and "加蓋" in floor_str:
-                is_rooftop = True
+            floor, total_floor, is_rooftop = parse_floor(floor_str)
 
             result = await conn.fetchrow(
                 query,
@@ -91,20 +90,21 @@ class ObjectRepository:
                 obj.layout_str,                                            # $13
                 None,                                                      # $14 shape
                 obj.area,                                                  # $15
-                None,                                                      # $16 floor
-                floor_str,                                                 # $17
-                None,                                                      # $18 bathroom
-                obj.tags or [],                                            # $19 features
-                [],                                                        # $20 options
-                None,                                                      # $21 fitment
-                obj.tags or [],                                            # $22 tags
-                obj.surrounding.type if obj.surrounding else None,         # $23
-                obj.surrounding.desc if obj.surrounding else None,         # $24
-                obj.surrounding.distance if obj.surrounding else None,     # $25
-                is_rooftop,                                                # $26
-                "all",                                                     # $27 gender
-                None,                                                      # $28 pet_allowed
-                None,                                                      # $29 raw_data
+                floor,                                                     # $16 floor (INTEGER)
+                floor_str,                                                 # $17 floor_str
+                total_floor,                                               # $18 total_floor
+                None,                                                      # $19 bathroom
+                obj.tags or [],                                            # $20 features
+                [],                                                        # $21 options
+                None,                                                      # $22 fitment
+                obj.tags or [],                                            # $23 tags
+                obj.surrounding.type if obj.surrounding else None,         # $24
+                obj.surrounding.desc if obj.surrounding else None,         # $25
+                obj.surrounding.distance if obj.surrounding else None,     # $26
+                is_rooftop,                                                # $27
+                "all",                                                     # $28 gender
+                None,                                                      # $29 pet_allowed
+                None,                                                      # $30 raw_data
             )
             return result["inserted"]
 

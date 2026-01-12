@@ -28,7 +28,7 @@
 | 格局 | `layout` | `layoutStr` | 提取房數 | ✅ 已實作 |
 | 型態 | `shape` | ❌ 無 | - | ❌ 需詳細頁 |
 | 坪數 | `area_min/max` | `area` | 範圍比對 | ✅ 已實作 |
-| 樓層 | `floor` | `floor_name` | 提取樓層 | ✅ 已實作 |
+| 樓層 | `floor_min/max` | `floor` | 範圍比對 | ✅ 已實作 |
 | 衛浴 | `bathroom` | `layoutStr` | 提取衛數 | ⚠️ 可實作 |
 | 特色 | `features` | `tags` | 標籤比對 | ✅ 已實作 |
 | 設備 | `options` | `tags` | 標籤比對 | ✅ 已實作 |
@@ -165,16 +165,29 @@
 
 ## 樓層 Floor
 
-| 代碼 | 名稱 |
-|-----|------|
-| `1_1` | 1 樓 |
-| `2_6` | 2-6 層 |
-| `6_12` | 6-12 層 |
-| `13_` | 12 樓以上 |
+### Floor Value Mapping
 
-**物件欄位:** `floor_name` (例: "3F/10F", "B1/10F")
+| 情況 | floor | is_rooftop | 說明 |
+|------|-------|------------|------|
+| 一般樓層 | 1, 2, 3... | false | 正整數 |
+| 頂加 | 0 | true | 用 is_rooftop 區分 |
+| B1 地下室 | -1 | false | 負數表示地下 |
+| B2 地下室 | -2 | false | 負數表示地下 |
 
-**比對方式:** 從 `floor_name` 提取樓層數字，比對是否在範圍內
+### API 輸入格式（向後相容）
+
+| 代碼 | 名稱 | floor_min | floor_max |
+|-----|------|-----------|-----------|
+| `1_1` | 1 樓 | 1 | 1 |
+| `2_6` | 2-6 層 | 2 | 6 |
+| `6_12` | 6-12 層 | 6 | 12 |
+| `12_` | 12 樓以上 | 12 | NULL |
+
+**訂閱欄位:** `floor_min`, `floor_max` (INTEGER)
+
+**物件欄位:** `floor` (INTEGER), `total_floor` (INTEGER), `floor_name` (原始字串如 "3F/10F")
+
+**比對方式:** `floor_min <= obj.floor <= floor_max`（NULL 表示無限制）
 
 ---
 
