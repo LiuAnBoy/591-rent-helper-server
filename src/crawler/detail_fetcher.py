@@ -150,9 +150,17 @@ class DetailFetcher:
         fetcher_log.info(f"Fetching {len(object_ids)} detail pages...")
 
         # Try bs4 for all objects
-        results = await self._bs4_fetcher.fetch_details_batch(object_ids)
+        bs4_results = await self._bs4_fetcher.fetch_details_batch(object_ids)
 
-        # Collect failed IDs
+        # Filter results with valid tags (non-empty)
+        results = {}
+        for oid, data in bs4_results.items():
+            if data.get("tags"):
+                results[oid] = data
+            else:
+                fetcher_log.warning(f"BS4 returned empty tags for {oid}")
+
+        # Collect failed IDs (not in results or empty tags)
         failed_ids = [oid for oid in object_ids if oid not in results]
 
         if failed_ids:
