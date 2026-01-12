@@ -171,26 +171,28 @@ uv run uvicorn src.api.main:app --reload
 
 ## 環境變數
 
-| 變數                             | 說明                             | 預設值    |
-| -------------------------------- | -------------------------------- | --------- |
-| `PG_HOST`                        | PostgreSQL 主機                  | localhost |
-| `PG_PORT`                        | PostgreSQL 埠號                  | 5432      |
-| `PG_USER`                        | PostgreSQL 使用者                | postgres  |
-| `PG_PASSWORD`                    | PostgreSQL 密碼                  | postgres  |
-| `PG_DATABASE`                    | PostgreSQL 資料庫                | rent591   |
-| `REDIS_HOST`                     | Redis 主機                       | localhost |
-| `REDIS_PORT`                     | Redis 埠號                       | 6379      |
-| `APP_PORT`                       | API 服務埠號                     | 8000      |
-| `WEB_APP_URL`                    | 前台網址                         | -         |
-| `TELEGRAM_BOT_TOKEN`             | Telegram Bot Token               | -         |
-| `TELEGRAM_BOT_USERNAME`          | Telegram Bot 使用者名稱          | -         |
-| `TELEGRAM_WEBHOOK_URL`           | Telegram Webhook URL             | -         |
-| `JWT_SECRET`                     | JWT 密鑰                         | -         |
-| `CRAWLER_INTERVAL_MINUTES`       | 白天爬取間隔（分鐘），間隔式排程 | 15        |
-| `CRAWLER_NIGHT_INTERVAL_MINUTES` | 夜間爬取間隔（分鐘），固定時間點 | 60        |
-| `CRAWLER_NIGHT_START_HOUR`       | 夜間開始時間                     | 1         |
-| `CRAWLER_NIGHT_END_HOUR`         | 夜間結束時間                     | 8         |
-| `CORS_ORIGINS`                   | CORS 允許來源                    | \*        |
+| 變數                             | 說明                                 | 預設值    |
+| -------------------------------- | ------------------------------------ | --------- |
+| `PG_HOST`                        | PostgreSQL 主機                      | localhost |
+| `PG_PORT`                        | PostgreSQL 埠號                      | 5432      |
+| `PG_USER`                        | PostgreSQL 使用者                    | postgres  |
+| `PG_PASSWORD`                    | PostgreSQL 密碼                      | postgres  |
+| `PG_DATABASE`                    | PostgreSQL 資料庫                    | rent591   |
+| `PG_POOL_MAX`                    | PostgreSQL 連線池最大數              | 10        |
+| `REDIS_HOST`                     | Redis 主機                           | localhost |
+| `REDIS_PORT`                     | Redis 埠號                           | 6379      |
+| `APP_PORT`                       | API 服務埠號                         | 8000      |
+| `WEB_APP_URL`                    | 前台網址                             | -         |
+| `TELEGRAM_BOT_TOKEN`             | Telegram Bot Token                   | -         |
+| `TELEGRAM_BOT_USERNAME`          | Telegram Bot 使用者名稱              | -         |
+| `TELEGRAM_WEBHOOK_URL`           | Telegram Webhook URL                 | -         |
+| `TELEGRAM_ADMIN_ID`              | 管理員 ID（錯誤通知用，可選）        | -         |
+| `JWT_SECRET`                     | JWT 密鑰                             | -         |
+| `CRAWLER_INTERVAL_MINUTES`       | 白天爬取間隔（分鐘），間隔式排程     | 15        |
+| `CRAWLER_NIGHT_INTERVAL_MINUTES` | 夜間爬取間隔（分鐘），固定時間點     | 60        |
+| `CRAWLER_NIGHT_START_HOUR`       | 夜間開始時間                         | 1         |
+| `CRAWLER_NIGHT_END_HOUR`         | 夜間結束時間                         | 8         |
+| `CORS_ORIGINS`                   | CORS 允許來源                        | \*        |
 
 > **排程說明**
 >
