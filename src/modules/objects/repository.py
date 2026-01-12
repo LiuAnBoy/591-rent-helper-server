@@ -11,6 +11,7 @@ from asyncpg import Pool
 from loguru import logger
 
 from src.modules.objects.models import RentalObject
+from src.utils.mappings import convert_other_to_codes
 from src.utils.parsers import parse_floor
 
 objects_log = logger.bind(module="Objects")
@@ -43,7 +44,7 @@ class ObjectRepository:
             id, title, url, region, section, address,
             kind, kind_name, price, price_unit, price_per,
             layout, layout_str, shape, area,
-            floor, floor_str, total_floor, bathroom, features, options,
+            floor, floor_str, total_floor, bathroom, other, options,
             fitment, tags,
             surrounding_type, surrounding_desc, surrounding_distance,
             is_rooftop, gender, pet_allowed, raw_data
@@ -97,7 +98,7 @@ class ObjectRepository:
                 floor_str,                                                 # $17 floor_str
                 total_floor,                                               # $18 total_floor
                 None,                                                      # $19 bathroom
-                obj.tags or [],                                            # $20 features
+                convert_other_to_codes(obj.tags or []),                     # $20 other
                 [],                                                        # $21 options
                 None,                                                      # $22 fitment
                 obj.tags or [],                                            # $23 tags

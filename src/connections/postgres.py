@@ -67,7 +67,7 @@ class PostgresConnection:
             id, title, url, region, section, address,
             kind, kind_name, price, price_unit, price_per,
             layout, layout_str, shape, area,
-            floor, floor_str, bathroom, features, options,
+            floor, floor_str, bathroom, other, options,
             fitment, tags,
             surrounding_type, surrounding_desc, surrounding_distance,
             is_rooftop, gender, pet_allowed, raw_data
@@ -120,7 +120,7 @@ class PostgresConnection:
                 None,                                                      # $16 floor
                 floor_str,                                                 # $17
                 None,                                                      # $18 bathroom
-                obj.tags or [],                                            # $19 features
+                obj.tags or [],                                            # $19 other (TODO: convert)
                 [],                                                        # $20 options
                 None,                                                      # $21 fitment
                 obj.tags or [],                                            # $22 tags
@@ -223,7 +223,7 @@ class PostgresConnection:
           AND (s.area_max IS NULL OR $6 <= s.area_max)
 
           -- 特色 (陣列有交集即可)
-          AND (s.features IS NULL OR s.features && $7::TEXT[])
+          AND (s.other IS NULL OR s.other && $7::TEXT[])
 
           -- 排除已推播
           AND NOT EXISTS (
@@ -322,7 +322,7 @@ class PostgresConnection:
             user_id, name, region, section, kind,
             price_min, price_max, layout, shape,
             area_min, area_max, floor, bathroom,
-            features, options, fitment, notice,
+            other, options, fitment, notice,
             keywords, exclude_keywords
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9,
@@ -346,7 +346,7 @@ class PostgresConnection:
                 data.get("area_max"),
                 data.get("floor"),
                 data.get("bathroom"),
-                data.get("features"),
+                data.get("other"),
                 data.get("options"),
                 data.get("fitment"),
                 data.get("notice"),

@@ -67,8 +67,9 @@ class RentalObject(BaseModel):
     region: Optional[int] = Field(default=None, alias="regionid")
     section: Optional[int] = Field(default=None, alias="sectionid")
 
-    # Tags
+    # Tags and features
     tags: list[str] = Field(default_factory=list)
+    other: list[str] = Field(default_factory=list, description="特色代碼 (near_subway, pet, cook...)")
 
     # Surrounding
     surrounding: Optional[Surrounding] = None

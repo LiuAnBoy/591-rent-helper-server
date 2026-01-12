@@ -37,7 +37,7 @@ class SubscriptionRepository:
             user_id, name, region, section, kind,
             price_min, price_max, layout, shape,
             area_min, area_max, floor_min, floor_max, bathroom,
-            features, options, fitment,
+            other, options, fitment,
             exclude_rooftop, gender, pet_required
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9,
@@ -62,7 +62,7 @@ class SubscriptionRepository:
                 data.get("floor_min"),
                 data.get("floor_max"),
                 data.get("bathroom"),
-                data.get("features"),
+                data.get("other"),
                 data.get("options"),
                 data.get("fitment"),
                 data.get("exclude_rooftop", False),

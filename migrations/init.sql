@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     -- cartplace=有車位, lift=有電梯, balcony_1=有陽台, lease=可短期租賃,
     -- social-housing=社會住宅, rental-subsidy=租金補貼, elderly-friendly=高齡友善,
     -- tax-deductible=可報稅, naturalization=可入籍
-    features        TEXT[],                     -- ['pet', 'near_subway', 'cook']
+    other        TEXT[],                     -- ['pet', 'near_subway', 'cook']
 
     -- ========== 設備 option ==========
     -- cold=冷氣, washer=洗衣機, icebox=冰箱, hotwater=熱水器,
@@ -201,10 +201,10 @@ CREATE TABLE IF NOT EXISTS objects (
     -- 1=1衛, 2=2衛, 3=3衛, 4+=4衛以上
     bathroom        INTEGER,
 
-    -- ========== 特色 other/features ==========
+    -- ========== 特色 other/other ==========
     -- newPost, near_subway, pet, cook, cartplace, lift, balcony_1, lease,
     -- social-housing, rental-subsidy, elderly-friendly, tax-deductible, naturalization
-    features        TEXT[],
+    other        TEXT[],
 
     -- ========== 設備 option ==========
     -- cold=冷氣, washer=洗衣機, icebox=冰箱, hotwater=熱水器,
@@ -251,7 +251,7 @@ CREATE INDEX IF NOT EXISTS idx_objects_area ON objects(area);
 CREATE INDEX IF NOT EXISTS idx_objects_floor ON objects(floor);
 CREATE INDEX IF NOT EXISTS idx_objects_bathroom ON objects(bathroom);
 CREATE INDEX IF NOT EXISTS idx_objects_fitment ON objects(fitment);
-CREATE INDEX IF NOT EXISTS idx_objects_features ON objects USING GIN(features);
+CREATE INDEX IF NOT EXISTS idx_objects_other ON objects USING GIN(other);
 CREATE INDEX IF NOT EXISTS idx_objects_options ON objects USING GIN(options);
 CREATE INDEX IF NOT EXISTS idx_objects_is_rooftop ON objects(is_rooftop);
 CREATE INDEX IF NOT EXISTS idx_objects_gender ON objects(gender);

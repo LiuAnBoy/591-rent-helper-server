@@ -252,15 +252,12 @@ class Checker:
             if obj_pet is False:
                 return False
 
-        # Features - check if obj.tags contains any subscription features
-        if sub.get("features"):
-            obj_tags = obj.get("tags", []) or []
-            obj_labels = obj.get("labels", []) or []
-            all_tags = set(t.lower() for t in obj_tags + obj_labels)
-
-            # Map subscription features to possible tag names
-            feature_matched = self._match_features(sub["features"], all_tags, obj)
-            if not feature_matched:
+        # Other (features) - compare subscription.other with object.other (both are codes)
+        if sub.get("other"):
+            obj_other = set(code.lower() for code in (obj.get("other", []) or []))
+            sub_other = set(f.lower() for f in sub["other"])
+            # Check if any subscription feature matches object's other
+            if not obj_other & sub_other:
                 return False
 
         # Options (設備) - check obj.options (detail page) and obj.tags (list page)
@@ -341,53 +338,6 @@ class Checker:
         if floor_max is not None and obj_floor > floor_max:
             return False
         return True
-
-    def _match_features(
-        self, features: list[str], obj_tags: set[str], obj: dict
-    ) -> bool:
-        """
-        Match subscription features against object tags.
-
-        Args:
-            features: Subscription features like ["near_subway", "pet", "lift"]
-            obj_tags: Object's tags (lowercased)
-            obj: Full object data for additional checks
-
-        Returns:
-            True if at least one feature matches (OR logic)
-        """
-        # Feature to tag mapping
-        feature_map = {
-            "near_subway": ["近捷運", "捷運", "mrt"],
-            "pet": ["可養寵", "寵物", "pet"],
-            "cook": ["可開伙", "開伙", "廚房"],
-            "lift": ["有電梯", "電梯"],
-            "balcony_1": ["有陽台", "陽台"],
-            "cartplace": ["車位", "停車"],
-            "newpost": ["新上架"],
-            "lease": ["短租"],
-        }
-
-        for feature in features:
-            feature_lower = feature.lower()
-
-            # Check direct tag match
-            if feature_lower in obj_tags:
-                return True
-
-            # Check mapped tags
-            if feature_lower in feature_map:
-                for tag_variant in feature_map[feature_lower]:
-                    if tag_variant in obj_tags or any(tag_variant in t for t in obj_tags):
-                        return True
-
-            # Check surrounding for near_subway
-            if feature_lower == "near_subway":
-                surrounding = obj.get("surrounding", {}) or {}
-                if surrounding.get("subway"):
-                    return True
-
-        return False
 
     def _match_options(self, sub_options: list[str], obj_options: set[str]) -> bool:
         """

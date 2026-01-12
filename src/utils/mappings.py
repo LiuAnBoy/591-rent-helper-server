@@ -48,8 +48,8 @@ OPTIONS_NAME_TO_CODE: dict[str, str] = {
     "車位": "parking",
 }
 
-# Features mapping (中文 → 代號)
-FEATURES_NAME_TO_CODE: dict[str, str] = {
+# Other (features) mapping (中文 → 代號)
+OTHER_NAME_TO_CODE: dict[str, str] = {
     # near_subway - 近捷運
     "近捷運": "near_subway",
     "捷運": "near_subway",
@@ -173,22 +173,22 @@ def convert_options_to_codes(options: list[str]) -> list[str]:
     return list(codes)
 
 
-def convert_features_to_codes(features: list[str]) -> list[str]:
+def convert_other_to_codes(tags: list[str]) -> list[str]:
     """
-    Convert feature names to standardized codes.
+    Convert tag names to other codes.
 
     Args:
-        features: List of Chinese feature names
+        tags: List of Chinese tag names
 
     Returns:
         List of standardized codes (duplicates removed)
     """
     codes = set()
-    for name in features:
-        if name in FEATURES_NAME_TO_CODE:
-            codes.add(FEATURES_NAME_TO_CODE[name])
+    for name in tags:
+        if name in OTHER_NAME_TO_CODE:
+            codes.add(OTHER_NAME_TO_CODE[name])
         else:
-            for key, code in FEATURES_NAME_TO_CODE.items():
+            for key, code in OTHER_NAME_TO_CODE.items():
                 if key in name:
                     codes.add(code)
                     break
