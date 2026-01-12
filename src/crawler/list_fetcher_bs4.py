@@ -19,19 +19,10 @@ from loguru import logger
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from src.modules.objects import RentalObject, Surrounding
+from src.utils.mappings import KIND_NAME_TO_CODE, convert_kind_name_to_code
 from src.utils.parsers import parse_floor
 
 fetcher_log = logger.bind(module="BS4")
-
-# Kind name to code mapping
-KIND_NAME_TO_CODE = {
-    "整層住家": 1,
-    "獨立套房": 2,
-    "分租套房": 3,
-    "雅房": 4,
-    "車位": 8,
-    "其他": 24,
-}
 
 
 class ListFetcherBs4:
@@ -173,7 +164,7 @@ class ListFetcherBs4:
                 for span in spans:
                     span_text = span.get_text(strip=True)
                     # First span is kind_name (整層住家, 獨立套房, etc.)
-                    if kind_name is None and span_text in ["整層住家", "獨立套房", "分租套房", "雅房", "車位", "其他"]:
+                    if kind_name is None and span_text in KIND_NAME_TO_CODE:
                         kind_name = span_text
                     # Layout pattern: X房X廳, X房, or 開放格局
                     elif layout_str is None and (re.match(r"^\d+房", span_text) or span_text == "開放格局"):
@@ -183,7 +174,7 @@ class ListFetcherBs4:
                         address = span_text
 
             # Convert kind_name to kind code
-            kind = KIND_NAME_TO_CODE.get(kind_name) if kind_name else None
+            kind = convert_kind_name_to_code(kind_name)
 
             return RentalObject(
                 id=obj_id,
