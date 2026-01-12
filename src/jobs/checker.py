@@ -179,7 +179,7 @@ class Checker:
         All matching done in memory.
 
         Matching logic:
-        - For list criteria (kind, section, layout, etc.): object value must be IN the list
+        - For list criteria (kind, section, layout, shape, etc.): object value must be IN the list
         - For range criteria (price, area): object value must be within range
         - For exclude_rooftop: object must not be rooftop addition
         - For gender: object gender must match (or be "all")
@@ -215,6 +215,13 @@ class Checker:
             if obj_section is not None and obj_section not in sub["section"]:
                 return False
 
+        # Shape (建物型態) - obj.shape in sub.shape list
+        # 1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅
+        if sub.get("shape"):
+            obj_shape = obj.get("shape")
+            if obj_shape is not None and obj_shape not in sub["shape"]:
+                return False
+
         # Area range
         if sub.get("area_min") is not None or sub.get("area_max") is not None:
             obj_area = obj.get("area", 0) or 0
@@ -242,12 +249,36 @@ class Checker:
                 if not matched:
                     return False
 
+        # Bathroom (衛浴) - similar to layout matching
+        # sub.bathroom is like ["1", "2", "3", "4_"] where "4_" means 4+
+        if sub.get("bathroom"):
+            obj_bathroom = obj.get("bathroom")
+            if obj_bathroom is not None:
+                matched = False
+                for required in sub["bathroom"]:
+                    if required == "4_" or required == 4:  # 4衛以上
+                        if obj_bathroom >= 4:
+                            matched = True
+                            break
+                    elif int(required) == obj_bathroom:
+                        matched = True
+                        break
+                if not matched:
+                    return False
+
         # Floor (樓層) - use floor_min/floor_max for numeric comparison
         floor_min = sub.get("floor_min")
         floor_max = sub.get("floor_max")
         if floor_min is not None or floor_max is not None:
             obj_floor = obj.get("floor")
             if not self._match_floor(obj_floor, floor_min, floor_max):
+                return False
+
+        # Fitment (裝潢) - obj.fitment in sub.fitment list
+        # 99=新裝潢, 3=中檔裝潢, 4=高檔裝潢
+        if sub.get("fitment"):
+            obj_fitment = obj.get("fitment")
+            if obj_fitment is not None and obj_fitment not in sub["fitment"]:
                 return False
 
         # Exclude rooftop addition (排除頂樓加蓋)
