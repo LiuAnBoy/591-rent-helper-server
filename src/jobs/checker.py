@@ -4,6 +4,7 @@ Listing Checker Module.
 Checks for new objects and triggers notifications.
 """
 
+import asyncio
 from typing import Optional
 
 from loguru import logger
@@ -539,6 +540,8 @@ class Checker:
                 new_object_ids = [obj.id for obj in new_objects]
 
                 # Step 3: Fetch detail pages for new objects (batch with fallback)
+                # Wait 1 second after list fetch before detail fetch
+                await asyncio.sleep(1)
                 checker_log.info(f"Fetching detail for {len(new_object_ids)} new objects")
                 details = await self._detail_fetcher.fetch_details_batch(new_object_ids)
                 detail_fetched = len(details)

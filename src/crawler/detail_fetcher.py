@@ -116,6 +116,10 @@ class DetailFetcher:
                     f"bs4 attempt {attempt + 1}/{self._max_retries} failed for {object_id}"
                 )
 
+            # Wait 1 second before retry
+            if attempt < self._max_retries - 1:
+                await asyncio.sleep(1)
+
         # Fallback to Playwright
         fetcher_log.warning(f"BS4 failed, falling back to Playwright for {object_id}")
         await self._ensure_playwright()
