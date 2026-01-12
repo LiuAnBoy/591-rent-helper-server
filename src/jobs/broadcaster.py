@@ -4,6 +4,7 @@ Notification Broadcaster Module.
 Sends notifications to subscribed users via their bound channels.
 """
 
+import asyncio
 from typing import Optional
 
 from loguru import logger
@@ -128,7 +129,7 @@ class Broadcaster:
         matches: list[tuple[RentalObject, list[dict]]],
     ) -> dict:
         """
-        Broadcast notifications for matched listings.
+        Broadcast notifications for matched listings (concurrent).
 
         Args:
             matches: List of (listing, subscriptions) tuples from Checker
@@ -140,10 +141,9 @@ class Broadcaster:
             - failed: Number of failed sends
             - by_service: Breakdown by service
         """
-        total = 0
-        success = 0
-        failed = 0
-        by_service: dict[str, dict] = {}
+        # Build list of notification tasks
+        tasks = []
+        task_info = []  # Track service for each task
 
         for listing, subscriptions in matches:
             for sub in subscriptions:
@@ -155,27 +155,44 @@ class Broadcaster:
                     broadcast_log.debug(f"Skipping subscription {sub.get('id')} - no binding")
                     continue
 
-                # Track by service
-                if service not in by_service:
-                    by_service[service] = {"total": 0, "success": 0, "failed": 0}
-
-                total += 1
-                by_service[service]["total"] += 1
-
-                sent = await self.send_notification(
+                task = self.send_notification(
                     service=service,
                     service_id=service_id,
                     listing=listing,
                     subscription_name=sub_name,
                 )
+                tasks.append(task)
+                task_info.append(service)
 
-                if sent:
-                    success += 1
-                    by_service[service]["success"] += 1
-                else:
-                    failed += 1
-                    by_service[service]["failed"] += 1
+        if not tasks:
+            return {"total": 0, "success": 0, "failed": 0, "by_service": {}}
 
+        # Run all notifications concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
+        success = 0
+        failed = 0
+        by_service: dict[str, dict] = {}
+
+        for service, result in zip(task_info, results):
+            if service not in by_service:
+                by_service[service] = {"total": 0, "success": 0, "failed": 0}
+
+            by_service[service]["total"] += 1
+
+            if isinstance(result, Exception):
+                broadcast_log.error(f"Notification failed: {result}")
+                failed += 1
+                by_service[service]["failed"] += 1
+            elif result:
+                success += 1
+                by_service[service]["success"] += 1
+            else:
+                failed += 1
+                by_service[service]["failed"] += 1
+
+        total = len(tasks)
         broadcast_log.info(
             f"Broadcast complete: {success}/{total} sent, {failed} failed"
         )
