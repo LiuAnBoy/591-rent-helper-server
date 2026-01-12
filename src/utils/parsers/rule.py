@@ -40,11 +40,11 @@ def parse_rule(rule: Optional[str]) -> dict:
     elif "限女" in rule:
         gender = "girl"
 
-    # Parse pet policy
+    # Parse pet policy (check negative first since "不可養寵物" contains "可養寵")
     pet_allowed: Optional[bool] = None
-    if "可養寵" in rule or "可以養" in rule:
-        pet_allowed = True
-    elif "不可養" in rule or "禁養" in rule:
+    if "不可養" in rule or "禁養" in rule:
         pet_allowed = False
+    elif "可養寵" in rule or "可以養" in rule:
+        pet_allowed = True
 
     return {"gender": gender, "pet_allowed": pet_allowed}

@@ -144,10 +144,11 @@ class DetailFetcherBs4:
         Returns:
             True (allowed) | False (not allowed) | None (unknown)
         """
-        if "可養寵物" in page_text or "可養寵" in page_text:
-            return True
-        elif "不可養寵" in page_text or "禁養寵" in page_text:
+        # Check negative first (「不可養寵物」contains「可養寵」)
+        if "不可養寵" in page_text or "禁養寵" in page_text:
             return False
+        elif "可養寵物" in page_text or "可養寵" in page_text:
+            return True
         return None
 
     def _parse_shape(self, page_text: str) -> Optional[int]:
