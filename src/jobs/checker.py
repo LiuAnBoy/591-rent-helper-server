@@ -122,25 +122,23 @@ class Checker:
         checker_log.info(f"Synced {len(subscriptions)} subscriptions to Redis")
         return len(subscriptions)
 
-    async def _process_object_etl(
+    def _transform_object(
         self,
         list_data: ListRawData,
         detail_data: DetailRawData | None,
         region: int,
     ) -> DBReadyData:
         """
-        Process a new object using ETL pipeline.
+        Transform raw data to DB-ready format (no I/O operations).
 
         ETL Flow:
         1. Combine: list_data + detail_data → CombinedRawData
         2. Transform: CombinedRawData → DBReadyData
-        3. Save to DB (direct)
-        4. Save to Redis (direct, no RentalObject conversion)
 
         Args:
             list_data: Raw data from list page
             detail_data: Raw data from detail page (can be None)
-            region: Region code for Redis operations
+            region: Region code
 
         Returns:
             DBReadyData dict (for subscription matching)
@@ -173,20 +171,37 @@ class Checker:
             }
 
         # Step 2: Transform to DB-ready format
-        db_ready = transform_to_db_ready(combined)
+        return transform_to_db_ready(combined)
 
-        # Step 3: Save to DB directly
-        await self._object_repo.save_db_ready(db_ready)
+    async def _save_objects_batch(
+        self,
+        objects: list[DBReadyData],
+        region: int,
+    ) -> None:
+        """
+        Batch save objects to DB and Redis.
 
-        # Step 4: Add to Redis seen set
-        await self._redis.add_seen_ids(region, {db_ready["id"]})
+        Args:
+            objects: List of DBReadyData to save
+            region: Region code
+        """
+        if not objects:
+            return
 
-        # Step 5: Save to Redis object cache
-        await self._redis.save_objects([db_ready])
+        # Save to DB
+        for obj in objects:
+            await self._object_repo.save_db_ready(obj)
 
-        checker_log.debug(f"Processed new object {db_ready['id']} (ETL)")
+        # Add to Redis seen set (batch)
+        all_ids = {obj["id"] for obj in objects}
+        await self._redis.add_seen_ids(region, all_ids)
 
-        return db_ready
+        # Save to Redis object cache (batch)
+        await self._redis.save_objects(objects)
+
+        # Log summary
+        id_list = ", ".join(str(obj["id"]) for obj in objects)
+        checker_log.info(f"Saved {len(objects)} new objects: {id_list}")
 
     def _match_object_to_subscription(self, obj: dict, sub: dict) -> bool:
         """
@@ -513,23 +528,19 @@ class Checker:
                         details=f"共 {failed_detail_count} 個物件詳情頁抓取失敗\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
                     )
 
-                # Step 4: Process each new object with ETL pipeline
+                # Step 4: Transform each new object (no I/O)
                 for object_id in new_object_ids:
                     list_data = list_data_by_id[object_id]
-                    detail_data = details.get(
-                        object_id
-                    )  # May be None if detail fetch failed
-                    processed_obj = await self._process_object_etl(
+                    detail_data = details.get(object_id)
+                    processed_obj = self._transform_object(
                         list_data, detail_data, region
                     )
                     processed_objects.append(processed_obj)
 
-                checker_log.info(
-                    f"Processed {len(processed_objects)} objects "
-                    f"({detail_fetched} with detail)"
-                )
+                # Step 5: Batch save to DB and Redis
+                await self._save_objects_batch(processed_objects, region)
 
-                # Step 5: Subscription matching
+                # Step 6: Subscription matching
                 all_subs = await self._redis.get_subscriptions_by_region(region)
                 uninitialized_subs = await self._redis.get_uninitialized_subscriptions(
                     all_subs
