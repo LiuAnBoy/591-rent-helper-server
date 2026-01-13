@@ -167,6 +167,18 @@ docker compose up -d postgres redis
 uv run uvicorn src.api.main:app --reload
 ```
 
+### 手動測試爬蟲
+
+```bash
+# 測試列表爬蟲
+python scripts/test_list_bs4.py --region 1 --limit 5
+python scripts/test_list_playwright.py --region 1 --limit 5
+
+# 測試詳情爬蟲
+python scripts/test_detail_bs4.py <object_id>
+python scripts/test_detail_playwright.py <object_id>
+```
+
 ---
 
 ## 環境變數
@@ -306,8 +318,12 @@ uv run uvicorn src.api.main:app --reload
 │   │   ├── postgres.py          # PostgreSQL 連線
 │   │   └── redis.py             # Redis 連線
 │   ├── crawler/
-│   │   ├── rent591.py           # 591 列表爬蟲
-│   │   └── object_detail.py     # 物件詳情爬蟲
+│   │   ├── list_fetcher.py           # 列表爬蟲（自動備援）
+│   │   ├── list_fetcher_bs4.py       # BS4 列表解析
+│   │   ├── list_fetcher_playwright.py # Playwright 列表爬蟲
+│   │   ├── detail_fetcher.py         # 詳情爬蟲（自動備援）
+│   │   ├── detail_fetcher_bs4.py     # BS4 詳情解析
+│   │   └── detail_fetcher_playwright.py # Playwright 詳情爬蟲
 │   ├── jobs/
 │   │   ├── scheduler.py         # 排程器
 │   │   ├── checker.py           # 物件比對
@@ -324,6 +340,11 @@ uv run uvicorn src.api.main:app --reload
 │   │   └── objects/             # 物件模組
 │   └── utils/
 │       └── mappings.py          # 常數對照表
+├── scripts/
+│   ├── test_list_bs4.py         # BS4 列表爬蟲測試
+│   ├── test_list_playwright.py  # Playwright 列表爬蟲測試
+│   ├── test_detail_bs4.py       # BS4 詳情爬蟲測試
+│   └── test_detail_playwright.py # Playwright 詳情爬蟲測試
 ├── docs/
 │   ├── API.md                   # API 文件
 │   └── OPTIONS.md               # 訂閱條件選項

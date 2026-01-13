@@ -74,3 +74,4 @@ docs/*
 .serena/
 .playwright-mcp/
 .claude
+.ruff_cache/
