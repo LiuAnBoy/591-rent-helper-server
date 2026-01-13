@@ -5,7 +5,7 @@ Manages Telegram bot instance and message sending.
 """
 
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from loguru import logger
 from telegram import Bot
@@ -70,7 +70,7 @@ class TelegramBot:
         text: str,
         parse_mode: str = ParseMode.MARKDOWN,
         disable_web_page_preview: bool = False,
-        reply_markup: any | None = None,
+        reply_markup: Any | None = None,
     ) -> bool:
         """
         Send a text message.
