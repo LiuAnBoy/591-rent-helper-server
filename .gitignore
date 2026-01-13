@@ -62,6 +62,9 @@ Thumbs.db
 data/
 tmp/
 
+# Local development docs (not tracked)
+.local-docs/
+
 # Docs - only keep API.md and OPTIONS.md
 docs/*
 !docs/API.md
