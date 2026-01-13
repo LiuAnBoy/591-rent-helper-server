@@ -183,48 +183,40 @@ CREATE TABLE IF NOT EXISTS objects (
     price_unit      VARCHAR(20) DEFAULT '元/月',
     price_per       DECIMAL(10, 2),             -- 每坪單價
 
-    -- ========== 格局 layout ==========
-    -- 1=1房, 2=2房, 3=3房, 4=4房以上
+    -- ========== 格局/坪數 ==========
+    -- layout: 1=1房, 2=2房, 3=3房, 4=4房以上
+    -- shape: 1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅
     layout          INTEGER,                    -- 房數
     layout_str      VARCHAR(50),                -- 原始格局字串 (2房1廳)
-
-    -- ========== 建物型態 shape ==========
-    -- 1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅
-    shape           INTEGER,
-
-    -- ========== 坪數 area ==========
+    shape           INTEGER,                    -- 建物型態
     area            DECIMAL(10, 2),             -- 坪數
 
-    -- ========== 樓層 floor ==========
+    -- ========== 樓層 ==========
     floor           INTEGER,                    -- 樓層數字
     floor_str       VARCHAR(50),                -- 原始樓層字串 (3F/5F)
     total_floor     INTEGER,                    -- 總樓層
+    is_rooftop      BOOLEAN DEFAULT FALSE,      -- 是否頂樓加蓋 (from floor_name)
 
-    -- ========== 衛浴 bathroom ==========
+    -- ========== 衛浴 ==========
     -- 1=1衛, 2=2衛, 3=3衛, 4+=4衛以上
     bathroom        INTEGER,
 
-    -- ========== 特色 other/other ==========
-    -- newPost, near_subway, pet, cook, cartplace, lift, balcony_1, lease,
-    -- social-housing, rental-subsidy, elderly-friendly, tax-deductible, naturalization
-    other        TEXT[],
-
-    -- ========== 設備 option ==========
-    -- cold=冷氣, washer=洗衣機, icebox=冰箱, hotwater=熱水器,
-    -- naturalgas=天然瓦斯, broadband=網路, bed=床
+    -- ========== 特色/設備/裝潢 ==========
+    -- other: newPost, near_subway, pet, cook, cartplace, lift, balcony_1, lease,
+    --        social-housing, rental-subsidy, elderly-friendly, tax-deductible, naturalization
+    -- options: cold=冷氣, washer=洗衣機, icebox=冰箱, hotwater=熱水器,
+    --          naturalgas=天然瓦斯, broadband=網路, bed=床
+    -- fitment: 99=新裝潢, 3=中檔裝潢, 4=高檔裝潢
+    other           TEXT[],
     options         TEXT[],
-
-    -- ========== 裝潢 fitment ==========
-    -- 99=新裝潢, 3=中檔裝潢, 4=高檔裝潢
     fitment         INTEGER,
 
-    -- ========== 須知 (獨立欄位) ==========
-    is_rooftop      BOOLEAN DEFAULT FALSE,      -- 是否頂樓加蓋 (from floor_name)
+    -- ========== 須知 ==========
     gender          VARCHAR(10) DEFAULT 'all',  -- 性別限制 (boy/girl/all, from service.rule)
     pet_allowed     BOOLEAN DEFAULT NULL,       -- 可否養寵物 (from service.rule)
 
-    -- ========== 標籤 (原始 591 tags) ==========
-    tags            TEXT[],
+    -- ========== 標籤 ==========
+    tags            TEXT[],                     -- 原始 591 tags
 
     -- ========== 周邊資訊 ==========
     surrounding_type     VARCHAR(20),           -- 類型 (metro, bus...)
@@ -342,10 +334,13 @@ SELECT
     floor,
     floor_str,
     total_floor,
+    is_rooftop,
     bathroom,
     other,
     options,
     fitment,
+    gender,
+    pet_allowed,
     tags,
     surrounding_type,
     surrounding_desc,
@@ -354,10 +349,7 @@ SELECT
     last_seen_at,
     created_at,
     updated_at,
-    is_active,
-    is_rooftop,
-    gender,
-    pet_allowed
+    is_active
 FROM objects
 WHERE first_seen_at > NOW() - INTERVAL '7 days'
   AND is_active = TRUE
