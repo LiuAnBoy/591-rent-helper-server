@@ -14,7 +14,7 @@ import urllib3
 from bs4 import BeautifulSoup
 from loguru import logger
 
-from src.crawler.types import DetailRawData
+from src.crawler.types import DetailRawData, calculate_detail_workers
 
 # Suppress SSL warnings for 591's certificate issues
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -59,16 +59,28 @@ class DetailFetcherBs4:
         """
         self._timeout = timeout
         self._max_workers = max_workers
+        self._current_workers = 0
         self._session: requests.Session | None = None
         self._executor: ThreadPoolExecutor | None = None
 
-    async def start(self) -> None:
-        """Initialize session (for interface compatibility)."""
+    async def start(self, worker_count: int | None = None) -> None:
+        """Initialize session and executor.
+
+        Args:
+            worker_count: Override worker count (uses max_workers if None)
+        """
+        actual_workers = worker_count if worker_count is not None else self._max_workers
+        if actual_workers == 0:
+            return
+
         if self._session is None:
             self._session = requests.Session()
             self._session.headers.update(self.DEFAULT_HEADERS)
-            self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
-            fetcher_log.info("DetailFetcherBs4 started")
+
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=actual_workers)
+            self._current_workers = actual_workers
+            fetcher_log.info(f"DetailFetcherBs4 started with {actual_workers} workers")
 
     async def close(self) -> None:
         """Close session and executor."""
@@ -79,6 +91,40 @@ class DetailFetcherBs4:
             self._executor.shutdown(wait=False)
             self._executor = None
         fetcher_log.info("DetailFetcherBs4 closed")
+
+    async def _ensure_workers(self, batch_size: int) -> int:
+        """
+        Ensure optimal worker count for the batch size.
+
+        Args:
+            batch_size: Number of items to process
+
+        Returns:
+            Actual worker count being used
+        """
+        optimal = calculate_detail_workers(batch_size)
+
+        if optimal == 0:
+            return 0
+
+        # Initialize session if needed
+        if self._session is None:
+            self._session = requests.Session()
+            self._session.headers.update(self.DEFAULT_HEADERS)
+
+        # Not started yet or need different worker count
+        if self._executor is None or self._current_workers != optimal:
+            if self._executor is not None:
+                fetcher_log.info(
+                    f"Resizing BS4 workers: {self._current_workers} -> {optimal}"
+                )
+                self._executor.shutdown(wait=False)
+
+            self._executor = ThreadPoolExecutor(max_workers=optimal)
+            self._current_workers = optimal
+            fetcher_log.debug(f"BS4 executor ready with {optimal} workers")
+
+        return optimal
 
     def _fetch_and_parse(self, object_id: int) -> DetailRawData | None:
         """

@@ -9,7 +9,7 @@ import asyncio
 from loguru import logger
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
-from src.crawler.types import DetailRawData
+from src.crawler.types import DetailRawData, calculate_detail_workers
 
 fetcher_log = logger.bind(module="Playwright")
 
@@ -266,13 +266,22 @@ class DetailFetcherPlaywright:
         self._page_locks: list[asyncio.Lock] = []
         self._semaphore: asyncio.Semaphore | None = None
 
-    async def start(self) -> None:
-        """Start browser and create worker pages."""
+    async def start(self, worker_count: int | None = None) -> None:
+        """Start browser and create worker pages.
+
+        Args:
+            worker_count: Override worker count (uses max_workers if None)
+        """
         if self._browser:
             return
 
+        # Use provided count or default
+        actual_workers = worker_count if worker_count is not None else self.max_workers
+        if actual_workers == 0:
+            return
+
         fetcher_log.info(
-            f"Starting DetailFetcherPlaywright with {self.max_workers} workers"
+            f"Starting DetailFetcherPlaywright with {actual_workers} workers"
         )
 
         self._playwright = await async_playwright().start()
@@ -288,13 +297,13 @@ class DetailFetcherPlaywright:
         # Create worker pages
         self._pages = []
         self._page_locks = []
-        for i in range(self.max_workers):
+        for i in range(actual_workers):
             page = await self._context.new_page()
             self._pages.append(page)
             self._page_locks.append(asyncio.Lock())
-            fetcher_log.debug(f"Created worker page {i + 1}/{self.max_workers}")
+            fetcher_log.debug(f"Created worker page {i + 1}/{actual_workers}")
 
-        self._semaphore = asyncio.Semaphore(self.max_workers)
+        self._semaphore = asyncio.Semaphore(actual_workers)
 
     async def close(self) -> None:
         """Close browser and cleanup resources."""
@@ -310,6 +319,43 @@ class DetailFetcherPlaywright:
         self._pages = []
         self._page_locks = []
         fetcher_log.info("DetailFetcherPlaywright closed")
+
+    async def _ensure_workers(self, batch_size: int) -> int:
+        """
+        Ensure optimal worker count for the batch size.
+
+        If browser not started, starts with optimal count.
+        If current worker count differs from optimal, restarts browser.
+
+        Args:
+            batch_size: Number of items to process
+
+        Returns:
+            Actual worker count being used
+        """
+        optimal = calculate_detail_workers(batch_size)
+
+        if optimal == 0:
+            return 0
+
+        current_workers = len(self._pages)
+
+        # Not started yet - start with optimal count
+        if not self._browser:
+            await self.start(worker_count=optimal)
+            return optimal
+
+        # Already running with correct count
+        if current_workers == optimal:
+            return optimal
+
+        # Need to resize - close and restart
+        fetcher_log.info(
+            f"Resizing workers: {current_workers} -> {optimal} (batch_size={batch_size})"
+        )
+        await self.close()
+        await self.start(worker_count=optimal)
+        return optimal
 
     async def _get_available_page(self) -> tuple[int, Page]:
         """Get an available page with its index."""
@@ -531,6 +577,8 @@ class DetailFetcherPlaywright:
         """
         Fetch detail data for multiple objects in parallel.
 
+        Dynamically adjusts worker count based on batch size.
+
         Args:
             object_ids: List of object IDs to fetch
 
@@ -540,12 +588,14 @@ class DetailFetcherPlaywright:
         if not object_ids:
             return {}
 
-        if not self._browser:
-            await self.start()
+        # Dynamic worker scaling
+        actual_workers = await self._ensure_workers(len(object_ids))
+        if actual_workers == 0:
+            return {}
 
         fetcher_log.info(
             f"Fetching {len(object_ids)} detail pages "
-            f"with {self.max_workers} Playwright workers..."
+            f"with {actual_workers} workers..."
         )
 
         results = {}
@@ -579,7 +629,7 @@ class DetailFetcherPlaywright:
                 results[obj_id] = detail
 
         fetcher_log.info(
-            f"Playwright fetched {len(results)}/{len(object_ids)} detail pages"
+            f"Fetched {len(results)}/{len(object_ids)} detail pages"
         )
 
         return results
@@ -622,6 +672,8 @@ class DetailFetcherPlaywright:
         """
         Fetch detail raw data for multiple objects in parallel.
 
+        Dynamically adjusts worker count based on batch size.
+
         Args:
             object_ids: List of object IDs to fetch
 
@@ -631,12 +683,14 @@ class DetailFetcherPlaywright:
         if not object_ids:
             return {}
 
-        if not self._browser:
-            await self.start()
+        # Dynamic worker scaling
+        actual_workers = await self._ensure_workers(len(object_ids))
+        if actual_workers == 0:
+            return {}
 
         fetcher_log.info(
             f"Fetching {len(object_ids)} detail pages (raw) "
-            f"with {self.max_workers} Playwright workers..."
+            f"with {actual_workers} workers..."
         )
 
         results: dict[int, DetailRawData] = {}
@@ -672,7 +726,7 @@ class DetailFetcherPlaywright:
                 results[obj_id] = detail
 
         fetcher_log.info(
-            f"Playwright fetched {len(results)}/{len(object_ids)} detail pages (raw)"
+            f"Fetched {len(results)}/{len(object_ids)} detail pages (raw)"
         )
 
         return results

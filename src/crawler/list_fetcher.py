@@ -9,7 +9,7 @@ import asyncio
 
 from loguru import logger
 
-from src.crawler.types import ListRawData
+from src.crawler.types import ListRawData, calculate_list_workers
 from src.crawler.list_fetcher_bs4 import ListFetcherBs4, get_bs4_fetcher
 from src.crawler.list_fetcher_playwright import (
     ListFetcherPlaywright,
@@ -137,6 +137,64 @@ class ListFetcher:
             fetcher_log.error("Both BS4 and Playwright failed to fetch raw objects")
 
         return result
+
+    async def fetch_objects_raw_multi(
+        self,
+        regions: list[int],
+        sort: str = "posttime_desc",
+        max_items: int | None = None,
+    ) -> dict[int, list[ListRawData]]:
+        """
+        Fetch rental objects from multiple regions in parallel.
+
+        Dynamically uses worker count based on number of regions.
+
+        Args:
+            regions: List of region codes (1=Taipei, 3=New Taipei)
+            sort: Sort order (default: posttime_desc)
+            max_items: Maximum number of items per region
+
+        Returns:
+            Dict mapping region to list of ListRawData
+        """
+        if not regions:
+            return {}
+
+        if self._bs4_fetcher is None:
+            await self.start()
+
+        worker_count = calculate_list_workers(len(regions))
+        fetcher_log.info(
+            f"Fetching {len(regions)} regions with {worker_count} workers..."
+        )
+
+        async def fetch_region(region: int) -> tuple[int, list[ListRawData]]:
+            items = await self.fetch_objects_raw(
+                region=region,
+                sort=sort,
+                max_items=max_items,
+            )
+            return region, items
+
+        # Fetch all regions in parallel
+        tasks = [fetch_region(r) for r in regions]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
+        output: dict[int, list[ListRawData]] = {}
+        for result in results:
+            if isinstance(result, Exception):
+                fetcher_log.error(f"Region fetch failed: {result}")
+                continue
+            region, items = result
+            output[region] = items
+
+        total_items = sum(len(items) for items in output.values())
+        fetcher_log.info(
+            f"Fetched {total_items} total objects from {len(output)} regions"
+        )
+
+        return output
 
 
 # Singleton instance

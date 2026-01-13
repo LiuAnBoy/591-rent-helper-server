@@ -126,6 +126,8 @@ class DetailFetcher:
         """
         Fetch multiple details with automatic fallback, returning raw data.
 
+        Dynamically adjusts worker count based on batch size.
+
         1. Try bs4 for all objects
         2. For failed objects, fallback to Playwright
 
@@ -140,6 +142,9 @@ class DetailFetcher:
 
         if self._bs4_fetcher is None:
             await self.start()
+
+        # Dynamic worker scaling for BS4
+        await self._bs4_fetcher._ensure_workers(len(object_ids))
 
         fetcher_log.info(f"Fetching {len(object_ids)} detail pages (raw)...")
 
