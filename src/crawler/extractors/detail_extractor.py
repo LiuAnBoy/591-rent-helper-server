@@ -5,19 +5,19 @@ This module extracts raw data from 591 detail pages without any transformation.
 Part of the ETL Extract phase.
 """
 
-import logging
 import re
 
 import requests
 import urllib3
 from bs4 import BeautifulSoup
+from loguru import logger
 
 from src.crawler.extractors.types import DetailRawData
 
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-logger = logging.getLogger(__name__)
+extractor_log = logger.bind(module="DetailExtractorBS4")
 
 HEADERS = {
     "User-Agent": (
@@ -60,7 +60,7 @@ def extract_detail_raw(
         session.headers.update(HEADERS)
 
     url = f"https://rent.591.com.tw/{object_id}"
-    logger.debug(f"Fetching detail page: {url}")
+    extractor_log.debug(f"Fetching detail page: {url}")
 
     # Wait before fetching to avoid rate limiting
     time.sleep(3)
@@ -68,7 +68,7 @@ def extract_detail_raw(
     resp = session.get(url, timeout=15, verify=False)
 
     if resp.status_code != 200:
-        logger.warning(
+        extractor_log.warning(
             f"Failed to fetch detail page {object_id}: HTTP {resp.status_code}"
         )
         return None

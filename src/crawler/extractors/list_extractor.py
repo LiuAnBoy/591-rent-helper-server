@@ -5,19 +5,19 @@ This module extracts raw data from 591 list pages without any transformation.
 Part of the ETL Extract phase.
 """
 
-import logging
 import re
 
 import requests
 import urllib3
 from bs4 import BeautifulSoup
+from loguru import logger
 
 from src.crawler.extractors.types import ListRawData
 
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-logger = logging.getLogger(__name__)
+extractor_log = logger.bind(module="ListExtractorBS4")
 
 BASE_URL = "https://rent.591.com.tw/list"
 
@@ -64,7 +64,7 @@ def extract_list_raw(
     if offset > 0:
         url += f"&firstRow={offset}"
 
-    logger.debug(f"Fetching list page: {url}")
+    extractor_log.debug(f"Fetching list page: {url}")
 
     resp = session.get(url, timeout=15, verify=False)
     resp.raise_for_status()
@@ -72,7 +72,7 @@ def extract_list_raw(
     soup = BeautifulSoup(resp.text, "html.parser")
     items = soup.find_all("div", class_="item")
 
-    logger.debug(f"Found {len(items)} items on page {page}")
+    extractor_log.debug(f"Found {len(items)} items on page {page}")
 
     results: list[ListRawData] = []
     for elem in items:
@@ -81,7 +81,7 @@ def extract_list_raw(
             if raw_data.get("id"):
                 results.append(raw_data)
         except Exception as e:
-            logger.warning(f"Failed to parse item: {e}")
+            extractor_log.warning(f"Failed to parse item: {e}")
             continue
 
     return results

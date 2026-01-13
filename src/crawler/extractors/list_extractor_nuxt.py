@@ -5,11 +5,11 @@ Extracts raw data from window.__NUXT__.data for Playwright fetcher.
 Part of the ETL Extract phase.
 """
 
-import logging
+from loguru import logger
 
 from src.crawler.extractors.types import ListRawData
 
-logger = logging.getLogger(__name__)
+extractor_log = logger.bind(module="ListExtractorNuxt")
 
 
 def extract_list_raw_from_nuxt(
@@ -28,10 +28,10 @@ def extract_list_raw_from_nuxt(
     """
     items, total = _find_items(nuxt_data)
     if not items:
-        logger.warning("No items found in NUXT data")
+        extractor_log.warning("No items found in NUXT data")
         return []
 
-    logger.debug(f"Found {len(items)} items (total: {total}) in NUXT data")
+    extractor_log.debug(f"Found {len(items)} items (total: {total}) in NUXT data")
 
     results: list[ListRawData] = []
     for item in items:
@@ -40,7 +40,7 @@ def extract_list_raw_from_nuxt(
             if raw_data.get("id"):
                 results.append(raw_data)
         except Exception as e:
-            logger.warning(f"Failed to parse NUXT item: {e}")
+            extractor_log.warning(f"Failed to parse NUXT item: {e}")
             continue
 
     return results

@@ -5,11 +5,11 @@ Extracts raw data from window.__NUXT__.data for Playwright fetcher.
 Part of the ETL Extract phase.
 """
 
-import logging
+from loguru import logger
 
 from src.crawler.extractors.types import DetailRawData
 
-logger = logging.getLogger(__name__)
+extractor_log = logger.bind(module="DetailExtractorNuxt")
 
 
 def extract_detail_raw_from_nuxt(
@@ -29,7 +29,7 @@ def extract_detail_raw_from_nuxt(
     # Find detail data in NUXT structure
     detail_data = _find_detail_data(nuxt_data)
     if not detail_data:
-        logger.warning(f"No detail data found in NUXT for object {object_id}")
+        extractor_log.warning(f"No detail data found in NUXT for object {object_id}")
         return None
 
     return _parse_detail_raw_from_nuxt(detail_data, object_id)
