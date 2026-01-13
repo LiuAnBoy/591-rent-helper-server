@@ -5,6 +5,8 @@ Primary: BS4 (fast, lightweight)
 Fallback: Playwright (stable, reliable)
 """
 
+import asyncio
+
 from loguru import logger
 
 from src.crawler.extractors import ListRawData
@@ -114,6 +116,10 @@ class ListFetcher:
             fetcher_log.warning(
                 f"BS4 raw attempt {attempt + 1}/{self._max_retries} returned no items"
             )
+
+            # Wait 1.5 seconds before retry
+            if attempt < self._max_retries - 1:
+                await asyncio.sleep(1.5)
 
         # Fallback to Playwright
         fetcher_log.warning(
