@@ -61,7 +61,7 @@ def parse_detail_fields(detail_data: dict) -> dict:
         # NUXT format: [{"key": "fridge", "active": 1, "name": "冰箱"}, ...]
         # BS4 format: ["冰箱", "洗衣機", ...]
         facility = service.get("facility", [])
-        if facility:
+        if isinstance(facility, list) and facility:
             if isinstance(facility[0], dict):
                 # NUXT format - extract names from active facilities
                 active_names = [f.get("name") for f in facility if f.get("active") == 1]
