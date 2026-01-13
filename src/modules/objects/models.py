@@ -85,8 +85,8 @@ class RentalObject(BaseModel):
     gender: str = Field(
         default="all", description="性別限制 (boy/girl/all, from service.rule)"
     )
-    pet_allowed: bool | None = Field(
-        default=None, description="可否養寵物 (from service.rule)"
+    pet_allowed: bool = Field(
+        default=False, description="可否養寵物 (from service.rule)"
     )
     options: list[str] = Field(
         default_factory=list, description="提供設備 (from service.facility)"

@@ -315,10 +315,8 @@ class Checker:
 
         # Pet required (需要可養寵物)
         if sub.get("pet_required"):
-            obj_pet = obj.get("pet_allowed")
-            # If pet_allowed is None (not fetched), we can't determine - skip this check
-            # If pet_allowed is False, reject
-            if obj_pet is False:
+            # pet_allowed defaults to False, only True if explicitly allowed
+            if not obj.get("pet_allowed"):
                 return False
 
         # Other (features) - compare subscription.other with object.other (both are codes)

@@ -16,7 +16,7 @@ def parse_rule(rule: str | None) -> dict:
     Returns:
         dict with keys:
             - gender: "boy" | "girl" | "all"
-            - pet_allowed: True | False | None
+            - pet_allowed: True | False (default False)
 
     Examples:
         >>> parse_rule("此房屋限男生租住，不可養寵物")
@@ -26,10 +26,10 @@ def parse_rule(rule: str | None) -> dict:
         >>> parse_rule("此房屋限女生租住，不可養寵物")
         {"gender": "girl", "pet_allowed": False}
         >>> parse_rule(None)
-        {"gender": "all", "pet_allowed": None}
+        {"gender": "all", "pet_allowed": False}
     """
     if not rule:
-        return {"gender": "all", "pet_allowed": None}
+        return {"gender": "all", "pet_allowed": False}
 
     # Parse gender restriction
     gender = "all"
@@ -38,11 +38,7 @@ def parse_rule(rule: str | None) -> dict:
     elif "限女" in rule:
         gender = "girl"
 
-    # Parse pet policy (check negative first since "不可養寵物" contains "可養寵")
-    pet_allowed: bool | None = None
-    if "不可養" in rule or "禁養" in rule:
-        pet_allowed = False
-    elif "可養寵" in rule or "可以養" in rule:
-        pet_allowed = True
+    # Parse pet policy - only True if explicitly allowed
+    pet_allowed = "可養寵物" in rule
 
     return {"gender": gender, "pet_allowed": pet_allowed}

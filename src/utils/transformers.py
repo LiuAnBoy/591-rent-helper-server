@@ -44,7 +44,7 @@ class DBReadyData(TypedDict):
     shape: int | None
     fitment: int | None
     gender: str
-    pet_allowed: bool | None
+    pet_allowed: bool
     options: list[str]
     other: list[str]
     tags: list[str]
@@ -346,7 +346,7 @@ def transform_gender(gender_raw: str | None) -> str:
     return "all"
 
 
-def transform_pet_allowed(tags: list[str]) -> bool | None:
+def transform_pet_allowed(tags: list[str]) -> bool:
     """
     Determine if pets are allowed based on tags.
 
@@ -354,24 +354,24 @@ def transform_pet_allowed(tags: list[str]) -> bool | None:
         tags: List of tag strings
 
     Returns:
-        True if pets allowed, False if not, None if not specified
+        True if pets explicitly allowed, False otherwise (default)
 
     Examples:
         >>> transform_pet_allowed(["可養寵物", "近捷運"])
         True
+        >>> transform_pet_allowed(["可養寵", "近捷運"])  # 必須完整四個字
+        False
         >>> transform_pet_allowed(["近捷運"])
-        None
+        False
     """
     if not tags:
-        return None
+        return False
 
     for tag in tags:
-        if "可養寵" in tag:
+        if "可養寵物" in tag:
             return True
-        if "不可養" in tag or "禁養" in tag:
-            return False
 
-    return None
+    return False
 
 
 def transform_options(options: list[str]) -> list[str]:
