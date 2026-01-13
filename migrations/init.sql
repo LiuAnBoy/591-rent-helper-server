@@ -117,8 +117,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     floor_max       INTEGER,                    -- 最高樓層
 
     -- ========== 衛浴 bathroom ==========
-    -- 1=1衛, 2=2衛, 3=3衛, '4_'=4衛以上
-    bathroom        TEXT[],                     -- ['1', '2']
+    -- 1=1衛, 2=2衛, 3=3衛, 4=4衛以上
+    bathroom        INTEGER[],                  -- [1, 2]
 
     -- ========== 特色 other ==========
     -- newPost=新上架, near_subway=近捷運, pet=可養寵物, cook=可開伙,

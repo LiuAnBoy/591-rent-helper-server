@@ -114,7 +114,7 @@ class SubscriptionBase(BaseModel):
     floor_max: Optional[int] = Field(None, description="最高樓層")
 
     # Bathroom
-    bathroom: Optional[list[str]] = Field(None, description="衛浴數量 (1, 2, 3, 4_)")
+    bathroom: Optional[list[int]] = Field(None, description="衛浴數量 (1, 2, 3, 4=4+)")
 
     # Other (features)
     other: Optional[list[str]] = Field(
@@ -165,7 +165,7 @@ class SubscriptionUpdate(BaseModel):
     area_min: Optional[Decimal] = Field(None, ge=0)
     area_max: Optional[Decimal] = Field(None, ge=0)
     floor: Optional[list[str]] = None
-    bathroom: Optional[list[str]] = None
+    bathroom: Optional[list[int]] = None
     other: Optional[list[str]] = None
     options: Optional[list[str]] = None
     fitment: Optional[list[int]] = None

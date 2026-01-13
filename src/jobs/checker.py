@@ -17,7 +17,7 @@ from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
 from src.jobs.broadcaster import Broadcaster, ErrorType, get_broadcaster
 from src.modules.objects import ObjectRepository, RentalObject
-from src.utils import convert_options_to_codes, convert_other_to_codes
+from src.utils import convert_other_to_codes
 from src.utils.parsers import parse_is_rooftop
 
 
@@ -281,18 +281,18 @@ class Checker:
                 if not matched:
                     return False
 
-        # Bathroom (衛浴) - similar to layout matching
-        # sub.bathroom is like ["1", "2", "3", "4_"] where "4_" means 4+
+        # Bathroom (衛浴) - obj.bathroom in sub.bathroom list
+        # sub.bathroom is like [1, 2, 3, 4] where 4 means 4+
         if sub.get("bathroom"):
             obj_bathroom = obj.get("bathroom")
             if obj_bathroom is not None:
                 matched = False
                 for required in sub["bathroom"]:
-                    if required == "4_" or required == 4:  # 4衛以上
+                    if required == 4:  # 4衛以上
                         if obj_bathroom >= 4:
                             matched = True
                             break
-                    elif int(required) == obj_bathroom:
+                    elif required == obj_bathroom:
                         matched = True
                         break
                 if not matched:
@@ -343,18 +343,11 @@ class Checker:
             if not sub_other <= obj_other:
                 return False
 
-        # Options (設備) - check obj.options (detail page) and obj.tags (list page)
+        # Options (設備) - sub.options must be subset of obj.options
         if sub.get("options"):
-            # obj.options from detail page already in codes (e.g., ["cold", "washer"])
-            obj_options = obj.get("options", []) or []
-            # obj.tags from list page in Chinese, convert to codes
-            obj_tags = obj.get("tags", []) or []
-            tags_as_codes = convert_options_to_codes(obj_tags)
-            # Combine all equipment codes
-            all_equipment = set(code.lower() for code in obj_options + tags_as_codes)
+            obj_options = set(o.lower() for o in (obj.get("options", []) or []))
             sub_options = set(o.lower() for o in sub["options"])
-            # All subscription options must be present in object (AND logic)
-            if not sub_options <= all_equipment:
+            if not sub_options <= obj_options:
                 return False
 
         return True
