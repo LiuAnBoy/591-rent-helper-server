@@ -131,7 +131,24 @@ class DetailFetcherPlaywright:
         url = f"https://rent.591.com.tw/{object_id}"
 
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+
+            # Check response status
+            if response:
+                status = response.status
+                if status == 404:
+                    fetcher_log.debug(f"Object {object_id} not found (404 - removed)")
+                    return None
+                if status >= 400:
+                    fetcher_log.warning(f"Object {object_id} returned HTTP {status}")
+                    return None
+
+            # Check if redirected (listing removed -> redirects to list page)
+            current_url = page.url
+            if f"/{object_id}" not in current_url:
+                fetcher_log.debug(f"Object {object_id} redirected (removed)")
+                return None
+
             await page.wait_for_timeout(500)
 
             # Extract NUXT data
@@ -163,7 +180,14 @@ class DetailFetcherPlaywright:
             return result
 
         except Exception as e:
-            fetcher_log.error(f"Failed to fetch detail for {object_id}: {e}")
+            error_msg = str(e)
+            # Classify error types
+            if "net::ERR_ABORTED" in error_msg:
+                fetcher_log.debug(f"Object {object_id} navigation aborted (likely removed)")
+            elif "Timeout" in error_msg:
+                fetcher_log.warning(f"Object {object_id} timeout - network slow")
+            else:
+                fetcher_log.error(f"Object {object_id} fetch failed: {e}")
             return None
 
     async def _fetch_with_worker(

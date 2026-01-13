@@ -121,13 +121,11 @@ class DetailFetcher:
                 await asyncio.sleep(1)
 
         # Fallback to Playwright
-        fetcher_log.warning(f"BS4 failed, falling back to Playwright for {object_id}")
+        fetcher_log.debug(f"BS4 failed, falling back to Playwright for {object_id}")
         await self._ensure_playwright()
         result = await self._playwright_fetcher.fetch_detail(object_id)
 
-        if result is None:
-            fetcher_log.error(f"All fetchers failed for {object_id}")
-
+        # Playwright fetcher already logs specific failure reason
         return result
 
     async def fetch_details_batch(
@@ -160,19 +158,21 @@ class DetailFetcher:
 
         # Process results
         results = {}
-        failed_count = 0
+        error_count = 0
+        skipped_count = 0
         for oid, result in zip(object_ids, results_list):
             if isinstance(result, Exception):
-                fetcher_log.error(f"Fetch failed for {oid}: {result}")
-                failed_count += 1
+                fetcher_log.error(f"Fetch exception for {oid}: {result}")
+                error_count += 1
             elif result:
                 results[oid] = result
             else:
-                failed_count += 1
+                # None = object removed/unavailable (already logged by fetcher)
+                skipped_count += 1
 
         fetcher_log.info(
             f"Fetched {len(results)}/{len(object_ids)} detail pages "
-            f"({failed_count} failed)"
+            f"({skipped_count} unavailable, {error_count} errors)"
         )
 
         return results
