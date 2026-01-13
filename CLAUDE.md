@@ -144,6 +144,14 @@ src/
         └── rule.py       # Rule/restriction parser
 ```
 
+## Testing Crawlers
+
+If you need to test or debug crawler logic, use the scripts in `scripts/`:
+- `test_list_bs4.py` / `test_list_playwright.py` - Test list fetching independently
+- `test_detail_bs4.py` / `test_detail_playwright.py` - Test detail fetching independently
+
+These scripts allow testing crawler components without running the full application.
+
 ## Key Patterns
 
 ### Crawler Fallback Strategy
