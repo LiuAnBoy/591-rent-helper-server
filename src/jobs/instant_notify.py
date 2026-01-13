@@ -271,7 +271,7 @@ class InstantNotifier:
                     all_ids.add(db_ready["id"])
 
                     # Save to DB
-                    await repo.save_db_ready(db_ready)
+                    await repo.save(db_ready)
 
                 # Add to seen_ids
                 if all_ids:
@@ -418,7 +418,7 @@ class InstantNotifier:
                 all_ids.add(db_ready["id"])
 
                 # Save to DB and check if new
-                is_new = await repo.save_db_ready(db_ready)
+                is_new = await repo.save(db_ready)
                 if is_new:
                     new_objects.append(db_ready)
 

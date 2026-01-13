@@ -190,7 +190,7 @@ class Checker:
 
         # Save to DB
         for obj in objects:
-            await self._object_repo.save_db_ready(obj)
+            await self._object_repo.save(obj)
 
         # Add to Redis seen set (batch)
         all_ids = {obj["id"] for obj in objects}
