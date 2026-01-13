@@ -162,7 +162,7 @@ Authorization: Bearer <token>
 | `area_max` | float | | 最大坪數 |
 | `layout` | int[] | | 1=1房, 2=2房, 3=3房, 4=4房以上 |
 | `shape` | int[] | | 1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅 |
-| `floor` | str[] | | "1_1", "2_6", "6_12", "13_" |
+| `floor` | str[] | | "1", "2_6", "6_12", "13_" |
 | `bathroom` | int[] | | 1=1衛, 2=2衛, 3=3衛, 4=4衛以上 |
 | `fitment` | int[] | | 99=新裝潢, 3=中檔, 4=高檔 |
 | `other` | str[] | | near_subway, pet, cook, lift 等 |
@@ -218,6 +218,7 @@ Authorization: Bearer <token>
   "area_max": 15.0,
   "layout": [1],
   "shape": [1, 2],
+  "floor": ["2_6", "6_12"],
   "floor_min": 2,
   "floor_max": 12,
   "bathroom": [1, 2],
