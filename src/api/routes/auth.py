@@ -8,7 +8,7 @@ from src.connections.postgres import get_postgres
 
 auth_log = logger.bind(module="Auth")
 
-from src.modules.users import UserRepository
+from src.modules.users import UserRepository  # noqa: E402
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -40,8 +40,8 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
     """
     from config.settings import Settings
     from src.modules.providers import (
-        verify_and_parse_init_data,
         UserProviderRepository,
+        verify_and_parse_init_data,
     )
 
     settings = Settings()
@@ -108,7 +108,9 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
                 provider_id=provider_id,
                 provider_data=provider_data,
             )
-            auth_log.info(f"New Telegram user created: {telegram_user.id} -> user {user.id}")
+            auth_log.info(
+                f"New Telegram user created: {telegram_user.id} -> user {user.id}"
+            )
 
         # Create access token
         token, expires_in = user_repo.create_access_token(
@@ -139,4 +141,4 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
         raise
     except Exception as e:
         auth_log.error(f"Telegram login failed: {e}")
-        raise HTTPException(status_code=500, detail="Telegram 登入失敗")
+        raise HTTPException(status_code=500, detail="Telegram 登入失敗") from None

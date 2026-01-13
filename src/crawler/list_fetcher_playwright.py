@@ -6,12 +6,15 @@ Reliable method for fetching rental objects from 591.
 
 import asyncio
 import random
-from typing import Optional
 from urllib.parse import urlencode
 
 from loguru import logger
-from playwright.async_api import async_playwright, Browser, Page
+from playwright.async_api import Browser, Page, async_playwright
 
+from src.crawler.extractors import ListRawData
+from src.crawler.extractors.list_extractor_nuxt import (
+    extract_list_raw_from_nuxt,
+)
 from src.modules.objects import RentalObject
 
 fetcher_log = logger.bind(module="Playwright")
@@ -36,8 +39,8 @@ class ListFetcherPlaywright:
         """
         self.headless = headless
         self._playwright = None
-        self._browser: Optional[Browser] = None
-        self._page: Optional[Page] = None
+        self._browser: Browser | None = None
+        self._page: Page | None = None
 
     async def start(self) -> None:
         """Start the browser."""
@@ -67,11 +70,11 @@ class ListFetcherPlaywright:
     def _build_url(
         self,
         region: int,
-        section: Optional[int] = None,
-        kind: Optional[int] = None,
-        price_min: Optional[int] = None,
-        price_max: Optional[int] = None,
-        other: Optional[list[str]] = None,
+        section: int | None = None,
+        kind: int | None = None,
+        price_min: int | None = None,
+        price_max: int | None = None,
+        other: list[str] | None = None,
         sort: str = "posttime_desc",
         first_row: int = 0,
     ) -> str:
@@ -96,12 +99,14 @@ class ListFetcherPlaywright:
     async def _wait_for_content(self) -> None:
         """Wait for page content to load."""
         try:
-            await self._page.wait_for_selector("[data-v-][class*='item']", timeout=10000)
+            await self._page.wait_for_selector(
+                "[data-v-][class*='item']", timeout=10000
+            )
         except Exception:
             fetcher_log.debug("No item selector found, waiting 2s...")
             await asyncio.sleep(2)
 
-    async def _extract_nuxt_data(self) -> Optional[dict]:
+    async def _extract_nuxt_data(self) -> dict | None:
         """Extract data from window.__NUXT__.data."""
         try:
             data = await self._page.evaluate("window.__NUXT__?.data")
@@ -113,7 +118,7 @@ class ListFetcherPlaywright:
     def _find_items(self, data: dict) -> list[dict]:
         """Find items array in the NUXT data structure."""
         if isinstance(data, dict):
-            for key, value in data.items():
+            for _key, value in data.items():
                 if isinstance(value, dict):
                     if "items" in value and isinstance(value["items"], list):
                         return value["items"]
@@ -125,7 +130,7 @@ class ListFetcherPlaywright:
     def _find_total(self, data: dict) -> int:
         """Find total count in the NUXT data structure."""
         if isinstance(data, dict):
-            for key, value in data.items():
+            for _key, value in data.items():
                 if isinstance(value, dict):
                     if "total" in value:
                         try:
@@ -151,14 +156,14 @@ class ListFetcherPlaywright:
     async def fetch_objects(
         self,
         region: int = 1,
-        section: Optional[int] = None,
-        kind: Optional[int] = None,
-        price_min: Optional[int] = None,
-        price_max: Optional[int] = None,
-        other: Optional[list[str]] = None,
+        section: int | None = None,
+        kind: int | None = None,
+        price_min: int | None = None,
+        price_max: int | None = None,
+        other: list[str] | None = None,
         sort: str = "posttime_desc",
-        max_pages: Optional[int] = None,
-        max_items: Optional[int] = None,
+        max_pages: int | None = None,
+        max_items: int | None = None,
     ) -> list[RentalObject]:
         """
         Fetch rental objects from 591.
@@ -243,9 +248,51 @@ class ListFetcherPlaywright:
         fetcher_log.info(f"Playwright fetched {len(all_objects)} objects")
         return all_objects
 
+    async def fetch_objects_raw(
+        self,
+        region: int,
+        sort: str = "posttime_desc",
+        max_items: int | None = None,
+    ) -> list[ListRawData]:
+        """
+        Fetch rental objects and return raw data (no transformation).
+
+        Uses the NUXT extractor for consistent raw data extraction.
+
+        Args:
+            region: City code (1=Taipei, 3=New Taipei)
+            sort: Sort order (default: posttime_desc)
+            max_items: Maximum number of items to return
+
+        Returns:
+            List of ListRawData
+        """
+        if not self._browser:
+            await self.start()
+
+        url = self._build_url(region=region, sort=sort)
+        fetcher_log.info(f"Playwright fetching raw: {url}")
+
+        await self._page.goto(url, wait_until="domcontentloaded")
+        await self._wait_for_content()
+
+        nuxt_data = await self._extract_nuxt_data()
+        if not nuxt_data:
+            fetcher_log.warning("No NUXT data found")
+            return []
+
+        # Use NUXT extractor
+        items = extract_list_raw_from_nuxt(nuxt_data, region)
+
+        if max_items and len(items) > max_items:
+            items = items[:max_items]
+
+        fetcher_log.info(f"Playwright fetched {len(items)} objects (raw)")
+        return items
+
 
 # Singleton instance
-_playwright_fetcher: Optional[ListFetcherPlaywright] = None
+_playwright_fetcher: ListFetcherPlaywright | None = None
 
 
 def get_playwright_fetcher(headless: bool = True) -> ListFetcherPlaywright:

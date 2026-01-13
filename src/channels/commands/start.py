@@ -4,8 +4,6 @@ Start Command Module.
 Handles the /start command - shows welcome message.
 """
 
-from typing import Optional
-
 from src.channels.commands.base import BaseCommand, CommandResult
 
 
@@ -20,7 +18,7 @@ class StartCommand(BaseCommand):
         self,
         user_id: str,
         args: str,
-        context: Optional[dict] = None,
+        context: dict | None = None,
     ) -> CommandResult:
         """
         Execute /start command.

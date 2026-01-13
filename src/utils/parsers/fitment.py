@@ -4,8 +4,6 @@ Fitment/decoration parsing utilities.
 Parse decoration level from rental data.
 """
 
-from typing import Optional
-
 # Fitment level mapping
 # 99 = newly decorated (within 3 years)
 # 3 = mid-range decoration
@@ -21,7 +19,7 @@ FITMENT_MAPPING = {
 }
 
 
-def parse_fitment(text: str) -> Optional[int]:
+def parse_fitment(text: str) -> int | None:
     """
     Parse fitment/decoration level from page text.
 

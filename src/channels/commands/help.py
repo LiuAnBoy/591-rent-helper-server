@@ -4,8 +4,6 @@ Help Command Module.
 Handles the /help command - shows usage instructions.
 """
 
-from typing import Optional
-
 from src.channels.commands.base import BaseCommand, CommandResult
 
 
@@ -20,7 +18,7 @@ class HelpCommand(BaseCommand):
         self,
         user_id: str,
         args: str,
-        context: Optional[dict] = None,
+        context: dict | None = None,
     ) -> CommandResult:
         """
         Execute /help command.

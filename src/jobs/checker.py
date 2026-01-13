@@ -5,20 +5,27 @@ Checks for new objects and triggers notifications.
 """
 
 import asyncio
-from typing import Optional
 
 from loguru import logger
 
 from src.connections.postgres import PostgresConnection, get_postgres
-
-checker_log = logger.bind(module="Checker")
 from src.connections.redis import RedisConnection, get_redis
 from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
+from src.crawler.extractors import (
+    CombinedRawData,
+    DetailRawData,
+    ListRawData,
+    combine_raw_data,
+)
 from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
 from src.jobs.broadcaster import Broadcaster, ErrorType, get_broadcaster
-from src.modules.objects import ObjectRepository, RentalObject
-from src.utils import convert_other_to_codes
-from src.utils.parsers import parse_is_rooftop
+from src.modules.objects import ObjectRepository
+from src.utils import (
+    DBReadyData,
+    transform_to_db_ready,
+)
+
+checker_log = logger.bind(module="Checker")
 
 
 class Checker:
@@ -34,16 +41,16 @@ class Checker:
     """
 
     # Crawl settings
-    INIT_CRAWL_COUNT = 5    # Items to crawl on first run (no notify)
+    INIT_CRAWL_COUNT = 5  # Items to crawl on first run (no notify)
     NORMAL_CRAWL_COUNT = 30  # Items to crawl on normal run
 
     def __init__(
         self,
-        postgres: Optional[PostgresConnection] = None,
-        redis: Optional[RedisConnection] = None,
-        list_fetcher: Optional[ListFetcher] = None,
-        detail_fetcher: Optional[DetailFetcher] = None,
-        broadcaster: Optional[Broadcaster] = None,
+        postgres: PostgresConnection | None = None,
+        redis: RedisConnection | None = None,
+        list_fetcher: ListFetcher | None = None,
+        detail_fetcher: DetailFetcher | None = None,
+        broadcaster: Broadcaster | None = None,
         enable_broadcast: bool = True,
         detail_max_workers: int = 3,
     ):
@@ -67,7 +74,7 @@ class Checker:
         self._enable_broadcast = enable_broadcast
         self._detail_max_workers = detail_max_workers
         self._owns_fetcher = False
-        self._object_repo: Optional[ObjectRepository] = None
+        self._object_repo: ObjectRepository | None = None
 
     async def _ensure_connections(self) -> None:
         """Ensure all connections are established."""
@@ -107,6 +114,7 @@ class Checker:
         await self._ensure_connections()
 
         from src.modules.subscriptions import SubscriptionRepository
+
         repo = SubscriptionRepository(self._postgres.pool)
 
         # Get all enabled subscriptions from PostgreSQL
@@ -118,93 +126,71 @@ class Checker:
         checker_log.info(f"Synced {len(subscriptions)} subscriptions to Redis")
         return len(subscriptions)
 
-    def _merge_detail_to_object(
+    async def _process_object_etl(
         self,
-        obj: RentalObject,
-        detail: Optional[dict],
-    ) -> RentalObject:
-        """
-        Merge detail page data into RentalObject.
-
-        Args:
-            obj: RentalObject from list page
-            detail: Detail data from detail fetcher (can be None)
-
-        Returns:
-            Updated RentalObject with merged data
-        """
-        import re
-
-        if not detail:
-            return obj
-
-        # Fields for matching
-        obj.gender = detail.get("gender", "all")
-        # pet_allowed: None means not specified, default to False
-        obj.pet_allowed = detail.get("pet_allowed") if detail.get("pet_allowed") is not None else False
-        obj.options = detail.get("options", [])
-        obj.shape = detail.get("shape")
-        obj.fitment = detail.get("fitment")
-
-        # Fields for notification display
-        obj.address = detail.get("address") or obj.address
-        obj.tags = detail.get("tags") or obj.tags
-        # Convert tags to other codes for matching
-        if obj.tags:
-            obj.other = convert_other_to_codes(obj.tags)
-        obj.layout_str = detail.get("layout_str") or obj.layout_str
-        obj.floor_name = detail.get("floor_str") or obj.floor_name
-        obj.floor = detail.get("floor") or obj.floor
-        obj.total_floor = detail.get("total_floor") or obj.total_floor
-        obj.is_rooftop = detail.get("is_rooftop", False) or obj.is_rooftop
-        obj.section = detail.get("section") or obj.section
-        obj.kind = detail.get("kind") or obj.kind
-
-        # Parse bathroom from layout_str
-        layout_str = detail.get("layout_str")
-        if layout_str:
-            bath_match = re.search(r"(\d+)衛", layout_str)
-            if bath_match:
-                obj.bathroom = int(bath_match.group(1))
-
-        return obj
-
-    async def _process_new_object(
-        self,
-        obj: RentalObject,
-        detail: Optional[dict],
+        list_data: ListRawData,
+        detail_data: DetailRawData | None,
         region: int,
-    ) -> RentalObject:
+    ) -> DBReadyData:
         """
-        Process a new object: merge detail, save to DB, update Redis.
+        Process a new object using ETL pipeline.
+
+        ETL Flow:
+        1. Combine: list_data + detail_data → CombinedRawData
+        2. Transform: CombinedRawData → DBReadyData
+        3. Save to DB (direct)
+        4. Save to Redis (direct, no RentalObject conversion)
 
         Args:
-            obj: RentalObject from list page
-            detail: Detail data from detail fetcher (can be None)
+            list_data: Raw data from list page
+            detail_data: Raw data from detail page (can be None)
             region: Region code for Redis operations
 
         Returns:
-            Processed RentalObject
+            DBReadyData dict (for subscription matching)
         """
-        # 1. Merge detail data into object
-        obj = self._merge_detail_to_object(obj, detail)
+        # Step 1: Combine raw data
+        if detail_data:
+            combined = combine_raw_data(list_data, detail_data)
+        else:
+            # If detail fetch failed, use list data only with minimal combined structure
+            combined: CombinedRawData = {
+                "id": list_data.get("id", ""),
+                "url": list_data.get("url", ""),
+                "title": list_data.get("title", ""),
+                "price_raw": list_data.get("price_raw", ""),
+                "tags": list_data.get("tags", []),
+                "kind_name": list_data.get("kind_name", ""),
+                "address_raw": list_data.get("address_raw", ""),
+                "surrounding_type": None,
+                "surrounding_raw": None,
+                "region": str(region),  # Use passed region
+                "section": "",
+                "kind": "",
+                "floor_raw": list_data.get("floor_raw", ""),
+                "layout_raw": list_data.get("layout_str", ""),
+                "area_raw": list_data.get("area_raw", ""),
+                "gender_raw": None,
+                "shape_raw": None,
+                "fitment_raw": None,
+                "options": [],
+            }
 
-        # 2. Parse is_rooftop from floor_name if not set from detail
-        if not obj.is_rooftop:
-            obj.is_rooftop = parse_is_rooftop(obj.floor_name)
+        # Step 2: Transform to DB-ready format
+        db_ready = transform_to_db_ready(combined)
 
-        # 3. Save to DB (single complete write)
-        await self._object_repo.save(obj)
+        # Step 3: Save to DB directly
+        await self._object_repo.save_db_ready(db_ready)
 
-        # 4. Add to Redis seen set
-        await self._redis.add_seen_ids(region, {obj.id})
+        # Step 4: Add to Redis seen set
+        await self._redis.add_seen_ids(region, {db_ready["id"]})
 
-        # 5. Save to Redis object cache
-        await self._redis.save_objects([obj.model_dump()])
+        # Step 5: Save to Redis object cache
+        await self._redis.save_objects([db_ready])
 
-        checker_log.debug(f"Processed new object {obj.id}")
+        checker_log.debug(f"Processed new object {db_ready['id']} (ETL)")
 
-        return obj
+        return db_ready
 
     def _match_object_to_subscription(self, obj: dict, sub: dict) -> bool:
         """
@@ -337,22 +323,22 @@ class Checker:
 
         # Other (features) - compare subscription.other with object.other (both are codes)
         if sub.get("other"):
-            obj_other = set(code.lower() for code in (obj.get("other", []) or []))
-            sub_other = set(f.lower() for f in sub["other"])
+            obj_other = {code.lower() for code in (obj.get("other", []) or [])}
+            sub_other = {f.lower() for f in sub["other"]}
             # All subscription features must be present in object
             if not sub_other <= obj_other:
                 return False
 
         # Options (設備) - sub.options must be subset of obj.options
         if sub.get("options"):
-            obj_options = set(o.lower() for o in (obj.get("options", []) or []))
-            sub_options = set(o.lower() for o in sub["options"])
+            obj_options = {o.lower() for o in (obj.get("options", []) or [])}
+            sub_options = {o.lower() for o in sub["options"]}
             if not sub_options <= obj_options:
                 return False
 
         return True
 
-    def _extract_floor_number(self, floor_name: str) -> Optional[int]:
+    def _extract_floor_number(self, floor_name: str) -> int | None:
         """
         Extract floor number from floor name.
 
@@ -363,6 +349,7 @@ class Checker:
             Floor number or None if cannot extract
         """
         import re
+
         # Handle basement floors
         if floor_name.upper().startswith("B"):
             return 0  # Treat basement as floor 0
@@ -375,9 +362,9 @@ class Checker:
 
     def _match_floor(
         self,
-        obj_floor: Optional[int],
-        floor_min: Optional[int],
-        floor_max: Optional[int],
+        obj_floor: int | None,
+        floor_min: int | None,
+        floor_max: int | None,
     ) -> bool:
         """
         Match object floor against subscription floor range.
@@ -399,9 +386,7 @@ class Checker:
             return False
         return True
 
-    async def _match_subscriptions_in_redis(
-        self, region: int, obj: dict
-    ) -> list[dict]:
+    async def _match_subscriptions_in_redis(self, region: int, obj: dict) -> list[dict]:
         """
         Find matching subscriptions for an object from Redis.
 
@@ -424,7 +409,7 @@ class Checker:
     async def check(
         self,
         region: int,
-        max_items: Optional[int] = None,
+        max_items: int | None = None,
         force_notify: bool = False,
     ) -> dict:
         """
@@ -460,21 +445,21 @@ class Checker:
         run_id = await self._postgres.start_crawler_run(region)
 
         try:
-            # Step 1: Crawl list page (with fallback)
-            objects = await self._list_fetcher.fetch_objects(
+            # Step 1: Fetch list raw data via fetcher (with retry + fallback)
+            list_raw_items = await self._list_fetcher.fetch_objects_raw(
                 region=region,
                 sort="posttime_desc",
                 max_items=max_items,
             )
 
-            if not objects:
+            if not list_raw_items:
                 checker_log.warning("No objects fetched")
                 # Notify admin about list fetch failure
                 if self._broadcaster:
                     await self._broadcaster.notify_admin(
                         error_type=ErrorType.LIST_FETCH_FAILED,
                         region=region,
-                        details="BS4 和 Playwright 都無法抓取列表頁",
+                        details="ListFetcher 無法抓取列表頁 (ETL raw)",
                     )
                 await self._postgres.finish_crawler_run(
                     run_id=run_id,
@@ -492,10 +477,10 @@ class Checker:
                     "initialized_subs": [],
                 }
 
-            checker_log.info(f"Fetched {len(objects)} objects from list")
+            checker_log.info(f"Fetched {len(list_raw_items)} objects from list (ETL)")
 
             # Step 2: Redis filter - find new IDs (don't save to DB yet)
-            fetched_ids = {obj.id for obj in objects}
+            fetched_ids = {int(item["id"]) for item in list_raw_items}
             new_ids = await self._redis.get_new_ids(region, fetched_ids)
             checker_log.info(f"Found {len(new_ids)} new objects")
 
@@ -508,15 +493,20 @@ class Checker:
             processed_objects = []
 
             if new_ids:
-                # Get new objects only
-                new_objects = [obj for obj in objects if obj.id in new_ids]
-                new_object_ids = [obj.id for obj in new_objects]
+                # Build lookup dict for list raw data
+                list_data_by_id = {int(item["id"]): item for item in list_raw_items}
+                new_object_ids = list(new_ids)
 
-                # Step 3: Fetch detail pages for new objects (batch with fallback)
+                # Step 3: Fetch detail raw data via fetcher (with retry + fallback)
                 # Wait 1 second after list fetch before detail fetch
                 await asyncio.sleep(1)
-                checker_log.info(f"Fetching detail for {len(new_object_ids)} new objects")
-                details = await self._detail_fetcher.fetch_details_batch(new_object_ids)
+                checker_log.info(
+                    f"Fetching detail for {len(new_object_ids)} new objects (ETL)"
+                )
+
+                details = await self._detail_fetcher.fetch_details_batch_raw(
+                    new_object_ids
+                )
                 detail_fetched = len(details)
 
                 # Notify admin if some detail fetches failed
@@ -529,10 +519,15 @@ class Checker:
                         details=f"共 {failed_detail_count} 個物件詳情頁抓取失敗\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
                     )
 
-                # Step 4: Process each new object (merge + save + redis)
-                for obj in new_objects:
-                    detail = details.get(obj.id)  # May be None if detail fetch failed
-                    processed_obj = await self._process_new_object(obj, detail, region)
+                # Step 4: Process each new object with ETL pipeline
+                for object_id in new_object_ids:
+                    list_data = list_data_by_id[object_id]
+                    detail_data = details.get(
+                        object_id
+                    )  # May be None if detail fetch failed
+                    processed_obj = await self._process_object_etl(
+                        list_data, detail_data, region
+                    )
                     processed_objects.append(processed_obj)
 
                 checker_log.info(
@@ -542,14 +537,16 @@ class Checker:
 
                 # Step 5: Subscription matching
                 all_subs = await self._redis.get_subscriptions_by_region(region)
-                uninitialized_subs = await self._redis.get_uninitialized_subscriptions(all_subs)
+                uninitialized_subs = await self._redis.get_uninitialized_subscriptions(
+                    all_subs
+                )
                 uninitialized_ids = {sub["id"] for sub in uninitialized_subs}
 
                 for obj in processed_objects:
-                    obj_data = obj.model_dump()
+                    # obj is already DBReadyData (dict), no conversion needed
 
                     for sub in all_subs:
-                        if not self._match_object_to_subscription(obj_data, sub):
+                        if not self._match_object_to_subscription(obj, sub):
                             continue
 
                         sub_id = sub["id"]
@@ -561,25 +558,31 @@ class Checker:
                         else:
                             # Initialized subscription - match and notify
                             matches.append((obj, [sub]))
-                            checker_log.info(f"Object {obj.id} matches subscription {sub_id}")
+                            checker_log.info(
+                                f"Object {obj['id']} matches subscription {sub_id}"
+                            )
 
                 # Mark uninitialized subscriptions as initialized
                 for sub_id in initialized_subs:
                     await self._redis.mark_subscription_initialized(sub_id)
-                    checker_log.info(f"Subscription {sub_id} initialized (first run, no notifications)")
+                    checker_log.info(
+                        f"Subscription {sub_id} initialized (first run, no notifications)"
+                    )
 
                 # Step 6: Broadcast notifications
                 if matches and self._enable_broadcast and self._broadcaster:
                     # Group matches by object
-                    object_subs_map: dict[int, tuple[RentalObject, list[dict]]] = {}
+                    object_subs_map: dict[int, tuple[DBReadyData, list[dict]]] = {}
                     for obj, subs in matches:
-                        if obj.id not in object_subs_map:
-                            object_subs_map[obj.id] = (obj, [])
-                        object_subs_map[obj.id][1].extend(subs)
+                        if obj["id"] not in object_subs_map:
+                            object_subs_map[obj["id"]] = (obj, [])
+                        object_subs_map[obj["id"]][1].extend(subs)
 
                     grouped_matches = list(object_subs_map.values())
                     checker_log.info(f"Broadcasting {len(grouped_matches)} matches...")
-                    broadcast_result = await self._broadcaster.broadcast(grouped_matches)
+                    broadcast_result = await self._broadcaster.broadcast(
+                        grouped_matches
+                    )
 
                     # Notify admin if some broadcasts failed
                     if broadcast_result.get("failed", 0) > 0:
@@ -593,7 +596,7 @@ class Checker:
                     for obj, subs in grouped_matches:
                         for sub in subs:
                             try:
-                                await self._postgres.mark_notified(sub["id"], obj.id)
+                                await self._postgres.mark_notified(sub["id"], obj["id"])
                             except Exception as e:
                                 # Handle stale subscription (exists in Redis but not in PostgreSQL)
                                 if "foreign key constraint" in str(e).lower():
@@ -611,13 +614,13 @@ class Checker:
             await self._postgres.finish_crawler_run(
                 run_id=run_id,
                 status="success",
-                total_fetched=len(objects),
+                total_fetched=len(list_raw_items),
                 new_objects=len(new_ids),
             )
 
             result = {
                 "region": region,
-                "fetched": len(objects),
+                "fetched": len(list_raw_items),
                 "new_count": len(new_ids),
                 "detail_fetched": detail_fetched,
                 "matches": matches,
@@ -641,7 +644,11 @@ class Checker:
             if self._broadcaster:
                 # Classify error type
                 error_str = str(e).lower()
-                if "postgres" in error_str or "database" in error_str or "sql" in error_str:
+                if (
+                    "postgres" in error_str
+                    or "database" in error_str
+                    or "sql" in error_str
+                ):
                     error_type = ErrorType.DB_ERROR
                 elif "redis" in error_str:
                     error_type = ErrorType.REDIS_ERROR
@@ -680,7 +687,9 @@ class Checker:
             checker_log.info("No active regions with subscriptions")
             return []
 
-        checker_log.info(f"Found {len(active_regions)} active regions: {active_regions}")
+        checker_log.info(
+            f"Found {len(active_regions)} active regions: {active_regions}"
+        )
 
         results = []
         for region in sorted(active_regions):
@@ -689,14 +698,16 @@ class Checker:
                 results.append(result)
             except Exception as e:
                 checker_log.error(f"Failed to check region {region}: {e}")
-                results.append({
-                    "region": region,
-                    "error": str(e),
-                    "fetched": 0,
-                    "new_count": 0,
-                    "matches": [],
-                    "broadcast": {"total": 0, "success": 0, "failed": 0},
-                })
+                results.append(
+                    {
+                        "region": region,
+                        "error": str(e),
+                        "fetched": 0,
+                        "new_count": 0,
+                        "matches": [],
+                        "broadcast": {"total": 0, "success": 0, "failed": 0},
+                    }
+                )
 
         return results
 
@@ -733,4 +744,5 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(main())

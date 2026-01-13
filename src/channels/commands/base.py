@@ -6,7 +6,7 @@ Defines the base command interface and result structure.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from asyncpg import Pool
 
@@ -23,14 +23,15 @@ class CommandResult:
         data: Additional structured data for formatting
         error: Error message if command failed
     """
+
     success: bool = True
     message: str = ""
-    title: Optional[str] = None
+    title: str | None = None
     data: dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    error: str | None = None
 
     @classmethod
-    def ok(cls, message: str, title: Optional[str] = None, **data) -> "CommandResult":
+    def ok(cls, message: str, title: str | None = None, **data) -> "CommandResult":
         """Create a successful result."""
         return cls(success=True, message=message, title=title, data=data)
 
@@ -53,7 +54,7 @@ class BaseCommand(ABC):
     description: str = ""
     usage: str = ""
 
-    def __init__(self, pool: Optional[Pool] = None):
+    def __init__(self, pool: Pool | None = None):
         """
         Initialize command.
 
@@ -67,7 +68,7 @@ class BaseCommand(ABC):
         self,
         user_id: str,
         args: str,
-        context: Optional[dict] = None,
+        context: dict | None = None,
     ) -> CommandResult:
         """
         Execute the command.

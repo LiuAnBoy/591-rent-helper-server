@@ -18,7 +18,7 @@ class TelegramBot:
     """Telegram bot wrapper for sending messages."""
 
     _instance: Optional["TelegramBot"] = None
-    _bot: Optional[Bot] = None
+    _bot: Bot | None = None
 
     def __new__(cls):
         """Singleton pattern."""
@@ -27,7 +27,7 @@ class TelegramBot:
         return cls._instance
 
     @classmethod
-    def init(cls, token: Optional[str] = None) -> "TelegramBot":
+    def init(cls, token: str | None = None) -> "TelegramBot":
         """
         Initialize the bot instance.
 
@@ -55,7 +55,7 @@ class TelegramBot:
         return cls._instance
 
     @property
-    def bot(self) -> Optional[Bot]:
+    def bot(self) -> Bot | None:
         """Get the underlying Bot instance."""
         return self._bot
 
@@ -70,7 +70,7 @@ class TelegramBot:
         text: str,
         parse_mode: str = ParseMode.MARKDOWN,
         disable_web_page_preview: bool = False,
-        reply_markup: Optional[any] = None,
+        reply_markup: any | None = None,
     ) -> bool:
         """
         Send a text message.
@@ -106,7 +106,7 @@ class TelegramBot:
         self,
         chat_id: int | str,
         photo_url: str,
-        caption: Optional[str] = None,
+        caption: str | None = None,
         parse_mode: str = ParseMode.MARKDOWN,
     ) -> bool:
         """
@@ -145,7 +145,7 @@ class TelegramBot:
         address: str,
         url: str,
         subscription_name: str,
-        photo_url: Optional[str] = None,
+        photo_url: str | None = None,
     ) -> bool:
         """
         Send a rental object notification.

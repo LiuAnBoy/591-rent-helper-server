@@ -4,14 +4,15 @@ Notification Control Commands.
 Handles /pause and /resume commands for notification control.
 """
 
-from typing import Optional
-
 from loguru import logger
 
 from src.channels.commands.base import BaseCommand, CommandResult
 
 cmd_log = logger.bind(module="BotCommand")
-from src.modules.providers import UserProviderRepository, sync_user_subscriptions_to_redis
+from src.modules.providers import (  # noqa: E402
+    UserProviderRepository,
+    sync_user_subscriptions_to_redis,
+)
 
 
 class PauseCommand(BaseCommand):
@@ -25,7 +26,7 @@ class PauseCommand(BaseCommand):
         self,
         user_id: str,
         args: str,
-        context: Optional[dict] = None,
+        context: dict | None = None,
     ) -> CommandResult:
         """
         Execute /pause command.
@@ -68,7 +69,9 @@ class PauseCommand(BaseCommand):
         # Sync to Redis
         await sync_user_subscriptions_to_redis(provider.user_id)
 
-        cmd_log.info(f"Paused notifications for user {provider.user_id} ({service}:{user_id})")
+        cmd_log.info(
+            f"Paused notifications for user {provider.user_id} ({service}:{user_id})"
+        )
 
         return CommandResult.ok(
             message="已暫停通知。輸入 /resume 可恢復通知。",
@@ -87,7 +90,7 @@ class ResumeCommand(BaseCommand):
         self,
         user_id: str,
         args: str,
-        context: Optional[dict] = None,
+        context: dict | None = None,
     ) -> CommandResult:
         """
         Execute /resume command.
@@ -101,6 +104,7 @@ class ResumeCommand(BaseCommand):
             Result indicating notifications are resumed
         """
         import asyncio
+
         from src.modules.subscriptions import SubscriptionRepository
 
         if not self._pool:
@@ -133,7 +137,9 @@ class ResumeCommand(BaseCommand):
         # Sync to Redis
         await sync_user_subscriptions_to_redis(provider.user_id)
 
-        cmd_log.info(f"Resumed notifications for user {provider.user_id} ({service}:{user_id})")
+        cmd_log.info(
+            f"Resumed notifications for user {provider.user_id} ({service}:{user_id})"
+        )
 
         # Trigger instant notification for all enabled subscriptions (batch mode)
         sub_repo = SubscriptionRepository(self._pool)
@@ -151,7 +157,9 @@ class ResumeCommand(BaseCommand):
                 )
             )
 
-            cmd_log.info(f"Triggered batch instant notify for {len(subscriptions)} subscriptions")
+            cmd_log.info(
+                f"Triggered batch instant notify for {len(subscriptions)} subscriptions"
+            )
 
         return CommandResult.ok(
             message="已恢復通知。有新物件時會立即通知你！",

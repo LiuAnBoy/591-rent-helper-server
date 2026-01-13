@@ -5,7 +5,7 @@ Defines base interfaces for notification channels.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from asyncpg import Pool
 
@@ -58,7 +58,7 @@ class BaseChannel(ABC):
     # Channel identifier
     service_name: str = ""
 
-    def __init__(self, pool: Optional[Pool] = None):
+    def __init__(self, pool: Pool | None = None):
         """
         Initialize channel.
 
@@ -66,7 +66,7 @@ class BaseChannel(ABC):
             pool: Database connection pool
         """
         self._pool = pool
-        self._formatter: Optional[BaseFormatter] = None
+        self._formatter: BaseFormatter | None = None
 
     @property
     @abstractmethod
@@ -89,7 +89,7 @@ class BaseChannel(ABC):
         pass
 
     @abstractmethod
-    async def handle_message(self, user_id: str, text: str) -> Optional[str]:
+    async def handle_message(self, user_id: str, text: str) -> str | None:
         """
         Handle an incoming message from a user.
 

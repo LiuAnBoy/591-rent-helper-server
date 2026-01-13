@@ -5,10 +5,9 @@ Parse floor-related fields from rental object data.
 """
 
 import re
-from typing import Optional
 
 
-def parse_floor(floor_str: Optional[str]) -> tuple[Optional[int], Optional[int], bool]:
+def parse_floor(floor_str: str | None) -> tuple[int | None, int | None, bool]:
     """
     Parse floor string into structured data.
 
@@ -46,7 +45,7 @@ def parse_floor(floor_str: Optional[str]) -> tuple[Optional[int], Optional[int],
     total_floor = int(total_match.group(1)) if total_match else None
 
     # Parse current floor
-    floor: Optional[int] = None
+    floor: int | None = None
     if is_rooftop:
         floor = 0
     elif floor_str.upper().startswith("B"):
@@ -61,7 +60,7 @@ def parse_floor(floor_str: Optional[str]) -> tuple[Optional[int], Optional[int],
     return floor, total_floor, is_rooftop
 
 
-def parse_is_rooftop(floor_name: Optional[str]) -> bool:
+def parse_is_rooftop(floor_name: str | None) -> bool:
     """
     Parse whether the property is a rooftop addition from floor_name.
 

@@ -4,14 +4,12 @@ Status Command Module.
 Handles the /status command - shows binding status.
 """
 
-from typing import Optional
-
 from loguru import logger
 
 from src.channels.commands.base import BaseCommand, CommandResult
 
 cmd_log = logger.bind(module="BotCommand")
-from src.modules.providers import UserProviderRepository
+from src.modules.providers import UserProviderRepository  # noqa: E402
 
 
 class StatusCommand(BaseCommand):
@@ -25,7 +23,7 @@ class StatusCommand(BaseCommand):
         self,
         user_id: str,
         args: str,
-        context: Optional[dict] = None,
+        context: dict | None = None,
     ) -> CommandResult:
         """
         Execute /status command.

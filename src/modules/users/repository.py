@@ -4,8 +4,7 @@ User Repository.
 Database operations for user management.
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from asyncpg import Pool
@@ -30,7 +29,9 @@ class UserRepository:
         self._pool = pool
         self._settings = get_settings()
 
-    def create_access_token(self, user_id: int, email: Optional[str], role: str) -> tuple[str, int]:
+    def create_access_token(
+        self, user_id: int, email: str | None, role: str
+    ) -> tuple[str, int]:
         """
         Create JWT access token.
 
@@ -43,14 +44,14 @@ class UserRepository:
             Tuple of (token, expires_in_seconds)
         """
         expires_in = 604800  # 7 days
-        expire = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        expire = datetime.now(UTC) + timedelta(seconds=expires_in)
 
         payload = {
             "id": user_id,
             "email": email,
             "role": role,
             "exp": expire,
-            "iat": datetime.now(timezone.utc),
+            "iat": datetime.now(UTC),
         }
 
         secret_key = self._settings.jwt_secret or "default_jwt_secret_change_me"
@@ -58,7 +59,7 @@ class UserRepository:
 
         return token, expires_in
 
-    def decode_token(self, token: str) -> Optional[dict]:
+    def decode_token(self, token: str) -> dict | None:
         """
         Decode and verify JWT token.
 
@@ -79,7 +80,7 @@ class UserRepository:
             users_log.warning(f"Invalid token: {e}")
             return None
 
-    async def get_by_id(self, user_id: int) -> Optional[User]:
+    async def get_by_id(self, user_id: int) -> User | None:
         """
         Get user by ID.
 
@@ -157,7 +158,7 @@ class UserRepository:
             users_log.info(f"Created user from provider: {name}")
             return User(**dict(row))
 
-    async def find_by_provider(self, provider: str, provider_id: str) -> Optional[User]:
+    async def find_by_provider(self, provider: str, provider_id: str) -> User | None:
         """
         Find user by provider type and provider ID.
 

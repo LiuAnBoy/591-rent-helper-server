@@ -7,7 +7,6 @@ Sends notifications to subscribed users via their bound channels.
 import asyncio
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from loguru import logger
 from telegram.constants import ParseMode
@@ -44,7 +43,7 @@ class ErrorType(Enum):
 class Broadcaster:
     """Broadcasts notifications to users via their bound channels."""
 
-    def __init__(self, bot: Optional[TelegramBot] = None):
+    def __init__(self, bot: TelegramBot | None = None):
         """
         Initialize Broadcaster.
 
@@ -66,35 +65,33 @@ class Broadcaster:
         """Escape HTML special characters."""
         if not text:
             return ""
-        return (
-            text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     async def send_telegram_notification(
         self,
         chat_id: str,
-        obj: RentalObject,
-        subscription_name: Optional[str] = None,
+        obj: RentalObject | dict,
+        subscription_name: str | None = None,
     ) -> bool:
         """
         Send notification to a Telegram chat.
 
         Args:
             chat_id: Telegram chat ID
-            obj: RentalObject to send
+            obj: RentalObject or dict (DBReadyData) to send
             subscription_name: Optional subscription name for context
 
         Returns:
             True if sent successfully, False otherwise
         """
         if not self.bot.is_configured:
-            broadcast_log.warning("Telegram bot not configured, cannot send notification")
+            broadcast_log.warning(
+                "Telegram bot not configured, cannot send notification"
+            )
             return False
 
         try:
-            # Use formatter to create message
+            # Use formatter to create message (supports both RentalObject and dict)
             message = self._telegram_formatter.format_object(obj)
 
             # Add subscription context if provided
@@ -109,19 +106,25 @@ class Broadcaster:
                 disable_web_page_preview=False,
             )
 
-            broadcast_log.info(f"Sent Telegram notification to {chat_id} for object {obj.id}")
+            # Get object ID for logging
+            obj_id = obj["id"] if isinstance(obj, dict) else obj.id
+            broadcast_log.info(
+                f"Sent Telegram notification to {chat_id} for object {obj_id}"
+            )
             return True
 
         except Exception as e:
-            broadcast_log.error(f"Failed to send Telegram notification to {chat_id}: {e}")
+            broadcast_log.error(
+                f"Failed to send Telegram notification to {chat_id}: {e}"
+            )
             return False
 
     async def send_notification(
         self,
         service: str,
         service_id: str,
-        obj: RentalObject,
-        subscription_name: Optional[str] = None,
+        obj: RentalObject | dict,
+        subscription_name: str | None = None,
     ) -> bool:
         """
         Send notification via the appropriate channel.
@@ -129,7 +132,7 @@ class Broadcaster:
         Args:
             service: Service name (telegram, line, etc.)
             service_id: Service-specific user ID
-            obj: RentalObject to send
+            obj: RentalObject or dict (DBReadyData) to send
             subscription_name: Optional subscription name for context
 
         Returns:
@@ -151,8 +154,8 @@ class Broadcaster:
     async def notify_admin(
         self,
         error_type: ErrorType,
-        region: Optional[int] = None,
-        details: Optional[str] = None,
+        region: int | None = None,
+        details: str | None = None,
     ) -> bool:
         """
         Send error notification to admin.
@@ -171,7 +174,9 @@ class Broadcaster:
             return False
 
         if not self.bot.is_configured:
-            broadcast_log.warning("Telegram bot not configured, cannot send admin notification")
+            broadcast_log.warning(
+                "Telegram bot not configured, cannot send admin notification"
+            )
             return False
 
         # Build message
@@ -229,7 +234,9 @@ class Broadcaster:
                 sub_name = sub.get("name", "")
 
                 if not service or not service_id:
-                    broadcast_log.debug(f"Skipping subscription {sub.get('id')} - no binding")
+                    broadcast_log.debug(
+                        f"Skipping subscription {sub.get('id')} - no binding"
+                    )
                     continue
 
                 task = self.send_notification(
@@ -254,8 +261,7 @@ class Broadcaster:
 
         # Run notifications with concurrency limit
         results = await asyncio.gather(
-            *[limited_task(t) for t in tasks],
-            return_exceptions=True
+            *[limited_task(t) for t in tasks], return_exceptions=True
         )
 
         # Process results
@@ -263,7 +269,7 @@ class Broadcaster:
         failed = 0
         by_service: dict[str, dict] = {}
 
-        for service, result in zip(task_info, results):
+        for service, result in zip(task_info, results, strict=True):
             if service not in by_service:
                 by_service[service] = {"total": 0, "success": 0, "failed": 0}
 
@@ -294,7 +300,7 @@ class Broadcaster:
 
 
 # Singleton instance
-_broadcaster: Optional[Broadcaster] = None
+_broadcaster: Broadcaster | None = None
 
 
 def get_broadcaster() -> Broadcaster:

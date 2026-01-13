@@ -4,8 +4,7 @@ Telegram Formatter Module.
 Formats messages for Telegram using HTML markup.
 """
 
-import os
-from typing import Any, Optional
+from typing import Any
 
 from src.channels.base import BaseFormatter
 from src.channels.commands.base import CommandResult
@@ -102,10 +101,12 @@ class TelegramFormatter(BaseFormatter):
         ]
 
         if web_url:
-            lines.extend([
-                "",
-                f'🔗 <a href="{web_url}">前往網站設定篩選條件</a>',
-            ])
+            lines.extend(
+                [
+                    "",
+                    f'🔗 <a href="{web_url}">前往網站設定篩選條件</a>',
+                ]
+            )
 
         return "\n".join(lines)
 
@@ -124,6 +125,7 @@ class TelegramFormatter(BaseFormatter):
         if created_at:
             try:
                 from datetime import datetime
+
                 dt = datetime.fromisoformat(created_at)
                 date_str = dt.strftime("%Y-%m-%d %H:%M")
             except Exception:
@@ -146,14 +148,16 @@ class TelegramFormatter(BaseFormatter):
 
     def _format_status_unbound(self, result: CommandResult) -> str:
         """Format unbound status message."""
-        return "\n".join([
-            "📊 綁定狀態",
-            "",
-            "❌ 尚未綁定帳號",
-            "",
-            "請先在網站取得綁定碼，然後使用：",
-            "/bind <code>",
-        ])
+        return "\n".join(
+            [
+                "📊 綁定狀態",
+                "",
+                "❌ 尚未綁定帳號",
+                "",
+                "請先在網站取得綁定碼，然後使用：",
+                "/bind <code>",
+            ]
+        )
 
     def _format_list_subscriptions(self, result: CommandResult) -> str:
         """Format subscription list message."""
@@ -180,7 +184,9 @@ class TelegramFormatter(BaseFormatter):
             kind = sub.get("kind")
             if kind:
                 if isinstance(kind, list):
-                    kind_str = "/".join(kind_names.get(k, "") for k in kind if k in kind_names)
+                    kind_str = "/".join(
+                        kind_names.get(k, "") for k in kind if k in kind_names
+                    )
                 else:
                     kind_str = kind_names.get(kind, "")
                 if kind_str:
@@ -199,11 +205,13 @@ class TelegramFormatter(BaseFormatter):
 
     def _format_list_empty(self, result: CommandResult) -> str:
         """Format empty list message."""
-        return "\n".join([
-            "📋 訂閱清單",
-            "",
-            "目前沒有任何訂閱",
-        ])
+        return "\n".join(
+            [
+                "📋 訂閱清單",
+                "",
+                "目前沒有任何訂閱",
+            ]
+        )
 
     def _format_manage(self, result: CommandResult) -> str:
         """Format manage message."""
@@ -226,48 +234,80 @@ class TelegramFormatter(BaseFormatter):
         Format a rental object for Telegram notification.
 
         Args:
-            obj: RentalObject to format
+            obj: RentalObject or dict (DBReadyData) to format
 
         Returns:
             HTML formatted object message
         """
-        if not isinstance(obj, RentalObject):
+        # Support both RentalObject and dict (DBReadyData)
+        if isinstance(obj, dict):
+            # Dict access for DBReadyData
+            title = obj.get("title", "")
+            price = obj.get("price", "")
+            kind_name = obj.get("kind_name", "")
+            area = obj.get("area")
+            layout_str = obj.get("layout_str", "")
+            floor_str = obj.get("floor_str", "")
+            address = obj.get("address", "")
+            surrounding_desc = obj.get("surrounding_desc", "")
+            surrounding_distance = obj.get("surrounding_distance")
+            tags = obj.get("tags", [])
+            url = obj.get("url", "")
+        elif isinstance(obj, RentalObject):
+            # Attribute access for RentalObject
+            title = obj.title
+            price = obj.price
+            kind_name = obj.kind_name
+            area = obj.area
+            layout_str = obj.layout_str
+            floor_str = obj.floor_name  # RentalObject uses floor_name
+            address = obj.address
+            surrounding_desc = obj.surrounding.desc if obj.surrounding else ""
+            surrounding_distance = obj.surrounding.distance if obj.surrounding else None
+            tags = obj.tags
+            url = obj.url
+        else:
             return str(obj)
 
         # Price formatting
-        price_display = f"${obj.price}/月" if obj.price else "價格洽詢"
+        if isinstance(price, int):
+            price_display = f"${price:,}/月" if price else "價格洽詢"
+        else:
+            price_display = f"${price}/月" if price else "價格洽詢"
 
         lines = [
-            f"🏠 <b>{self._escape_html(obj.title)}</b>",
+            f"🏠 <b>{self._escape_html(title)}</b>",
             "",
             f"💰 <b>{price_display}</b>",
         ]
 
-        if obj.kind_name:
-            lines.append(f"🏷️ {obj.kind_name}")
+        if kind_name:
+            lines.append(f"🏷️ {kind_name}")
 
-        if obj.area:
-            lines.append(f"📐 {obj.area} 坪")
+        if area:
+            lines.append(f"📐 {area} 坪")
 
-        if obj.layout_str:
-            lines.append(f"🛏️ {obj.layout_str}")
+        if layout_str:
+            lines.append(f"🛏️ {layout_str}")
 
-        if obj.floor_name:
-            lines.append(f"🏢 {obj.floor_name}")
+        if floor_str:
+            lines.append(f"🏢 {floor_str}")
 
-        if obj.address:
-            lines.append(f"📍 {self._escape_html(obj.address)}")
+        if address:
+            lines.append(f"📍 {self._escape_html(address)}")
 
-        if obj.surrounding and obj.surrounding.desc:
-            distance = obj.surrounding.distance or ""
-            lines.append(f"🚇 {obj.surrounding.desc} {distance}")
+        if surrounding_desc:
+            distance_str = (
+                f" {surrounding_distance}公尺" if surrounding_distance else ""
+            )
+            lines.append(f"🚇 {surrounding_desc}{distance_str}")
 
-        if obj.tags:
-            tags_str = " ".join(f"#{tag}" for tag in obj.tags)
+        if tags:
+            tags_str = " ".join(f"#{tag}" for tag in tags)
             lines.append(f"\n{tags_str}")
 
-        if obj.url:
-            lines.append(f'\n🔗 <a href="{obj.url}">查看詳情</a>')
+        if url:
+            lines.append(f'\n🔗 <a href="{url}">查看詳情</a>')
 
         return "\n".join(lines)
 
@@ -275,15 +315,11 @@ class TelegramFormatter(BaseFormatter):
         """Escape HTML special characters."""
         if not text:
             return ""
-        return (
-            text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 # Singleton instance
-_formatter: Optional[TelegramFormatter] = None
+_formatter: TelegramFormatter | None = None
 
 
 def get_telegram_formatter() -> TelegramFormatter:

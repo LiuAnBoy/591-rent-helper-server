@@ -1,19 +1,19 @@
 """User Providers module for multi-platform authentication and notifications."""
 
 from src.modules.providers.models import (
+    TelegramAuthData,
+    TelegramUser,
     UserProvider,
     UserProviderCreate,
     UserProviderResponse,
-    TelegramAuthData,
-    TelegramUser,
-)
-from src.modules.providers.repository import UserProviderRepository
-from src.modules.providers.telegram_auth import (
-    verify_init_data,
-    parse_init_data,
-    verify_and_parse_init_data,
 )
 from src.modules.providers.redis_sync import sync_user_subscriptions_to_redis
+from src.modules.providers.repository import UserProviderRepository
+from src.modules.providers.telegram_auth import (
+    parse_init_data,
+    verify_and_parse_init_data,
+    verify_init_data,
+)
 
 __all__ = [
     "UserProvider",

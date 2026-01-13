@@ -4,10 +4,8 @@ Rule parsing utilities.
 Parse gender restrictions and pet policies from rental rules.
 """
 
-from typing import Optional
 
-
-def parse_rule(rule: Optional[str]) -> dict:
+def parse_rule(rule: str | None) -> dict:
     """
     Parse gender restriction and pet policy from service.rule.
 
@@ -41,7 +39,7 @@ def parse_rule(rule: Optional[str]) -> dict:
         gender = "girl"
 
     # Parse pet policy (check negative first since "不可養寵物" contains "可養寵")
-    pet_allowed: Optional[bool] = None
+    pet_allowed: bool | None = None
     if "不可養" in rule or "禁養" in rule:
         pet_allowed = False
     elif "可養寵" in rule or "可以養" in rule:

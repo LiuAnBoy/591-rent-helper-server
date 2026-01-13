@@ -5,7 +5,6 @@ Manages Redis connection for caching objects, subscriptions, and seen IDs.
 """
 
 import json
-from typing import Optional
 
 import redis.asyncio as redis
 from loguru import logger
@@ -19,18 +18,20 @@ class RedisConnection:
     """Redis connection manager."""
 
     # TTL settings (seconds)
-    TTL_SEEN_IDS = 60 * 60 * 24 * 7      # 7 days
-    TTL_OBJECT = 60 * 60 * 24 * 3        # 3 days
-    TTL_INITIALIZED = 60 * 60 * 24 * 7   # 7 days
+    TTL_SEEN_IDS = 60 * 60 * 24 * 7  # 7 days
+    TTL_OBJECT = 60 * 60 * 24 * 3  # 3 days
+    TTL_INITIALIZED = 60 * 60 * 24 * 7  # 7 days
 
     def __init__(self):
         """Initialize Redis connection."""
         self.settings = get_settings().redis
-        self._client: Optional[redis.Redis] = None
+        self._client: redis.Redis | None = None
 
     async def connect(self) -> None:
         """Connect to Redis."""
-        redis_log.info(f"Connecting to Redis at {self.settings.host}:{self.settings.port}")
+        redis_log.info(
+            f"Connecting to Redis at {self.settings.host}:{self.settings.port}"
+        )
         self._client = redis.Redis(
             host=self.settings.host,
             port=self.settings.port,
@@ -176,7 +177,7 @@ class RedisConnection:
         await pipe.execute()
         redis_log.debug(f"Saved {len(objects)} objects to Redis")
 
-    async def get_object(self, object_id: int) -> Optional[dict]:
+    async def get_object(self, object_id: int) -> dict | None:
         """
         Get object data from Redis.
 
@@ -279,14 +280,16 @@ class RedisConnection:
         results = await pipe.execute()
 
         uninitialized = []
-        for sub, exists in zip(subscriptions, results):
+        for sub, exists in zip(subscriptions, results, strict=False):
             if not exists:
                 uninitialized.append(sub)
         return uninitialized
 
     # ========== Subscription Operations ==========
 
-    async def sync_subscription(self, subscription: dict, was_disabled: bool = False) -> None:
+    async def sync_subscription(
+        self, subscription: dict, was_disabled: bool = False
+    ) -> None:
         """
         Sync a subscription to Redis.
 
@@ -310,7 +313,9 @@ class RedisConnection:
             redis_log.info(f"Subscription {sub_id} re-enabled, will re-initialize")
 
         # Store subscription as JSON
-        await self.client.hset(key, sub_id, json.dumps(subscription, ensure_ascii=False, default=str))
+        await self.client.hset(
+            key, sub_id, json.dumps(subscription, ensure_ascii=False, default=str)
+        )
         redis_log.debug(f"Synced subscription {sub_id} to region {region}")
 
     async def sync_subscriptions(self, subscriptions: list[dict]) -> None:
@@ -329,7 +334,9 @@ class RedisConnection:
             region = sub["region"]
             if region not in by_region:
                 by_region[region] = {}
-            by_region[region][str(sub["id"])] = json.dumps(sub, ensure_ascii=False, default=str)
+            by_region[region][str(sub["id"])] = json.dumps(
+                sub, ensure_ascii=False, default=str
+            )
 
         # Clear and set for each region
         pipe = self.client.pipeline()
@@ -340,7 +347,9 @@ class RedisConnection:
                 pipe.hset(key, mapping=subs)
         await pipe.execute()
 
-        redis_log.info(f"Synced {len(subscriptions)} subscriptions across {len(by_region)} regions")
+        redis_log.info(
+            f"Synced {len(subscriptions)} subscriptions across {len(by_region)} regions"
+        )
 
     async def remove_subscription(self, region: int, subscription_id: int) -> None:
         """
@@ -389,7 +398,7 @@ class RedisConnection:
 
 
 # Singleton instance
-_redis: Optional[RedisConnection] = None
+_redis: RedisConnection | None = None
 
 
 async def get_redis() -> RedisConnection:

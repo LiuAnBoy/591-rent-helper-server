@@ -1,7 +1,5 @@
 """User Provider Repository for database operations."""
 
-from typing import Optional
-
 from asyncpg import Pool
 from loguru import logger
 
@@ -24,7 +22,7 @@ class UserProviderRepository:
 
     async def find_by_provider(
         self, provider: str, provider_id: str
-    ) -> Optional[UserProvider]:
+    ) -> UserProvider | None:
         """
         Find user provider by provider type and provider ID.
 
@@ -69,7 +67,7 @@ class UserProviderRepository:
         user_id: int,
         provider: str,
         provider_id: str,
-        provider_data: Optional[dict] = None,
+        provider_data: dict | None = None,
         notify_enabled: bool = True,
     ) -> UserProvider:
         """
@@ -101,12 +99,14 @@ class UserProviderRepository:
                 json.dumps(provider_data or {}),
                 notify_enabled,
             )
-            provider_log.info(f"Created provider binding: {provider}:{provider_id} -> user {user_id}")
+            provider_log.info(
+                f"Created provider binding: {provider}:{provider_id} -> user {user_id}"
+            )
             return UserProvider(**dict(row))
 
     async def update_notify_enabled(
         self, user_id: int, provider: str, enabled: bool
-    ) -> Optional[UserProvider]:
+    ) -> UserProvider | None:
         """
         Update notification enabled status.
 
@@ -127,13 +127,15 @@ class UserProviderRepository:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(query, user_id, provider, enabled)
             if row:
-                provider_log.info(f"Updated notify_enabled for user {user_id} provider {provider}: {enabled}")
+                provider_log.info(
+                    f"Updated notify_enabled for user {user_id} provider {provider}: {enabled}"
+                )
                 return UserProvider(**dict(row))
             return None
 
     async def update_provider_data(
         self, user_id: int, provider: str, provider_data: dict
-    ) -> Optional[UserProvider]:
+    ) -> UserProvider | None:
         """
         Update provider data.
 
@@ -154,7 +156,9 @@ class UserProviderRepository:
         RETURNING *
         """
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(query, user_id, provider, json.dumps(provider_data))
+            row = await conn.fetchrow(
+                query, user_id, provider, json.dumps(provider_data)
+            )
             if row:
                 return UserProvider(**dict(row))
             return None
@@ -178,7 +182,9 @@ class UserProviderRepository:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(query, user_id, provider)
             if row:
-                provider_log.info(f"Deleted provider binding: user {user_id} provider {provider}")
+                provider_log.info(
+                    f"Deleted provider binding: user {user_id} provider {provider}"
+                )
                 return True
             return False
 

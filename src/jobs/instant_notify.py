@@ -4,16 +4,19 @@ Instant Notification Module.
 Handles immediate notification when subscription is created or resumed.
 """
 
-import re
-from typing import Optional
-
 from loguru import logger
 
 from src.connections.postgres import get_postgres
 from src.connections.redis import get_redis
-from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
+from src.crawler.detail_fetcher import get_detail_fetcher
+from src.crawler.extractors import (
+    CombinedRawData,
+    combine_raw_data,
+)
+from src.crawler.list_fetcher import get_list_fetcher
 from src.jobs.broadcaster import get_broadcaster
-from src.modules.objects import ObjectRepository, RentalObject
+from src.modules.objects import ObjectRepository
+from src.utils import DBReadyData, transform_to_db_ready
 
 notify_log = logger.bind(module="Notify")
 
@@ -65,10 +68,14 @@ class InstantNotifier:
         sub_name = subscription.get("name", f"訂閱 {sub_id}")
 
         if not region:
-            notify_log.warning(f"Subscription {sub_id} has no region, skipping instant notify")
+            notify_log.warning(
+                f"Subscription {sub_id} has no region, skipping instant notify"
+            )
             return {"checked": 0, "matched": 0, "notified": 0, "error": "no_region"}
 
-        notify_log.info(f"Instant notify check for subscription {sub_id}, region {region}")
+        notify_log.info(
+            f"Instant notify check for subscription {sub_id}, region {region}"
+        )
 
         try:
             # Check if region has existing data
@@ -182,6 +189,7 @@ class InstantNotifier:
         Notify for multiple subscriptions in the same region.
 
         Fetches objects once and matches against all subscriptions.
+        Uses ETL pipeline for data processing.
 
         Args:
             region: Region code
@@ -198,38 +206,82 @@ class InstantNotifier:
         if has_data:
             # Region has data - fetch from DB
             repo = ObjectRepository(self._postgres.pool)
-            objects = await repo.get_latest_by_region(region, self.FETCH_COUNT)
+            db_objects = await repo.get_latest_by_region(region, self.FETCH_COUNT)
+            # DB returns list[dict], use directly as DBReadyData
+            objects: list[DBReadyData] = db_objects
             notify_log.info(f"Found {len(objects)} objects in DB for region {region}")
         else:
-            # Region has no data - need to crawl
-            fetcher = get_list_fetcher()
-            await fetcher.start()
+            # Region has no data - need to crawl using ETL
+            list_fetcher = get_list_fetcher()
+            detail_fetcher = get_detail_fetcher()
+            await list_fetcher.start()
+            await detail_fetcher.start()
 
             try:
-                fetched_objects = await fetcher.fetch_objects(
+                # Extract: Fetch list raw data
+                list_raw_items = await list_fetcher.fetch_objects_raw(
                     region=region,
                     sort="posttime_desc",
                     max_items=self.FETCH_COUNT,
                 )
-                notify_log.info(f"Crawled {len(fetched_objects)} objects for region {region}")
+                notify_log.info(
+                    f"Crawled {len(list_raw_items)} objects for region {region}"
+                )
 
-                # Save to DB
+                # Extract: Fetch detail raw data for all items
+                object_ids = [int(item["id"]) for item in list_raw_items]
+                details = await detail_fetcher.fetch_details_batch_raw(object_ids)
+
+                # Transform and Save
                 repo = ObjectRepository(self._postgres.pool)
+                objects: list[DBReadyData] = []
                 all_ids = set()
 
-                for fetched_obj in fetched_objects:
-                    all_ids.add(fetched_obj.id)
-                    await repo.save(fetched_obj)
+                for list_data in list_raw_items:
+                    object_id = int(list_data["id"])
+                    detail_data = details.get(object_id)
+
+                    # Combine raw data
+                    if detail_data:
+                        combined = combine_raw_data(list_data, detail_data)
+                    else:
+                        combined: CombinedRawData = {
+                            "id": list_data.get("id", ""),
+                            "url": list_data.get("url", ""),
+                            "title": list_data.get("title", ""),
+                            "price_raw": list_data.get("price_raw", ""),
+                            "tags": list_data.get("tags", []),
+                            "kind_name": list_data.get("kind_name", ""),
+                            "address_raw": list_data.get("address_raw", ""),
+                            "surrounding_type": None,
+                            "surrounding_raw": None,
+                            "region": str(region),
+                            "section": "",
+                            "kind": "",
+                            "floor_raw": list_data.get("floor_raw", ""),
+                            "layout_raw": list_data.get("layout_str", ""),
+                            "area_raw": list_data.get("area_raw", ""),
+                            "gender_raw": None,
+                            "shape_raw": None,
+                            "fitment_raw": None,
+                            "options": [],
+                        }
+
+                    # Transform to DB-ready format
+                    db_ready = transform_to_db_ready(combined)
+                    objects.append(db_ready)
+                    all_ids.add(db_ready["id"])
+
+                    # Save to DB
+                    await repo.save_db_ready(db_ready)
 
                 # Add to seen_ids
                 if all_ids:
                     await self._redis.add_seen_ids(region, all_ids)
 
-                # Convert to dict for matching
-                objects = [self._rental_object_to_dict(o) for o in fetched_objects]
-
             finally:
-                await fetcher.close()
+                await list_fetcher.close()
+                await detail_fetcher.close()
 
         # Match objects against ALL subscriptions for this region
         total_matched = 0
@@ -249,16 +301,18 @@ class InstantNotifier:
             if matched_objects and service_id:
                 for obj in matched_objects:
                     try:
-                        rental_obj = self._dict_to_rental_object(obj)
+                        # Send DBReadyData directly (broadcaster now supports dict)
                         await self._broadcaster.send_notification(
                             service=service,
                             service_id=service_id,
-                            obj=rental_obj,
+                            obj=obj,
                             subscription_name=sub_name,
                         )
                         total_notified += 1
                     except Exception as e:
-                        notify_log.error(f"Failed to notify for object {obj.get('id')}: {e}")
+                        notify_log.error(
+                            f"Failed to notify for object {obj.get('id')}: {e}"
+                        )
 
             notify_log.debug(
                 f"Subscription {sub.get('id')}: matched {len(matched_objects)} objects"
@@ -301,34 +355,74 @@ class InstantNotifier:
         sub_name: str,
     ) -> dict:
         """
-        Crawl new data and notify.
+        Crawl new data and notify using ETL pipeline.
         """
         region = subscription["region"]
 
-        # Initialize fetcher
-        fetcher = get_list_fetcher()
-        await fetcher.start()
+        # Initialize fetchers
+        list_fetcher = get_list_fetcher()
+        detail_fetcher = get_detail_fetcher()
+        await list_fetcher.start()
+        await detail_fetcher.start()
 
         try:
-            # Crawl objects
-            fetched_objects = await fetcher.fetch_objects(
+            # Extract: Fetch list raw data
+            list_raw_items = await list_fetcher.fetch_objects_raw(
                 region=region,
                 sort="posttime_desc",
                 max_items=self.FETCH_COUNT,
             )
+            notify_log.info(
+                f"Crawled {len(list_raw_items)} objects for region {region}"
+            )
 
-            notify_log.info(f"Crawled {len(fetched_objects)} objects for region {region}")
+            # Extract: Fetch detail raw data for all items
+            object_ids = [int(item["id"]) for item in list_raw_items]
+            details = await detail_fetcher.fetch_details_batch_raw(object_ids)
 
-            # Save to DB and filter new ones
+            # Transform, Save, and filter new ones
             repo = ObjectRepository(self._postgres.pool)
-            new_objects = []
+            new_objects: list[DBReadyData] = []
             all_ids = set()
 
-            for fetched_obj in fetched_objects:
-                all_ids.add(fetched_obj.id)
-                is_new = await repo.save(fetched_obj)
+            for list_data in list_raw_items:
+                object_id = int(list_data["id"])
+                detail_data = details.get(object_id)
+
+                # Combine raw data
+                if detail_data:
+                    combined = combine_raw_data(list_data, detail_data)
+                else:
+                    combined: CombinedRawData = {
+                        "id": list_data.get("id", ""),
+                        "url": list_data.get("url", ""),
+                        "title": list_data.get("title", ""),
+                        "price_raw": list_data.get("price_raw", ""),
+                        "tags": list_data.get("tags", []),
+                        "kind_name": list_data.get("kind_name", ""),
+                        "address_raw": list_data.get("address_raw", ""),
+                        "surrounding_type": None,
+                        "surrounding_raw": None,
+                        "region": str(region),
+                        "section": "",
+                        "kind": "",
+                        "floor_raw": list_data.get("floor_raw", ""),
+                        "layout_raw": list_data.get("layout_str", ""),
+                        "area_raw": list_data.get("area_raw", ""),
+                        "gender_raw": None,
+                        "shape_raw": None,
+                        "fitment_raw": None,
+                        "options": [],
+                    }
+
+                # Transform to DB-ready format
+                db_ready = transform_to_db_ready(combined)
+                all_ids.add(db_ready["id"])
+
+                # Save to DB and check if new
+                is_new = await repo.save_db_ready(db_ready)
                 if is_new:
-                    new_objects.append(fetched_obj)
+                    new_objects.append(db_ready)
 
             # Add to seen_ids
             if all_ids:
@@ -337,59 +431,62 @@ class InstantNotifier:
             notify_log.info(f"Saved {len(new_objects)} new objects to DB")
 
             # Match and notify (only new objects)
-            # Convert RentalObject to dict for matching
-            new_objects_dict = [self._rental_object_to_dict(obj) for obj in new_objects]
-
             return await self._match_and_notify(
-                new_objects_dict, subscription, service, service_id, sub_name,
-                original_objects=new_objects
+                new_objects, subscription, service, service_id, sub_name
             )
 
         finally:
-            await fetcher.close()
+            await list_fetcher.close()
+            await detail_fetcher.close()
 
     async def _match_and_notify(
         self,
-        objects: list,
+        objects: list[DBReadyData],
         subscription: dict,
         service: str,
         service_id: str,
         sub_name: str,
-        original_objects: list = None,
     ) -> dict:
         """
         Match objects against subscription and notify.
+
+        Args:
+            objects: List of DBReadyData dicts
+            subscription: Subscription dict
+            service: Notification service
+            service_id: Service user ID
+            sub_name: Subscription name for display
+
+        Returns:
+            Result dict with checked/matched/notified counts
         """
         matched = []
-        matched_indices = []
 
-        for idx, obj in enumerate(objects):
+        for obj in objects:
             if self._matches_subscription(obj, subscription):
                 matched.append(obj)
-                matched_indices.append(idx)
 
-        notify_log.info(f"Matched {len(matched)} objects for subscription {subscription.get('id')}")
+        notify_log.info(
+            f"Matched {len(matched)} objects for subscription {subscription.get('id')}"
+        )
 
         # Send notifications
         notified = 0
         if matched and service_id:
-            for idx, obj in zip(matched_indices, matched):
+            for obj in matched:
                 try:
-                    # Get RentalObject for notification
-                    if original_objects and idx < len(original_objects):
-                        rental_obj = original_objects[idx]
-                    else:
-                        rental_obj = self._dict_to_rental_object(obj)
-
+                    # Send DBReadyData directly (broadcaster now supports dict)
                     await self._broadcaster.send_notification(
                         service=service,
                         service_id=service_id,
-                        obj=rental_obj,
+                        obj=obj,
                         subscription_name=sub_name,
                     )
                     notified += 1
                 except Exception as e:
-                    notify_log.error(f"Failed to notify for object {obj.get('id')}: {e}")
+                    notify_log.error(
+                        f"Failed to notify for object {obj.get('id')}: {e}"
+                    )
 
         return {
             "checked": len(objects),
@@ -473,42 +570,9 @@ class InstantNotifier:
 
         return True
 
-    def _rental_object_to_dict(self, obj: RentalObject) -> dict:
-        """Convert RentalObject to dict for matching."""
-        return {
-            "id": obj.id,
-            "price": obj.price,
-            "kind": obj.kind,
-            "area": obj.area,
-            "layout_str": obj.layout_str,
-            "section": obj.section,
-            "is_rooftop": getattr(obj, "is_rooftop", False),
-        }
-
-    def _dict_to_rental_object(self, obj: dict) -> RentalObject:
-        """Convert dict back to RentalObject for notification."""
-        return RentalObject(
-            id=obj.get("id", 0),
-            title=obj.get("title", ""),
-            url=obj.get("url", ""),
-            region=obj.get("region"),
-            section=obj.get("section"),
-            address=obj.get("address"),
-            kind=obj.get("kind"),
-            kind_name=obj.get("kind_name"),
-            price=str(obj.get("price", "")) if obj.get("price") else None,
-            price_unit=obj.get("price_unit"),
-            price_per=obj.get("price_per"),
-            area=obj.get("area"),
-            layout_str=obj.get("layout_str"),
-            floor_name=obj.get("floor_str"),
-            tags=obj.get("tags", []),
-            surrounding=None,
-        )
-
 
 # Singleton instance
-_notifier: Optional[InstantNotifier] = None
+_notifier: InstantNotifier | None = None
 
 
 def get_instant_notifier() -> InstantNotifier:

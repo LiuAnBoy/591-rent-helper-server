@@ -7,8 +7,8 @@ Handles various notification channels (Telegram, Line, etc.)
 from src.channels.base import BaseChannel, BaseFormatter
 from src.channels.telegram import (
     TelegramBot,
-    TelegramHandler,
     TelegramFormatter,
+    TelegramHandler,
     get_telegram_formatter,
 )
 

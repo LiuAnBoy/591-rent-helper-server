@@ -1,9 +1,5 @@
 """Telegram webhook routes."""
 
-import os
-from typing import Optional
-
-from asyncpg import Pool
 from fastapi import APIRouter, Request
 from loguru import logger
 from telegram import Update
@@ -17,11 +13,11 @@ webhook_log = logger.bind(module="Webhook")
 router = APIRouter(prefix="/webhook/telegram", tags=["Telegram"])
 
 # Telegram bot and handler instances
-_bot: Optional[TelegramBot] = None
-_handler: Optional[TelegramHandler] = None
+_bot: TelegramBot | None = None
+_handler: TelegramHandler | None = None
 
 
-async def init_bot() -> Optional[TelegramBot]:
+async def init_bot() -> TelegramBot | None:
     """Initialize Telegram bot and handler."""
     global _bot, _handler
     settings = get_settings()
@@ -51,12 +47,12 @@ async def init_bot() -> Optional[TelegramBot]:
     return _bot
 
 
-def get_bot() -> Optional[TelegramBot]:
+def get_bot() -> TelegramBot | None:
     """Get bot instance."""
     return _bot
 
 
-def get_handler() -> Optional[TelegramHandler]:
+def get_handler() -> TelegramHandler | None:
     """Get handler instance."""
     return _handler
 
@@ -112,7 +108,7 @@ async def setup_telegram_webhook() -> dict:
 async def auto_setup_webhook() -> bool:
     """
     Auto setup webhook on startup.
-    
+
     Returns:
         True if setup successful, False otherwise
     """
@@ -124,7 +120,9 @@ async def auto_setup_webhook() -> bool:
     webhook_url = settings.telegram.webhook_url
 
     if not webhook_url:
-        webhook_log.warning("Cannot auto-setup webhook: TELEGRAM_WEBHOOK_URL not configured")
+        webhook_log.warning(
+            "Cannot auto-setup webhook: TELEGRAM_WEBHOOK_URL not configured"
+        )
         return False
 
     full_url = f"{webhook_url}/webhook/telegram"

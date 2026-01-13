@@ -5,16 +5,14 @@ Primary: BS4 (fast, lightweight)
 Fallback: Playwright (stable, reliable)
 """
 
-from typing import Optional
-
 from loguru import logger
 
+from src.crawler.extractors import ListRawData
 from src.crawler.list_fetcher_bs4 import ListFetcherBs4, get_bs4_fetcher
 from src.crawler.list_fetcher_playwright import (
     ListFetcherPlaywright,
     get_playwright_fetcher,
 )
-from src.modules.objects.models import RentalObject
 
 fetcher_log = logger.bind(module="ListFetcher")
 
@@ -45,8 +43,8 @@ class ListFetcher:
         self._headless = headless
         self._bs4_timeout = bs4_timeout
 
-        self._bs4_fetcher: Optional[ListFetcherBs4] = None
-        self._playwright_fetcher: Optional[ListFetcherPlaywright] = None
+        self._bs4_fetcher: ListFetcherBs4 | None = None
+        self._playwright_fetcher: ListFetcherPlaywright | None = None
         self._playwright_started = False
 
     async def start(self) -> None:
@@ -77,90 +75,66 @@ class ListFetcher:
             await self._playwright_fetcher.start()
             self._playwright_started = True
 
-    async def fetch_objects(
+    async def fetch_objects_raw(
         self,
-        region: int = 1,
-        section: Optional[int] = None,
-        kind: Optional[int] = None,
-        price_min: Optional[int] = None,
-        price_max: Optional[int] = None,
-        other: Optional[list[str]] = None,
+        region: int,
         sort: str = "posttime_desc",
-        max_pages: Optional[int] = None,
-        max_items: Optional[int] = None,
-    ) -> list[RentalObject]:
+        max_items: int | None = None,
+    ) -> list[ListRawData]:
         """
-        Fetch rental objects with automatic fallback.
+        Fetch rental objects from list page, returning raw data.
 
-        1. Try BS4 (up to max_retries times)
-        2. If all fail, fallback to Playwright
+        Uses BS4 as primary method.
+        Falls back to Playwright when BS4 fails 3 times.
 
         Args:
             region: City code (1=Taipei, 3=New Taipei)
-            section: District code
-            kind: Property type (1=整層, 2=獨立套房, 3=分租套房, 4=雅房)
-            price_min: Minimum price
-            price_max: Maximum price
-            other: Feature tags (e.g., ["pet", "near_subway"])
-            sort: Sort order (posttime_desc=最新)
-            max_pages: Maximum pages to fetch
-            max_items: Maximum items to return
+            sort: Sort order (default: posttime_desc)
+            max_items: Maximum number of items to return
 
         Returns:
-            List of RentalObject objects
+            List of ListRawData or empty list if failed
         """
         if self._bs4_fetcher is None:
             await self.start()
 
-        # Try BS4 first (up to max_retries)
+        # Try bs4 up to max_retries times
         for attempt in range(self._max_retries):
-            try:
-                result = await self._bs4_fetcher.fetch_objects(
-                    region=region,
-                    section=section,
-                    kind=kind,
-                    price_min=price_min,
-                    price_max=price_max,
-                    other=other,
-                    sort=sort,
-                    max_pages=max_pages,
-                    max_items=max_items,
+            items = await self._bs4_fetcher.fetch_objects_raw(
+                region=region,
+                sort=sort,
+                max_items=max_items,
+            )
+            if items:
+                fetcher_log.info(
+                    f"BS4 raw fetched {len(items)} objects (attempt {attempt + 1})"
                 )
-                if result:
-                    fetcher_log.info(f"BS4 succeeded: {len(result)} objects")
-                    return result
-                fetcher_log.warning(
-                    f"BS4 attempt {attempt + 1}/{self._max_retries} returned empty"
-                )
-            except Exception as e:
-                fetcher_log.warning(
-                    f"BS4 attempt {attempt + 1}/{self._max_retries} failed: {e}"
-                )
+                return items
+
+            fetcher_log.warning(
+                f"BS4 raw attempt {attempt + 1}/{self._max_retries} returned no items"
+            )
 
         # Fallback to Playwright
-        fetcher_log.warning("BS4 failed, falling back to Playwright...")
+        fetcher_log.warning(
+            "BS4 raw failed all attempts, falling back to Playwright..."
+        )
         await self._ensure_playwright()
 
-        result = await self._playwright_fetcher.fetch_objects(
+        result = await self._playwright_fetcher.fetch_objects_raw(
             region=region,
-            section=section,
-            kind=kind,
-            price_min=price_min,
-            price_max=price_max,
-            other=other,
             sort=sort,
-            max_pages=max_pages,
             max_items=max_items,
         )
 
         if not result:
-            fetcher_log.error("Both BS4 and Playwright failed to fetch objects")
+            fetcher_log.error("Both BS4 and Playwright failed to fetch raw objects")
 
         return result
 
 
 # Singleton instance
-_list_fetcher: Optional[ListFetcher] = None
+_list_fetcher: ListFetcher | None = None
 
 
 def get_list_fetcher(

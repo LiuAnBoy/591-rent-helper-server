@@ -56,7 +56,9 @@ async def run_checker_job(skip_night: bool = False) -> None:
         is_night = crawler.night_start_hour <= current_hour < crawler.night_end_hour
 
         if is_night:
-            scheduler_log.debug(f"Skipping daytime job during night hours (hour={current_hour})")
+            scheduler_log.debug(
+                f"Skipping daytime job during night hours (hour={current_hour})"
+            )
             return
 
     try:
@@ -132,9 +134,7 @@ def setup_jobs() -> None:
         return ",".join(str(m) for m in minutes)
 
     night_minutes = get_minute_expr(crawler.night_interval_minutes)
-    night_hours = list(
-        range(crawler.night_start_hour, crawler.night_end_hour)
-    )
+    night_hours = list(range(crawler.night_start_hour, crawler.night_end_hour))
     night_hours_expr = ",".join(str(h) for h in night_hours)
 
     _scheduler.add_job(

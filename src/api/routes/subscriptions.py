@@ -7,18 +7,18 @@ from src.api.dependencies import CurrentUser
 
 subs_log = logger.bind(module="Subscriptions")
 
-from src.connections.postgres import get_postgres
-from src.connections.redis import get_redis
-from src.modules.subscriptions import (
+from src.connections.postgres import get_postgres  # noqa: E402
+from src.connections.redis import get_redis  # noqa: E402
+from src.modules.providers import sync_user_subscriptions_to_redis  # noqa: E402
+from src.modules.subscriptions import (  # noqa: E402
     SubscriptionCreate,
-    SubscriptionUpdate,
-    SubscriptionResponse,
     SubscriptionListResponse,
     SubscriptionRepository,
+    SubscriptionResponse,
+    SubscriptionUpdate,
     parse_floor_ranges,
 )
-from src.modules.users import UserRepository
-from src.modules.providers import sync_user_subscriptions_to_redis
+from src.modules.users import UserRepository  # noqa: E402
 
 router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 
@@ -42,7 +42,6 @@ async def remove_subscription_from_redis(
         retry_delay: Initial delay between retries (exponential backoff)
     """
     import asyncio
-    from loguru import logger
 
     for attempt in range(max_retries):
         try:
@@ -51,7 +50,7 @@ async def remove_subscription_from_redis(
             return
         except Exception as e:
             if attempt < max_retries - 1:
-                wait_time = retry_delay * (2 ** attempt)
+                wait_time = retry_delay * (2**attempt)
                 subs_log.warning(
                     f"Redis remove failed (attempt {attempt + 1}/{max_retries}): {e}. "
                     f"Retrying in {wait_time}s..."
@@ -78,6 +77,7 @@ async def create_subscription(
         data: Subscription data
     """
     import asyncio
+
     from src.modules.providers import UserProviderRepository
 
     repo = await get_repository()
@@ -89,10 +89,7 @@ async def create_subscription(
     max_subs = await user_repo.get_role_limit(current_user.role)
 
     if count >= max_subs:
-        raise HTTPException(
-            status_code=400,
-            detail=f"已達訂閱數量上限 ({max_subs})"
-        )
+        raise HTTPException(status_code=400, detail=f"已達訂閱數量上限 ({max_subs})")
 
     try:
         # Convert floor list to floor_min/floor_max for storage
@@ -105,25 +102,21 @@ async def create_subscription(
         elif "floor" in create_data:
             create_data.pop("floor")
 
-        subscription = await repo.create(
-            user_id=current_user.id,
-            data=create_data
-        )
+        subscription = await repo.create(user_id=current_user.id, data=create_data)
 
         # Sync all user subscriptions to Redis (includes provider info)
         await sync_user_subscriptions_to_redis(current_user.id)
 
-        subs_log.info(f"Created subscription {subscription['id']} for user {current_user.id}")
+        subs_log.info(
+            f"Created subscription {subscription['id']} for user {current_user.id}"
+        )
 
         # Trigger instant notification in background
         provider_repo = UserProviderRepository(postgres.pool)
         providers = await provider_repo.get_by_user(current_user.id)
 
         # Find active provider with notifications enabled
-        active_provider = next(
-            (p for p in providers if p.notify_enabled),
-            None
-        )
+        active_provider = next((p for p in providers if p.notify_enabled), None)
 
         if active_provider:
             from src.jobs.instant_notify import notify_for_new_subscription
@@ -136,12 +129,14 @@ async def create_subscription(
                     service_id=active_provider.provider_id,
                 )
             )
-            subs_log.info(f"Triggered instant notify for subscription {subscription['id']}")
+            subs_log.info(
+                f"Triggered instant notify for subscription {subscription['id']}"
+            )
 
         return {"success": True}
     except Exception as e:
         subs_log.error(f"Failed to create subscription: {e}")
-        raise HTTPException(status_code=500, detail="建立訂閱失敗")
+        raise HTTPException(status_code=500, detail="建立訂閱失敗") from None
 
 
 @router.get("", response_model=SubscriptionListResponse)
@@ -159,10 +154,7 @@ async def list_subscriptions(
     """
     repo = await get_repository()
     subscriptions = await repo.get_by_user(current_user.id, enabled_only)
-    return {
-        "total": len(subscriptions),
-        "items": subscriptions
-    }
+    return {"total": len(subscriptions), "items": subscriptions}
 
 
 @router.get("/{subscription_id}", response_model=SubscriptionResponse)
@@ -228,7 +220,7 @@ async def update_subscription(
         update_data["floor_max"] = floor_max
 
     try:
-        subscription = await repo.update(subscription_id, update_data)
+        await repo.update(subscription_id, update_data)
 
         # Sync all user subscriptions to Redis (includes provider info)
         await sync_user_subscriptions_to_redis(current_user.id)
@@ -237,7 +229,7 @@ async def update_subscription(
         return {"success": True}
     except Exception as e:
         subs_log.error(f"Failed to update subscription: {e}")
-        raise HTTPException(status_code=500, detail="更新訂閱失敗")
+        raise HTTPException(status_code=500, detail="更新訂閱失敗") from None
 
 
 @router.delete("/{subscription_id}")
@@ -273,7 +265,7 @@ async def delete_subscription(
         return {"success": True}
     except Exception as e:
         subs_log.error(f"Failed to delete subscription: {e}")
-        raise HTTPException(status_code=500, detail="刪除訂閱失敗")
+        raise HTTPException(status_code=500, detail="刪除訂閱失敗") from None
 
 
 @router.patch("/{subscription_id}/toggle")
@@ -290,6 +282,7 @@ async def toggle_subscription(
         subscription_id: Subscription ID
     """
     import asyncio
+
     from src.modules.providers import UserProviderRepository
 
     repo = await get_repository()
@@ -304,12 +297,11 @@ async def toggle_subscription(
         raise HTTPException(status_code=403, detail="無權限修改此訂閱")
 
     # Toggle
-    was_disabled = not existing["enabled"]  # True if currently disabled, will be enabled
+    was_disabled = not existing[
+        "enabled"
+    ]  # True if currently disabled, will be enabled
     new_status = not existing["enabled"]
-    subscription = await repo.update(
-        subscription_id,
-        {"enabled": new_status}
-    )
+    subscription = await repo.update(subscription_id, {"enabled": new_status})
 
     # Sync all user subscriptions to Redis (includes provider info)
     await sync_user_subscriptions_to_redis(current_user.id)
@@ -319,10 +311,7 @@ async def toggle_subscription(
         provider_repo = UserProviderRepository(postgres.pool)
         providers = await provider_repo.get_by_user(current_user.id)
 
-        active_provider = next(
-            (p for p in providers if p.notify_enabled),
-            None
-        )
+        active_provider = next((p for p in providers if p.notify_enabled), None)
 
         if active_provider:
             from src.jobs.instant_notify import notify_for_new_subscription
@@ -335,7 +324,9 @@ async def toggle_subscription(
                     service_id=active_provider.provider_id,
                 )
             )
-            subs_log.info(f"Triggered instant notify for re-enabled subscription {subscription_id}")
+            subs_log.info(
+                f"Triggered instant notify for re-enabled subscription {subscription_id}"
+            )
 
     subs_log.info(f"Toggled subscription {subscription_id} to {new_status}")
     return {"success": True}

@@ -5,10 +5,12 @@ Reliable fallback for fetching rental detail pages when bs4 fails.
 """
 
 import asyncio
-from typing import Optional
 
 from loguru import logger
-from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright
+
+from src.crawler.extractors import DetailRawData
+from src.crawler.extractors.detail_extractor_nuxt import extract_detail_raw_from_nuxt
 
 fetcher_log = logger.bind(module="Playwright")
 
@@ -31,11 +33,11 @@ class DetailFetcherPlaywright:
         self.max_workers = max_workers
         self.delay = delay
         self._playwright = None
-        self._browser: Optional[Browser] = None
-        self._context: Optional[BrowserContext] = None
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
         self._pages: list[Page] = []
         self._page_locks: list[asyncio.Lock] = []
-        self._semaphore: Optional[asyncio.Semaphore] = None
+        self._semaphore: asyncio.Semaphore | None = None
 
     async def start(self) -> None:
         """Start browser and create worker pages."""
@@ -90,7 +92,7 @@ class DetailFetcherPlaywright:
         # Fallback to first page (should not happen with semaphore)
         return 0, self._pages[0]
 
-    async def _extract_nuxt_data(self, page: Page) -> Optional[dict]:
+    async def _extract_nuxt_data(self, page: Page) -> dict | None:
         """Extract data from window.__NUXT__.data."""
         try:
             data = await page.evaluate("window.__NUXT__?.data")
@@ -102,8 +104,8 @@ class DetailFetcherPlaywright:
     async def fetch_detail(
         self,
         object_id: int,
-        page: Optional[Page] = None,
-    ) -> Optional[dict]:
+        page: Page | None = None,
+    ) -> dict | None:
         """
         Fetch detail page data for a single rental object.
 
@@ -131,7 +133,9 @@ class DetailFetcherPlaywright:
         url = f"https://rent.591.com.tw/{object_id}"
 
         try:
-            response = await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+            response = await page.goto(
+                url, wait_until="domcontentloaded", timeout=15000
+            )
 
             # Check response status
             if response:
@@ -159,7 +163,7 @@ class DetailFetcherPlaywright:
 
             # Find detail data in NUXT data
             detail_data = None
-            for key, val in nuxt_data.items():
+            for _key, val in nuxt_data.items():
                 if isinstance(val, dict) and "data" in val:
                     data = val["data"]
                     if isinstance(data, dict) and "service" in data:
@@ -183,11 +187,88 @@ class DetailFetcherPlaywright:
             error_msg = str(e)
             # Classify error types
             if "net::ERR_ABORTED" in error_msg:
-                fetcher_log.debug(f"Object {object_id} navigation aborted (likely removed)")
+                fetcher_log.debug(
+                    f"Object {object_id} navigation aborted (likely removed)"
+                )
             elif "Timeout" in error_msg:
                 fetcher_log.warning(f"Object {object_id} timeout - network slow")
             else:
                 fetcher_log.error(f"Object {object_id} fetch failed: {e}")
+            return None
+
+    async def fetch_detail_raw(
+        self,
+        object_id: int,
+        page: Page | None = None,
+    ) -> DetailRawData | None:
+        """
+        Fetch detail page and return raw data (no transformation).
+
+        Uses the NUXT extractor for consistent raw data extraction.
+
+        Args:
+            object_id: The rental object ID
+            page: Optional page to use (for parallel fetching)
+
+        Returns:
+            DetailRawData or None if failed
+        """
+        if not self._browser:
+            await self.start()
+
+        # Use provided page or first available
+        if page is None:
+            page = self._pages[0]
+
+        url = f"https://rent.591.com.tw/{object_id}"
+
+        try:
+            response = await page.goto(
+                url, wait_until="domcontentloaded", timeout=15000
+            )
+
+            # Check response status
+            if response:
+                status = response.status
+                if status == 404:
+                    fetcher_log.debug(f"Object {object_id} not found (404 - removed)")
+                    return None
+                if status >= 400:
+                    fetcher_log.warning(f"Object {object_id} returned HTTP {status}")
+                    return None
+
+            # Check if redirected (listing removed -> redirects to list page)
+            current_url = page.url
+            if f"/{object_id}" not in current_url:
+                fetcher_log.debug(f"Object {object_id} redirected (removed)")
+                return None
+
+            await page.wait_for_timeout(500)
+
+            # Extract NUXT data
+            nuxt_data = await self._extract_nuxt_data(page)
+            if not nuxt_data:
+                fetcher_log.warning(f"No NUXT data found for object {object_id}")
+                return None
+
+            # Use NUXT extractor
+            result = extract_detail_raw_from_nuxt(nuxt_data, object_id)
+
+            if result:
+                fetcher_log.debug(f"Parsed detail raw {object_id}")
+
+            return result
+
+        except Exception as e:
+            error_msg = str(e)
+            if "net::ERR_ABORTED" in error_msg:
+                fetcher_log.debug(
+                    f"Object {object_id} navigation aborted (likely removed)"
+                )
+            elif "Timeout" in error_msg:
+                fetcher_log.warning(f"Object {object_id} timeout - network slow")
+            else:
+                fetcher_log.error(f"Object {object_id} fetch_detail_raw failed: {e}")
             return None
 
     async def _fetch_with_worker(
@@ -195,7 +276,7 @@ class DetailFetcherPlaywright:
         object_id: int,
         worker_id: int,
         progress: dict,
-    ) -> tuple[int, Optional[dict]]:
+    ) -> tuple[int, dict | None]:
         """
         Fetch detail using a specific worker.
 
@@ -249,7 +330,7 @@ class DetailFetcherPlaywright:
         progress = {"completed": 0, "total": len(object_ids)}
 
         # Create tasks with worker assignment
-        async def fetch_with_semaphore(object_id: int) -> tuple[int, Optional[dict]]:
+        async def fetch_with_semaphore(object_id: int) -> tuple[int, dict | None]:
             async with self._semaphore:
                 # Find available worker
                 worker_id = None
@@ -281,9 +362,102 @@ class DetailFetcherPlaywright:
 
         return results
 
+    async def _fetch_raw_with_worker(
+        self,
+        object_id: int,
+        worker_id: int,
+        progress: dict,
+    ) -> tuple[int, DetailRawData | None]:
+        """
+        Fetch detail raw data using a specific worker.
+
+        Args:
+            object_id: Object ID to fetch
+            worker_id: Worker index
+            progress: Shared progress dict for logging
+
+        Returns:
+            Tuple of (object_id, DetailRawData)
+        """
+        async with self._page_locks[worker_id]:
+            # Rate limiting
+            if self.delay > 0:
+                await asyncio.sleep(self.delay)
+
+            progress["completed"] += 1
+            fetcher_log.info(
+                f"[Worker {worker_id + 1}] Fetching detail raw "
+                f"{progress['completed']}/{progress['total']}: {object_id}"
+            )
+
+            result = await self.fetch_detail_raw(object_id, self._pages[worker_id])
+            return object_id, result
+
+    async def fetch_details_batch_raw(
+        self,
+        object_ids: list[int],
+    ) -> dict[int, DetailRawData]:
+        """
+        Fetch detail raw data for multiple objects in parallel.
+
+        Args:
+            object_ids: List of object IDs to fetch
+
+        Returns:
+            Dict mapping object_id to DetailRawData
+        """
+        if not object_ids:
+            return {}
+
+        if not self._browser:
+            await self.start()
+
+        fetcher_log.info(
+            f"Fetching {len(object_ids)} detail pages (raw) "
+            f"with {self.max_workers} Playwright workers..."
+        )
+
+        results: dict[int, DetailRawData] = {}
+        progress = {"completed": 0, "total": len(object_ids)}
+
+        # Create tasks with worker assignment
+        async def fetch_with_semaphore(
+            object_id: int,
+        ) -> tuple[int, DetailRawData | None]:
+            async with self._semaphore:
+                # Find available worker
+                worker_id = None
+                for i, lock in enumerate(self._page_locks):
+                    if not lock.locked():
+                        worker_id = i
+                        break
+                if worker_id is None:
+                    worker_id = 0  # Fallback
+
+                return await self._fetch_raw_with_worker(object_id, worker_id, progress)
+
+        # Execute all tasks concurrently (limited by semaphore)
+        tasks = [fetch_with_semaphore(oid) for oid in object_ids]
+        task_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
+        for result in task_results:
+            if isinstance(result, Exception):
+                fetcher_log.error(f"Task failed: {result}")
+                continue
+            obj_id, detail = result
+            if detail:
+                results[obj_id] = detail
+
+        fetcher_log.info(
+            f"Playwright fetched {len(results)}/{len(object_ids)} detail pages (raw)"
+        )
+
+        return results
+
 
 # Singleton instance
-_playwright_fetcher: Optional[DetailFetcherPlaywright] = None
+_playwright_fetcher: DetailFetcherPlaywright | None = None
 
 
 def get_playwright_fetcher(

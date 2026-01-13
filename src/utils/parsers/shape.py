@@ -4,8 +4,6 @@ Shape (building type) parsing utilities.
 Parse building type from rental data.
 """
 
-from typing import Optional
-
 # Building type mapping
 # 1 = apartment (walk-up)
 # 2 = elevator building
@@ -20,7 +18,7 @@ SHAPE_MAPPING = {
 }
 
 
-def parse_shape(text: str) -> Optional[int]:
+def parse_shape(text: str) -> int | None:
     """
     Parse building type (shape) from page text.
 
@@ -40,7 +38,7 @@ def parse_shape(text: str) -> Optional[int]:
     return None
 
 
-def get_shape_name(shape_code: Optional[int]) -> Optional[str]:
+def get_shape_name(shape_code: int | None) -> str | None:
     """
     Get shape name from code.
 

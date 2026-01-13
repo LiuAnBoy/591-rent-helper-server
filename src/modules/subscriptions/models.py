@@ -6,7 +6,6 @@ Pydantic models for subscription CRUD operations.
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 from pydantic import BaseModel, Field, computed_field, field_validator
 
@@ -90,55 +89,65 @@ class SubscriptionBase(BaseModel):
 
     # Location
     region: int = Field(..., description="縣市代碼 (1=台北市, 3=新北市)")
-    section: Optional[list[int]] = Field(None, description="區域代碼 (可多選)")
+    section: list[int] | None = Field(None, description="區域代碼 (可多選)")
 
     # Property type
-    kind: Optional[list[int]] = Field(None, description="物件類型 (1=整層, 2=獨立套房, 3=分租套房, 4=雅房)")
+    kind: list[int] | None = Field(
+        None, description="物件類型 (1=整層, 2=獨立套房, 3=分租套房, 4=雅房)"
+    )
 
     # Price range
-    price_min: Optional[int] = Field(None, ge=0, description="最低租金")
-    price_max: Optional[int] = Field(None, ge=0, description="最高租金")
+    price_min: int | None = Field(None, ge=0, description="最低租金")
+    price_max: int | None = Field(None, ge=0, description="最高租金")
 
     # Layout
-    layout: Optional[list[int]] = Field(None, description="格局 (1=1房, 2=2房, 3=3房, 4=4房以上)")
+    layout: list[int] | None = Field(
+        None, description="格局 (1=1房, 2=2房, 3=3房, 4=4房以上)"
+    )
 
     # Building type
-    shape: Optional[list[int]] = Field(None, description="建物型態 (1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅)")
+    shape: list[int] | None = Field(
+        None, description="建物型態 (1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅)"
+    )
 
     # Area range
-    area_min: Optional[Decimal] = Field(None, ge=0, description="最小坪數")
-    area_max: Optional[Decimal] = Field(None, ge=0, description="最大坪數")
+    area_min: Decimal | None = Field(None, ge=0, description="最小坪數")
+    area_max: Decimal | None = Field(None, ge=0, description="最大坪數")
 
     # Floor (存 floor_min/floor_max)
-    floor_min: Optional[int] = Field(None, description="最低樓層 (0=頂加, 負數=地下)")
-    floor_max: Optional[int] = Field(None, description="最高樓層")
+    floor_min: int | None = Field(None, description="最低樓層 (0=頂加, 負數=地下)")
+    floor_max: int | None = Field(None, description="最高樓層")
 
     # Bathroom
-    bathroom: Optional[list[int]] = Field(None, description="衛浴數量 (1, 2, 3, 4=4+)")
+    bathroom: list[int] | None = Field(None, description="衛浴數量 (1, 2, 3, 4=4+)")
 
     # Other (features)
-    other: Optional[list[str]] = Field(
+    other: list[str] | None = Field(
         None,
-        description="特色 (newPost, near_subway, pet, cook, cartplace, lift, balcony_1, lease...)"
+        description="特色 (newPost, near_subway, pet, cook, cartplace, lift, balcony_1, lease...)",
     )
 
     # Options/Equipment
-    options: Optional[list[str]] = Field(
+    options: list[str] | None = Field(
         None,
-        description="設備 (cold, washer, icebox, hotwater, naturalgas, broadband, bed)"
+        description="設備 (cold, washer, icebox, hotwater, naturalgas, broadband, bed)",
     )
 
     # Fitment
-    fitment: Optional[list[int]] = Field(None, description="裝潢 (99=新裝潢, 3=中檔, 4=高檔)")
+    fitment: list[int] | None = Field(
+        None, description="裝潢 (99=新裝潢, 3=中檔, 4=高檔)"
+    )
 
     # Notice fields (replaced from notice: list[str])
     exclude_rooftop: bool = Field(False, description="排除頂樓加蓋")
-    gender: Optional[str] = Field(None, description="性別限制 (boy=限男, girl=限女, None=不限)")
+    gender: str | None = Field(
+        None, description="性別限制 (boy=限男, girl=限女, None=不限)"
+    )
     pet_required: bool = Field(False, description="需要可養寵物")
 
     @field_validator("gender")
     @classmethod
-    def validate_gender(cls, v: Optional[str]) -> Optional[str]:
+    def validate_gender(cls, v: str | None) -> str | None:
         """Validate gender field only allows 'boy', 'girl', or None."""
         if v is not None and v not in ["boy", "girl"]:
             raise ValueError("gender must be 'boy', 'girl', or None")
@@ -149,30 +158,30 @@ class SubscriptionCreate(SubscriptionBase):
     """Model for creating a subscription."""
 
     # 前端傳 floor 陣列，API 轉成 floor_min/floor_max 存
-    floor: Optional[list[str]] = Field(None, description="樓層 (1, 2_6, 6_12, 12_)")
+    floor: list[str] | None = Field(None, description="樓層 (1, 2_6, 6_12, 12_)")
 
 
 class SubscriptionUpdate(BaseModel):
     """Model for updating a subscription (all fields optional)."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    region: Optional[int] = None
-    section: Optional[list[int]] = None
-    kind: Optional[list[int]] = None
-    price_min: Optional[int] = Field(None, ge=0)
-    price_max: Optional[int] = Field(None, ge=0)
-    layout: Optional[list[int]] = None
-    shape: Optional[list[int]] = None
-    area_min: Optional[Decimal] = Field(None, ge=0)
-    area_max: Optional[Decimal] = Field(None, ge=0)
-    floor: Optional[list[str]] = None
-    bathroom: Optional[list[int]] = None
-    other: Optional[list[str]] = None
-    options: Optional[list[str]] = None
-    fitment: Optional[list[int]] = None
-    exclude_rooftop: Optional[bool] = None
-    gender: Optional[str] = None
-    pet_required: Optional[bool] = None
+    name: str | None = Field(None, min_length=1, max_length=200)
+    region: int | None = None
+    section: list[int] | None = None
+    kind: list[int] | None = None
+    price_min: int | None = Field(None, ge=0)
+    price_max: int | None = Field(None, ge=0)
+    layout: list[int] | None = None
+    shape: list[int] | None = None
+    area_min: Decimal | None = Field(None, ge=0)
+    area_max: Decimal | None = Field(None, ge=0)
+    floor: list[str] | None = None
+    bathroom: list[int] | None = None
+    other: list[str] | None = None
+    options: list[str] | None = None
+    fitment: list[int] | None = None
+    exclude_rooftop: bool | None = None
+    gender: str | None = None
+    pet_required: bool | None = None
     # Note: `enabled` is not allowed here. Use PATCH .../toggle instead.
 
 

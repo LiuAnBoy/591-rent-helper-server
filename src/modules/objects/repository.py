@@ -5,12 +5,12 @@ Data access layer for rental object operations.
 """
 
 import re
-from typing import Optional
 
 from asyncpg import Pool
 from loguru import logger
 
 from src.modules.objects.models import RentalObject
+from src.utils import DBReadyData
 from src.utils.mappings import convert_other_to_codes
 from src.utils.parsers import parse_floor
 
@@ -79,41 +79,110 @@ class ObjectRepository:
 
             # Use object values (merged from detail) or fallback to parsed values
             final_floor = obj.floor if obj.floor is not None else floor
-            final_total_floor = obj.total_floor if obj.total_floor is not None else total_floor
+            final_total_floor = (
+                obj.total_floor if obj.total_floor is not None else total_floor
+            )
             final_is_rooftop = obj.is_rooftop if obj.is_rooftop else is_rooftop
             final_bathroom = obj.bathroom if obj.bathroom is not None else None
 
             result = await conn.fetchrow(
                 query,
-                obj.id,                                                    # $1
-                obj.title,                                                 # $2
-                obj.url,                                                   # $3
-                obj.region,                                                # $4
-                obj.section,                                               # $5
-                obj.address,                                               # $6
-                obj.kind,                                                  # $7
-                obj.kind_name,                                             # $8
-                price_int,                                                 # $9
-                obj.price_unit,                                            # $10
-                obj.price_per,                                             # $11
-                layout_num,                                                # $12
-                obj.layout_str,                                            # $13
-                obj.shape,                                                 # $14 shape (from detail)
-                obj.area,                                                  # $15
-                final_floor,                                               # $16 floor (INTEGER)
-                floor_str,                                                 # $17 floor_str
-                final_total_floor,                                         # $18 total_floor
-                final_bathroom,                                            # $19 bathroom (from detail)
-                convert_other_to_codes(obj.tags or []),                    # $20 other
-                obj.options or [],                                         # $21 options (from detail)
-                obj.fitment,                                               # $22 fitment (from detail)
-                obj.tags or [],                                            # $23 tags
-                obj.surrounding.type if obj.surrounding else None,         # $24
-                obj.surrounding.desc if obj.surrounding else None,         # $25
-                obj.surrounding.distance if obj.surrounding else None,     # $26
-                final_is_rooftop,                                          # $27 is_rooftop
-                obj.gender or "all",                                       # $28 gender (from detail)
-                obj.pet_allowed,                                           # $29 pet_allowed (from detail)
+                obj.id,  # $1
+                obj.title,  # $2
+                obj.url,  # $3
+                obj.region,  # $4
+                obj.section,  # $5
+                obj.address,  # $6
+                obj.kind,  # $7
+                obj.kind_name,  # $8
+                price_int,  # $9
+                obj.price_unit,  # $10
+                obj.price_per,  # $11
+                layout_num,  # $12
+                obj.layout_str,  # $13
+                obj.shape,  # $14 shape (from detail)
+                obj.area,  # $15
+                final_floor,  # $16 floor (INTEGER)
+                floor_str,  # $17 floor_str
+                final_total_floor,  # $18 total_floor
+                final_bathroom,  # $19 bathroom (from detail)
+                convert_other_to_codes(obj.tags or []),  # $20 other
+                obj.options or [],  # $21 options (from detail)
+                obj.fitment,  # $22 fitment (from detail)
+                obj.tags or [],  # $23 tags
+                obj.surrounding.type if obj.surrounding else None,  # $24
+                obj.surrounding.desc if obj.surrounding else None,  # $25
+                obj.surrounding.distance if obj.surrounding else None,  # $26
+                final_is_rooftop,  # $27 is_rooftop
+                obj.gender or "all",  # $28 gender (from detail)
+                obj.pet_allowed,  # $29 pet_allowed (from detail)
+            )
+            return result["inserted"]
+
+    async def save_db_ready(self, data: DBReadyData) -> bool:
+        """
+        Save DBReadyData directly to database (no transformation).
+
+        This is the ETL-optimized save method that accepts pre-transformed data.
+        All transformations should be done in the Transform phase before calling this.
+
+        Args:
+            data: DBReadyData with all fields already transformed
+
+        Returns:
+            True if inserted (new), False if already exists
+        """
+        query = """
+        INSERT INTO objects (
+            id, title, url, region, section, address,
+            kind, kind_name, price, price_unit,
+            layout, layout_str, shape, area,
+            floor, floor_str, total_floor, bathroom, other, options,
+            fitment, tags,
+            surrounding_type, surrounding_desc, surrounding_distance,
+            is_rooftop, gender, pet_allowed
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+            $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+            $21, $22, $23, $24, $25, $26, $27, $28
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            last_seen_at = NOW(),
+            updated_at = NOW()
+        RETURNING (xmax = 0) AS inserted
+        """
+
+        async with self._pool.acquire() as conn:
+            result = await conn.fetchrow(
+                query,
+                data["id"],  # $1
+                data["title"],  # $2
+                data["url"],  # $3
+                data["region"],  # $4
+                data["section"],  # $5
+                data["address"],  # $6
+                data["kind"],  # $7
+                data["kind_name"],  # $8
+                data["price"],  # $9  (already int)
+                data["price_unit"],  # $10
+                data["layout"],  # $11 (already int or None)
+                data["layout_str"],  # $12
+                data["shape"],  # $13
+                data["area"],  # $14
+                data["floor"],  # $15 (already int or None)
+                data["floor_str"],  # $16
+                data["total_floor"],  # $17
+                data["bathroom"],  # $18
+                data["other"],  # $19 (already list[str] codes)
+                data["options"],  # $20
+                data["fitment"],  # $21
+                data["tags"],  # $22
+                data["surrounding_type"],  # $23
+                data["surrounding_desc"],  # $24
+                data["surrounding_distance"],  # $25
+                data["is_rooftop"],  # $26
+                data["gender"],  # $27
+                data["pet_allowed"],  # $28
             )
             return result["inserted"]
 
@@ -140,7 +209,7 @@ class ObjectRepository:
         objects_log.info(f"Saved objects: {new_count} new, {updated_count} updated")
         return new_count, updated_count
 
-    async def get_by_id(self, object_id: int) -> Optional[dict]:
+    async def get_by_id(self, object_id: int) -> dict | None:
         """
         Get object by ID.
 

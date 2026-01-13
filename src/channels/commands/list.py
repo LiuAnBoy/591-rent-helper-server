@@ -4,15 +4,13 @@ List Command Module.
 Handles the /list command - shows user's subscriptions.
 """
 
-from typing import Optional
-
 from loguru import logger
 
 from src.channels.commands.base import BaseCommand, CommandResult
 
 cmd_log = logger.bind(module="BotCommand")
-from src.modules.providers import UserProviderRepository
-from src.modules.subscriptions import SubscriptionRepository
+from src.modules.providers import UserProviderRepository  # noqa: E402
+from src.modules.subscriptions import SubscriptionRepository  # noqa: E402
 
 
 class ListCommand(BaseCommand):
@@ -26,7 +24,7 @@ class ListCommand(BaseCommand):
         self,
         user_id: str,
         args: str,
-        context: Optional[dict] = None,
+        context: dict | None = None,
     ) -> CommandResult:
         """
         Execute /list command.
@@ -53,9 +51,7 @@ class ListCommand(BaseCommand):
         )
 
         if not provider:
-            return CommandResult.fail(
-                "尚未綁定帳號。請點擊「開啟管理頁面」按鈕登入。"
-            )
+            return CommandResult.fail("尚未綁定帳號。請點擊「開啟管理頁面」按鈕登入。")
 
         # Get subscriptions
         sub_repo = SubscriptionRepository(self._pool)

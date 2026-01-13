@@ -1,9 +1,7 @@
 """User Provider models for multi-platform authentication."""
 
-from datetime import datetime
-from typing import Optional
-
 import json
+from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -16,7 +14,9 @@ class UserProvider(BaseModel):
     provider: str = Field(..., description="Provider type: telegram, line, discord")
     provider_id: str = Field(..., description="Provider user ID")
     provider_data: dict = Field(default_factory=dict, description="Extra provider data")
-    notify_enabled: bool = Field(default=True, description="Whether to receive notifications")
+    notify_enabled: bool = Field(
+        default=True, description="Whether to receive notifications"
+    )
     created_at: datetime
     updated_at: datetime
 
@@ -44,11 +44,11 @@ class TelegramUser(BaseModel):
 
     id: int = Field(..., description="Telegram user ID")
     first_name: str = Field(..., description="User's first name")
-    last_name: Optional[str] = Field(None, description="User's last name")
-    username: Optional[str] = Field(None, description="Telegram username")
-    language_code: Optional[str] = Field(None, description="User's language code")
-    photo_url: Optional[str] = Field(None, description="User's profile photo URL")
-    is_premium: Optional[bool] = Field(None, description="Is Telegram Premium user")
+    last_name: str | None = Field(None, description="User's last name")
+    username: str | None = Field(None, description="Telegram username")
+    language_code: str | None = Field(None, description="User's language code")
+    photo_url: str | None = Field(None, description="User's profile photo URL")
+    is_premium: bool | None = Field(None, description="Is Telegram Premium user")
 
     @property
     def display_name(self) -> str:
@@ -64,9 +64,9 @@ class TelegramAuthData(BaseModel):
     user: TelegramUser
     auth_date: int = Field(..., description="Unix timestamp of authentication")
     hash: str = Field(..., description="Hash for verification")
-    query_id: Optional[str] = Field(None, description="Query ID for inline mode")
-    chat_type: Optional[str] = Field(None, description="Chat type")
-    chat_instance: Optional[str] = Field(None, description="Chat instance")
+    query_id: str | None = Field(None, description="Query ID for inline mode")
+    chat_type: str | None = Field(None, description="Chat type")
+    chat_instance: str | None = Field(None, description="Chat instance")
 
     def is_expired(self, max_age_seconds: int = 3600) -> bool:
         """

@@ -6,12 +6,12 @@ Fallback: Playwright (stable, reliable)
 """
 
 import asyncio
-from typing import Optional
 
 from loguru import logger
 
 from src.crawler.detail_fetcher_bs4 import DetailFetcherBs4
 from src.crawler.detail_fetcher_playwright import DetailFetcherPlaywright
+from src.crawler.extractors import DetailRawData
 
 fetcher_log = logger.bind(module="DetailFetcher")
 
@@ -22,15 +22,6 @@ class DetailFetcher:
 
     Uses bs4 as primary method (fast, lightweight).
     Falls back to Playwright when bs4 fails (stable, reliable).
-
-    Both fetchers return the same field format:
-        - gender: "boy" | "girl" | "all"
-        - pet_allowed: True | False | None
-        - shape: int | None (1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅)
-        - options: list[str] (equipment codes)
-        - fitment: int | None (99=新裝潢, 3=中檔, 4=高檔)
-        - section: int | None (行政區代碼)
-        - kind: int | None (類型代碼)
     """
 
     def __init__(
@@ -51,8 +42,8 @@ class DetailFetcher:
         self._bs4_max_workers = bs4_max_workers
         self._playwright_max_workers = playwright_max_workers
 
-        self._bs4_fetcher: Optional[DetailFetcherBs4] = None
-        self._playwright_fetcher: Optional[DetailFetcherPlaywright] = None
+        self._bs4_fetcher: DetailFetcherBs4 | None = None
+        self._playwright_fetcher: DetailFetcherPlaywright | None = None
         self._playwright_started = False
 
     async def start(self) -> None:
@@ -85,9 +76,9 @@ class DetailFetcher:
             await self._playwright_fetcher.start()
             self._playwright_started = True
 
-    async def fetch_detail(self, object_id: int) -> Optional[dict]:
+    async def fetch_detail_raw(self, object_id: int) -> DetailRawData | None:
         """
-        Fetch detail with automatic fallback.
+        Fetch detail with automatic fallback, returning raw data.
 
         1. Try bs4 (up to max_retries)
         2. If all fail, fallback to Playwright
@@ -96,24 +87,24 @@ class DetailFetcher:
             object_id: The rental object ID
 
         Returns:
-            Dict with parsed detail fields or None if all methods failed
+            DetailRawData or None if all methods failed
         """
         if self._bs4_fetcher is None:
             await self.start()
 
         # Try bs4 first
         for attempt in range(self._max_retries):
-            result = await self._bs4_fetcher.fetch_detail(object_id)
+            result = await self._bs4_fetcher.fetch_detail_raw(object_id)
             if result:
                 # Check if we got meaningful data (tags should not be empty)
                 if result.get("tags"):
                     return result
                 fetcher_log.warning(
-                    f"bs4 attempt {attempt + 1}/{self._max_retries} returned empty tags for {object_id}"
+                    f"bs4 raw attempt {attempt + 1}/{self._max_retries} returned empty tags for {object_id}"
                 )
             else:
                 fetcher_log.warning(
-                    f"bs4 attempt {attempt + 1}/{self._max_retries} failed for {object_id}"
+                    f"bs4 raw attempt {attempt + 1}/{self._max_retries} failed for {object_id}"
                 )
 
             # Wait 1 second before retry
@@ -121,19 +112,19 @@ class DetailFetcher:
                 await asyncio.sleep(1)
 
         # Fallback to Playwright
-        fetcher_log.debug(f"BS4 failed, falling back to Playwright for {object_id}")
+        fetcher_log.debug(f"BS4 raw failed, falling back to Playwright for {object_id}")
         await self._ensure_playwright()
-        result = await self._playwright_fetcher.fetch_detail(object_id)
+        result = await self._playwright_fetcher.fetch_detail_raw(object_id)
 
         # Playwright fetcher already logs specific failure reason
         return result
 
-    async def fetch_details_batch(
+    async def fetch_details_batch_raw(
         self,
         object_ids: list[int],
-    ) -> dict[int, dict]:
+    ) -> dict[int, DetailRawData]:
         """
-        Fetch multiple details with automatic fallback.
+        Fetch multiple details with automatic fallback, returning raw data.
 
         1. Try bs4 for all objects
         2. For failed objects, fallback to Playwright
@@ -142,7 +133,7 @@ class DetailFetcher:
             object_ids: List of object IDs to fetch
 
         Returns:
-            Dict mapping object_id to detail data
+            Dict mapping object_id to DetailRawData
         """
         if not object_ids:
             return {}
@@ -150,19 +141,19 @@ class DetailFetcher:
         if self._bs4_fetcher is None:
             await self.start()
 
-        fetcher_log.info(f"Fetching {len(object_ids)} detail pages...")
+        fetcher_log.info(f"Fetching {len(object_ids)} detail pages (raw)...")
 
-        # Use unified fetch_detail for each object (has retry + fallback)
-        tasks = [self.fetch_detail(oid) for oid in object_ids]
+        # Use unified fetch_detail_raw for each object (has retry + fallback)
+        tasks = [self.fetch_detail_raw(oid) for oid in object_ids]
         results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Process results
-        results = {}
+        results: dict[int, DetailRawData] = {}
         error_count = 0
         skipped_count = 0
-        for oid, result in zip(object_ids, results_list):
+        for oid, result in zip(object_ids, results_list, strict=False):
             if isinstance(result, Exception):
-                fetcher_log.error(f"Fetch exception for {oid}: {result}")
+                fetcher_log.error(f"Fetch raw exception for {oid}: {result}")
                 error_count += 1
             elif result:
                 results[oid] = result
@@ -171,7 +162,7 @@ class DetailFetcher:
                 skipped_count += 1
 
         fetcher_log.info(
-            f"Fetched {len(results)}/{len(object_ids)} detail pages "
+            f"Fetched {len(results)}/{len(object_ids)} detail pages (raw) "
             f"({skipped_count} unavailable, {error_count} errors)"
         )
 
@@ -179,7 +170,7 @@ class DetailFetcher:
 
 
 # Singleton instance
-_detail_fetcher: Optional[DetailFetcher] = None
+_detail_fetcher: DetailFetcher | None = None
 
 
 def get_detail_fetcher(

@@ -13,11 +13,11 @@ from dotenv import load_dotenv
 # Load .env file at startup
 load_dotenv()
 
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from loguru import logger
-from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi import FastAPI, Request  # noqa: E402
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from loguru import logger  # noqa: E402
+from starlette.exceptions import HTTPException as StarletteHTTPException  # noqa: E402
 
 
 class InterceptHandler(logging.Handler):
@@ -58,7 +58,7 @@ for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
 
 log = logger.bind(module="App")
 
-from src.api.routes import (
+from src.api.routes import (  # noqa: E402
     auth_router,
     bindings_router,
     checker_router,
@@ -67,9 +67,9 @@ from src.api.routes import (
     telegram_router,
     users_router,
 )
-from src.api.routes.telegram import init_bot, auto_setup_webhook
-from src.jobs import scheduler
-from src.middleware import setup_middleware
+from src.api.routes.telegram import auto_setup_webhook, init_bot  # noqa: E402
+from src.jobs import scheduler  # noqa: E402
+from src.middleware import setup_middleware  # noqa: E402
 
 
 async def sync_subscriptions_on_startup():

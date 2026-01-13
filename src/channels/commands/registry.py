@@ -4,18 +4,17 @@ Command Registry Module.
 Central registry for all available commands.
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.channels.commands.base import BaseCommand
 
 # Import commands (will be populated after command files are created)
-from src.channels.commands.start import StartCommand
+from src.channels.commands.command import CommandListCommand
 from src.channels.commands.help import HelpCommand
 from src.channels.commands.list import ListCommand
-from src.channels.commands.command import CommandListCommand
 from src.channels.commands.notify import PauseCommand, ResumeCommand
-
+from src.channels.commands.start import StartCommand
 
 # Command registry: name -> command class
 # Includes aliases (e.g., Chinese names)
@@ -38,7 +37,7 @@ COMMANDS: dict[str, type["BaseCommand"]] = {
 }
 
 
-def get_command(name: str) -> Optional[type["BaseCommand"]]:
+def get_command(name: str) -> type["BaseCommand"] | None:
     """
     Get command class by name.
 
@@ -51,7 +50,7 @@ def get_command(name: str) -> Optional[type["BaseCommand"]]:
     return COMMANDS.get(name.lower())
 
 
-def parse_command(text: str) -> Optional[tuple[str, str]]:
+def parse_command(text: str) -> tuple[str, str] | None:
     """
     Parse text to extract command and arguments.
 

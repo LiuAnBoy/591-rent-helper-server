@@ -4,8 +4,6 @@ Subscription Repository.
 Data access layer for subscription operations.
 """
 
-from typing import Optional
-
 from asyncpg import Pool
 
 
@@ -71,7 +69,7 @@ class SubscriptionRepository:
             )
             return dict(row)
 
-    async def get_by_id(self, subscription_id: int) -> Optional[dict]:
+    async def get_by_id(self, subscription_id: int) -> dict | None:
         """
         Get subscription by ID.
 
@@ -86,9 +84,7 @@ class SubscriptionRepository:
             row = await conn.fetchrow(query, subscription_id)
             return dict(row) if row else None
 
-    async def get_by_user(
-        self, user_id: int, enabled_only: bool = False
-    ) -> list[dict]:
+    async def get_by_user(self, user_id: int, enabled_only: bool = False) -> list[dict]:
         """
         Get all subscriptions for a user.
 
@@ -108,9 +104,7 @@ class SubscriptionRepository:
             rows = await conn.fetch(query, user_id)
             return [dict(row) for row in rows]
 
-    async def update(
-        self, subscription_id: int, data: dict
-    ) -> Optional[dict]:
+    async def update(self, subscription_id: int, data: dict) -> dict | None:
         """
         Update a subscription.
 
@@ -185,12 +179,12 @@ class SubscriptionRepository:
             List of all enabled subscription records with service and service_id
         """
         query = """
-        SELECT 
+        SELECT
             s.*,
             up.provider AS service,
             up.provider_id AS service_id
         FROM subscriptions s
-        LEFT JOIN user_providers up 
+        LEFT JOIN user_providers up
             ON s.user_id = up.user_id AND up.notify_enabled = TRUE
         WHERE s.enabled = TRUE
         ORDER BY s.region, s.created_at DESC
@@ -225,7 +219,9 @@ class SubscriptionRepository:
         if enabled_only:
             query = "SELECT * FROM subscriptions WHERE region = $1 AND enabled = TRUE ORDER BY created_at DESC"
         else:
-            query = "SELECT * FROM subscriptions WHERE region = $1 ORDER BY created_at DESC"
+            query = (
+                "SELECT * FROM subscriptions WHERE region = $1 ORDER BY created_at DESC"
+            )
 
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(query, region)

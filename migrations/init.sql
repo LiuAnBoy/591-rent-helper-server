@@ -219,9 +219,9 @@ CREATE TABLE IF NOT EXISTS objects (
     tags            TEXT[],                     -- 原始 591 tags
 
     -- ========== 周邊資訊 ==========
-    surrounding_type     VARCHAR(20),           -- 類型 (metro, bus...)
-    surrounding_desc     VARCHAR(100),          -- 描述
-    surrounding_distance VARCHAR(50),           -- 距離
+    surrounding_type     VARCHAR(20),           -- 類型 (metro, bus)
+    surrounding_desc     VARCHAR(100),          -- 站名 (信義安和站)
+    surrounding_distance INTEGER,               -- 距離 (公尺)
 
     -- ========== 時間戳記 ==========
     first_seen_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW(),  -- 首次爬到的時間
@@ -249,6 +249,7 @@ CREATE INDEX IF NOT EXISTS idx_objects_options ON objects USING GIN(options);
 CREATE INDEX IF NOT EXISTS idx_objects_is_rooftop ON objects(is_rooftop);
 CREATE INDEX IF NOT EXISTS idx_objects_gender ON objects(gender);
 CREATE INDEX IF NOT EXISTS idx_objects_pet_allowed ON objects(pet_allowed);
+CREATE INDEX IF NOT EXISTS idx_objects_surrounding_distance ON objects(surrounding_distance);
 CREATE INDEX IF NOT EXISTS idx_objects_first_seen_at ON objects(first_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_objects_is_active ON objects(is_active);
 CREATE INDEX IF NOT EXISTS idx_objects_region_created_at ON objects(region, created_at DESC);

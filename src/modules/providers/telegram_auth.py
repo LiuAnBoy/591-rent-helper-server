@@ -3,7 +3,6 @@
 import hashlib
 import hmac
 import json
-from typing import Optional
 from urllib.parse import parse_qs, parse_qsl, unquote
 
 from loguru import logger
@@ -43,16 +42,12 @@ def verify_init_data(init_data: str, bot_token: str) -> bool:
 
         # Calculate secret key: HMAC-SHA256("WebAppData", bot_token)
         secret_key = hmac.new(
-            b"WebAppData",
-            bot_token.encode(),
-            hashlib.sha256
+            b"WebAppData", bot_token.encode(), hashlib.sha256
         ).digest()
 
         # Calculate hash: HMAC-SHA256(secret_key, data_check_string)
         calculated_hash = hmac.new(
-            secret_key,
-            data_check_string.encode(),
-            hashlib.sha256
+            secret_key, data_check_string.encode(), hashlib.sha256
         ).hexdigest()
 
         is_valid = calculated_hash == received_hash
@@ -67,7 +62,7 @@ def verify_init_data(init_data: str, bot_token: str) -> bool:
         return False
 
 
-def parse_init_data(init_data: str) -> Optional[TelegramAuthData]:
+def parse_init_data(init_data: str) -> TelegramAuthData | None:
     """
     Parse Telegram Web App initData into structured data.
 
@@ -108,10 +103,8 @@ def parse_init_data(init_data: str) -> Optional[TelegramAuthData]:
 
 
 def verify_and_parse_init_data(
-    init_data: str,
-    bot_token: str,
-    max_age_seconds: int = 3600
-) -> Optional[TelegramAuthData]:
+    init_data: str, bot_token: str, max_age_seconds: int = 3600
+) -> TelegramAuthData | None:
     """
     Verify and parse Telegram Web App initData.
 

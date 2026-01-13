@@ -6,15 +6,14 @@ Shared dependencies for API routes (authentication, etc.)
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Header
-from loguru import logger
+from fastapi import Depends, Header, HTTPException
 
 from src.connections.postgres import get_postgres
 from src.modules.users import User, UserRepository
 
 
 async def get_current_user(
-    authorization: Annotated[str | None, Header()] = None
+    authorization: Annotated[str | None, Header()] = None,
 ) -> User:
     """
     Get current authenticated user from JWT token.
@@ -70,10 +69,7 @@ async def get_current_user(
         )
 
     if not user.enabled:
-        raise HTTPException(
-            status_code=403,
-            detail="帳號已被停用"
-        )
+        raise HTTPException(status_code=403, detail="帳號已被停用")
 
     return user
 

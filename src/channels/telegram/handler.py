@@ -4,8 +4,6 @@ Telegram Handler Module.
 Routes incoming Telegram updates to appropriate command handlers.
 """
 
-from typing import Optional
-
 import os
 
 from asyncpg import Pool
@@ -13,9 +11,9 @@ from loguru import logger
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ParseMode
 
+from src.channels.commands import COMMANDS, BaseCommand, parse_command
 from src.channels.telegram.bot import TelegramBot
 from src.channels.telegram.formatter import TelegramFormatter, get_telegram_formatter
-from src.channels.commands import COMMANDS, BaseCommand, parse_command
 
 tg_log = logger.bind(module="TelegramBot")
 
@@ -26,7 +24,7 @@ class TelegramHandler:
     # Service identifier for this channel
     SERVICE_NAME = "telegram"
 
-    def __init__(self, bot: TelegramBot, pool: Optional[Pool] = None):
+    def __init__(self, bot: TelegramBot, pool: Pool | None = None):
         """
         Initialize handler.
 
@@ -80,7 +78,9 @@ class TelegramHandler:
         else:
             return await self._handle_text(chat_id, text)
 
-    async def _execute_command(self, chat_id: int, command_name: str, args: str) -> bool:
+    async def _execute_command(
+        self, chat_id: int, command_name: str, args: str
+    ) -> bool:
         """
         Execute a command.
 
@@ -117,9 +117,7 @@ class TelegramHandler:
                 return True
             except Exception as e:
                 tg_log.error(f"Command {command_name} error: {e}")
-                await self._bot.send_message(
-                    chat_id, "❌ 指令執行失敗，請稍後再試"
-                )
+                await self._bot.send_message(chat_id, "❌ 指令執行失敗，請稍後再試")
                 return False
         else:
             await self._bot.send_message(
@@ -128,7 +126,7 @@ class TelegramHandler:
             )
             return True
 
-    def _get_reply_markup(self, title: str) -> Optional[InlineKeyboardMarkup]:
+    def _get_reply_markup(self, title: str) -> InlineKeyboardMarkup | None:
         """
         Get inline keyboard markup for specific command results.
 
@@ -144,21 +142,23 @@ class TelegramHandler:
 
         # Commands that need a button
         if title == "welcome":
-            keyboard = [[
-                InlineKeyboardButton(
-                    "📱 開啟管理頁面",
-                    web_app=WebAppInfo(url=web_app_url)
-                )
-            ]]
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        "📱 開啟管理頁面", web_app=WebAppInfo(url=web_app_url)
+                    )
+                ]
+            ]
             return InlineKeyboardMarkup(keyboard)
 
         if title in ("help", "list_subscriptions", "list_empty"):
-            keyboard = [[
-                InlineKeyboardButton(
-                    "📱 開啟管理頁面",
-                    web_app=WebAppInfo(url=web_app_url)
-                )
-            ]]
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        "📱 開啟管理頁面", web_app=WebAppInfo(url=web_app_url)
+                    )
+                ]
+            ]
             return InlineKeyboardMarkup(keyboard)
 
         return None

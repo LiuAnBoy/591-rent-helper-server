@@ -5,7 +5,6 @@ Pydantic models for user authentication and profile.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -14,8 +13,8 @@ class User(BaseModel):
     """User model from database."""
 
     id: int
-    name: Optional[str] = None
-    email: Optional[str] = None
+    name: str | None = None
+    email: str | None = None
     role: str = "user"
     enabled: bool = True
     created_at: datetime
@@ -27,7 +26,7 @@ class UserWithBindings(BaseModel):
 
     id: int
     email: str = ""
-    name: Optional[str] = None
+    name: str | None = None
     role: str
     enabled: bool
     created_at: datetime

@@ -5,10 +5,9 @@ Parse room/hall/bathroom layout from rental data.
 """
 
 import re
-from typing import Optional
 
 
-def parse_layout_str(text: str) -> Optional[str]:
+def parse_layout_str(text: str) -> str | None:
     """
     Extract layout string from page text.
 
@@ -26,7 +25,7 @@ def parse_layout_str(text: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def parse_layout_num(layout_str: Optional[str]) -> Optional[int]:
+def parse_layout_num(layout_str: str | None) -> int | None:
     """
     Extract room count from layout string.
 
@@ -43,7 +42,7 @@ def parse_layout_num(layout_str: Optional[str]) -> Optional[int]:
     return int(match.group(1)) if match else None
 
 
-def parse_bathroom_num(layout_str: Optional[str]) -> Optional[int]:
+def parse_bathroom_num(layout_str: str | None) -> int | None:
     """
     Extract bathroom count from layout string.
 

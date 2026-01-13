@@ -1,11 +1,11 @@
 """Crawler modules."""
 
-from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
-from src.crawler.list_fetcher_bs4 import ListFetcherBs4
-from src.crawler.list_fetcher_playwright import ListFetcherPlaywright
 from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.detail_fetcher_bs4 import DetailFetcherBs4
 from src.crawler.detail_fetcher_playwright import DetailFetcherPlaywright
+from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
+from src.crawler.list_fetcher_bs4 import ListFetcherBs4
+from src.crawler.list_fetcher_playwright import ListFetcherPlaywright
 
 __all__ = [
     # List fetchers

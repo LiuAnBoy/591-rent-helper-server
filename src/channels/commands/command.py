@@ -4,8 +4,6 @@ Command List Module.
 Handles the command list - shows available commands.
 """
 
-from typing import Optional
-
 from src.channels.commands.base import BaseCommand, CommandResult
 
 
@@ -20,7 +18,7 @@ class CommandListCommand(BaseCommand):
         self,
         user_id: str,
         args: str,
-        context: Optional[dict] = None,
+        context: dict | None = None,
     ) -> CommandResult:
         """
         Execute command list.
