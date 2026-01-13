@@ -11,10 +11,7 @@ from urllib.parse import urlencode
 from loguru import logger
 from playwright.async_api import Browser, Page, async_playwright
 
-from src.crawler.extractors import ListRawData
-from src.crawler.extractors.list_extractor_playwright import (
-    extract_list_raw_from_nuxt,
-)
+from src.crawler.types import ListRawData
 from src.modules.objects import RentalObject
 
 fetcher_log = logger.bind(module="Playwright")
@@ -115,32 +112,89 @@ class ListFetcherPlaywright:
             fetcher_log.error(f"Failed to extract __NUXT__ data: {e}")
             return None
 
-    def _find_items(self, data: dict) -> list[dict]:
-        """Find items array in the NUXT data structure."""
-        if isinstance(data, dict):
-            for _key, value in data.items():
-                if isinstance(value, dict):
-                    if "items" in value and isinstance(value["items"], list):
-                        return value["items"]
-                    result = self._find_items(value)
-                    if result:
-                        return result
-        return []
+    def _find_items_and_total(self, data: dict) -> tuple[list[dict], int]:
+        """Find items array and total count in the NUXT data structure."""
+        if not isinstance(data, dict):
+            return [], 0
 
-    def _find_total(self, data: dict) -> int:
-        """Find total count in the NUXT data structure."""
-        if isinstance(data, dict):
-            for _key, value in data.items():
-                if isinstance(value, dict):
-                    if "total" in value:
-                        try:
-                            return int(value["total"])
-                        except (ValueError, TypeError):
-                            pass
-                    result = self._find_total(value)
-                    if result > 0:
-                        return result
-        return 0
+        def search(d: dict) -> tuple[list[dict], int]:
+            if isinstance(d, dict):
+                for _key, value in d.items():
+                    if isinstance(value, dict):
+                        if "items" in value and isinstance(value["items"], list):
+                            items = value["items"]
+                            total = value.get("total", len(items))
+                            try:
+                                total = int(total)
+                            except (ValueError, TypeError):
+                                total = len(items)
+                            return items, total
+                        result = search(value)
+                        if result[0]:
+                            return result
+            return [], 0
+
+        return search(data)
+
+    def _parse_item_raw(self, item: dict, region: int) -> ListRawData:
+        """Parse a single item from NUXT structure into ListRawData."""
+        result: ListRawData = {
+            "region": region,
+            "id": "",
+            "url": "",
+            "title": "",
+            "price_raw": "",
+            "tags": [],
+            "kind_name": "",
+            "area_raw": "",
+            "floor_raw": "",
+            "address_raw": "",
+        }
+
+        # ID
+        item_id = item.get("id") or item.get("post_id")
+        if item_id is not None:
+            result["id"] = str(item_id)
+            result["url"] = f"https://rent.591.com.tw/{item_id}"
+
+        # Title
+        result["title"] = item.get("title", "")
+
+        # Price
+        price = item.get("price")
+        if price is not None:
+            result["price_raw"] = f"{price}元/月"
+
+        # Tags
+        tags = item.get("tags", [])
+        if tags:
+            if isinstance(tags[0], dict):
+                result["tags"] = [tag.get("value") for tag in tags if tag.get("value")]
+            else:
+                result["tags"] = [str(t) for t in tags if t]
+
+        # Kind name
+        result["kind_name"] = item.get("kind_name", "") or item.get("kindName", "")
+
+        # Area
+        area = item.get("area")
+        if area is not None:
+            if isinstance(area, (int, float)):
+                result["area_raw"] = f"{area}坪"
+            else:
+                result["area_raw"] = str(area)
+
+        # Floor
+        floor_name = item.get("floor_name") or item.get("floorName")
+        if floor_name:
+            result["floor_raw"] = str(floor_name)
+
+        # Address
+        address = item.get("address") or item.get("section_str")
+        if address:
+            result["address_raw"] = str(address)
+
+        return result
 
     def _parse_items(self, items: list[dict]) -> list[RentalObject]:
         """Parse raw items into RentalObject objects."""
@@ -210,8 +264,7 @@ class ListFetcherPlaywright:
                 fetcher_log.warning("No data found on page")
                 break
 
-            items = self._find_items(data)
-            total = self._find_total(data)
+            items, total = self._find_items_and_total(data)
 
             if not items:
                 fetcher_log.info("No more items found")
@@ -257,8 +310,6 @@ class ListFetcherPlaywright:
         """
         Fetch rental objects and return raw data (no transformation).
 
-        Uses the NUXT extractor for consistent raw data extraction.
-
         Args:
             region: City code (1=Taipei, 3=New Taipei)
             sort: Sort order (default: posttime_desc)
@@ -281,14 +332,29 @@ class ListFetcherPlaywright:
             fetcher_log.warning("No NUXT data found")
             return []
 
-        # Use NUXT extractor
-        items = extract_list_raw_from_nuxt(nuxt_data, region)
+        # Parse items
+        items, total = self._find_items_and_total(nuxt_data)
+        if not items:
+            fetcher_log.warning("No items found in NUXT data")
+            return []
 
-        if max_items and len(items) > max_items:
-            items = items[:max_items]
+        fetcher_log.debug(f"Found {len(items)} items (total: {total})")
 
-        fetcher_log.info(f"Playwright fetched {len(items)} objects (raw)")
-        return items
+        results: list[ListRawData] = []
+        for item in items:
+            try:
+                raw_data = self._parse_item_raw(item, region)
+                if raw_data.get("id"):
+                    results.append(raw_data)
+            except Exception as e:
+                fetcher_log.warning(f"Failed to parse NUXT item: {e}")
+                continue
+
+        if max_items and len(results) > max_items:
+            results = results[:max_items]
+
+        fetcher_log.info(f"Playwright fetched {len(results)} objects (raw)")
+        return results
 
 
 # Singleton instance
@@ -296,16 +362,38 @@ _playwright_fetcher: ListFetcherPlaywright | None = None
 
 
 def get_playwright_fetcher(headless: bool = True) -> ListFetcherPlaywright:
-    """
-    Get or create singleton Playwright list fetcher.
-
-    Args:
-        headless: Run browser in headless mode
-
-    Returns:
-        ListFetcherPlaywright instance
-    """
+    """Get or create singleton Playwright list fetcher."""
     global _playwright_fetcher
     if _playwright_fetcher is None:
         _playwright_fetcher = ListFetcherPlaywright(headless=headless)
     return _playwright_fetcher
+
+
+# Standalone functions for testing
+def _find_items(data: dict) -> tuple[list[dict], int]:
+    """Find items array and total count in the NUXT data structure (for testing)."""
+    fetcher = ListFetcherPlaywright()
+    return fetcher._find_items_and_total(data)
+
+
+def _parse_item_raw_from_nuxt(item: dict, region: int) -> ListRawData:
+    """Parse a single item from NUXT structure into ListRawData (for testing)."""
+    fetcher = ListFetcherPlaywright()
+    return fetcher._parse_item_raw(item, region)
+
+
+def extract_list_raw_from_nuxt(nuxt_data: dict, region: int) -> list[ListRawData]:
+    """Extract raw data from NUXT data structure (for testing)."""
+    items, _ = _find_items(nuxt_data)
+    results = []
+    for item in items:
+        raw_data = _parse_item_raw_from_nuxt(item, region)
+        if raw_data.get("id"):
+            results.append(raw_data)
+    return results
+
+
+def get_total_from_nuxt(nuxt_data: dict) -> int:
+    """Get total count from NUXT data structure (for testing)."""
+    _, total = _find_items(nuxt_data)
+    return total

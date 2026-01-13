@@ -321,19 +321,14 @@ python scripts/test_detail_playwright.py <object_id>
 │   │   ├── postgres.py          # PostgreSQL 連線
 │   │   └── redis.py             # Redis 連線
 │   ├── crawler/
+│   │   ├── types.py                  # Raw data 型別定義
+│   │   ├── combiner.py               # Raw data 合併
 │   │   ├── list_fetcher.py           # 列表爬蟲（自動備援）
-│   │   ├── list_fetcher_bs4.py       # BS4 列表解析
-│   │   ├── list_fetcher_playwright.py # Playwright 列表爬蟲
+│   │   ├── list_fetcher_bs4.py       # BS4 列表爬取+解析
+│   │   ├── list_fetcher_playwright.py # Playwright 列表爬取+解析
 │   │   ├── detail_fetcher.py         # 詳情爬蟲（自動備援）
-│   │   ├── detail_fetcher_bs4.py     # BS4 詳情解析
-│   │   ├── detail_fetcher_playwright.py # Playwright 詳情爬蟲
-│   │   └── extractors/               # ETL Extract 層
-│   │       ├── types.py              # Raw data 型別定義
-│   │       ├── list_extractor.py     # BS4 列表解析
-│   │       ├── list_extractor_playwright.py # Playwright JSON 解析
-│   │       ├── detail_extractor.py   # BS4 詳情解析
-│   │       ├── detail_extractor_playwright.py # Playwright JSON 解析
-│   │       └── combiner.py           # Raw data 合併
+│   │   ├── detail_fetcher_bs4.py     # BS4 詳情爬取+解析
+│   │   └── detail_fetcher_playwright.py # Playwright 詳情爬取+解析
 │   ├── jobs/
 │   │   ├── scheduler.py         # 排程器
 │   │   ├── checker.py           # 物件比對

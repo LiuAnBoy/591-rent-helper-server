@@ -11,7 +11,7 @@ from loguru import logger
 
 from src.crawler.detail_fetcher_bs4 import DetailFetcherBs4
 from src.crawler.detail_fetcher_playwright import DetailFetcherPlaywright
-from src.crawler.extractors import DetailRawData
+from src.crawler.types import DetailRawData
 
 fetcher_log = logger.bind(module="DetailFetcher")
 

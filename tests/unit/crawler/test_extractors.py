@@ -5,16 +5,16 @@ Unit tests for src/crawler/extractors/
 import pytest
 from bs4 import BeautifulSoup
 
-from src.crawler.extractors.combiner import combine_raw_data, combine_with_detail_only
-from src.crawler.extractors.list_extractor import _parse_item_raw
-from src.crawler.extractors.detail_extractor import _parse_detail_raw
-from src.crawler.extractors.list_extractor_playwright import (
+from src.crawler.combiner import combine_raw_data, combine_with_detail_only
+from src.crawler.list_fetcher_bs4 import _parse_item_raw
+from src.crawler.detail_fetcher_bs4 import _parse_detail_raw
+from src.crawler.list_fetcher_playwright import (
     extract_list_raw_from_nuxt,
     _find_items,
     _parse_item_raw_from_nuxt,
     get_total_from_nuxt,
 )
-from src.crawler.extractors.detail_extractor_playwright import (
+from src.crawler.detail_fetcher_playwright import (
     extract_detail_raw_from_nuxt,
     _find_detail_data,
     _parse_detail_raw_from_nuxt,

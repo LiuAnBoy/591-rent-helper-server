@@ -9,7 +9,7 @@ import asyncio
 
 from loguru import logger
 
-from src.crawler.extractors import ListRawData
+from src.crawler.types import ListRawData
 from src.crawler.list_fetcher_bs4 import ListFetcherBs4, get_bs4_fetcher
 from src.crawler.list_fetcher_playwright import (
     ListFetcherPlaywright,

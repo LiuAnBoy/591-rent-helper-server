@@ -5,7 +5,7 @@ This module combines raw data from List and Detail pages according to
 specific priority rules. Part of the ETL Extract/Combine phase.
 """
 
-from src.crawler.extractors.types import CombinedRawData, DetailRawData, ListRawData
+from src.crawler.types import CombinedRawData, DetailRawData, ListRawData
 
 
 def combine_raw_data(

@@ -2,22 +2,25 @@
 List fetcher using requests + BeautifulSoup.
 
 Lightweight alternative to Playwright for fetching rental objects.
-Note: 591 list pages use NUXT which requires JavaScript execution,
-so this fetcher may fail and fallback to Playwright is expected.
 """
 
+import re
 from urllib.parse import urlencode
 
 import requests
 import urllib3
+from bs4 import BeautifulSoup
 from loguru import logger
+
+from src.crawler.types import ListRawData
 
 # Suppress SSL warnings for 591's certificate issues
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-from src.crawler.extractors import ListRawData, extract_list_raw  # noqa: E402
-
 fetcher_log = logger.bind(module="BS4")
+
+# Kind name constants for matching
+KIND_NAMES = ["整層住家", "獨立套房", "分租套房", "雅房", "車位", "其他"]
 
 
 class ListFetcherBs4:
@@ -99,8 +102,6 @@ class ListFetcherBs4:
         """
         Fetch rental objects from list page, returning raw data.
 
-        Uses the new ETL extractor for consistent raw data extraction.
-
         Args:
             region: City code (1=Taipei, 3=New Taipei)
             sort: Sort order (default: posttime_desc)
@@ -112,14 +113,111 @@ class ListFetcherBs4:
         if self._session is None:
             await self.start()
 
-        # Use the ETL extractor
-        items = extract_list_raw(region=region, page=1, session=self._session)
+        # Build URL
+        url = f"{self.BASE_URL}?region={region}&sort={sort}"
+        fetcher_log.debug(f"Fetching list page: {url}")
+
+        resp = self._session.get(url, timeout=self._timeout, verify=False)
+        resp.raise_for_status()
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        items = soup.find_all("div", class_="item")
+
+        fetcher_log.debug(f"Found {len(items)} items")
+
+        results: list[ListRawData] = []
+        for elem in items:
+            try:
+                raw_data = self._parse_item_raw(elem, region)
+                if raw_data.get("id"):
+                    results.append(raw_data)
+            except Exception as e:
+                fetcher_log.warning(f"Failed to parse item: {e}")
+                continue
 
         # Apply max_items limit
-        if max_items and len(items) > max_items:
-            items = items[:max_items]
+        if max_items and len(results) > max_items:
+            results = results[:max_items]
 
-        return items
+        return results
+
+    def _parse_item_raw(self, elem: BeautifulSoup, region: int) -> ListRawData:
+        """
+        Parse a single item element and return raw data.
+
+        Args:
+            elem: BeautifulSoup element for the item
+            region: Region code
+
+        Returns:
+            ListRawData dictionary
+        """
+        result: ListRawData = {
+            "region": region,
+            "id": "",
+            "url": "",
+            "title": "",
+            "price_raw": "",
+            "tags": [],
+            "kind_name": "",
+            "area_raw": "",
+            "floor_raw": "",
+            "address_raw": "",
+        }
+
+        # ID from data-id attribute
+        data_id = elem.get("data-id")
+        if data_id:
+            result["id"] = str(data_id)
+
+        # URL from link
+        link = elem.find("a", href=re.compile(r"rent\.591\.com\.tw/\d+"))
+        if link:
+            result["url"] = link.get("href", "")
+
+        # Title
+        title_elem = elem.select_one(".item-info-title a")
+        if title_elem:
+            result["title"] = title_elem.get_text(strip=True)
+
+        # Price (raw, including unit)
+        price_elem = elem.select_one(".item-info-price")
+        if price_elem:
+            result["price_raw"] = price_elem.get_text(strip=True)
+
+        # Tags from multiple possible selectors
+        tags: list[str] = []
+        tag_elems = elem.select(".item-tags span, .item-info-tag span")
+        for tag in tag_elems:
+            tag_text = tag.get_text(strip=True)
+            if tag_text:
+                tags.append(tag_text)
+        result["tags"] = tags
+
+        # Info row parsing (kind_name, area_raw, floor_raw, address_raw)
+        txt_elems = elem.select(".item-info-txt")
+        for txt_elem in txt_elems:
+            has_home = txt_elem.select_one(".house-home")
+            has_place = txt_elem.select_one(".house-place")
+
+            if has_home:
+                spans = txt_elem.find_all("span")
+                for span in spans:
+                    text = span.get_text(strip=True)
+                    if not text:
+                        continue
+
+                    if text in KIND_NAMES:
+                        result["kind_name"] = text
+                    elif "坪" in text:
+                        result["area_raw"] = text
+                    elif "F" in text or "層" in text:
+                        result["floor_raw"] = text
+
+            elif has_place:
+                result["address_raw"] = txt_elem.get_text(strip=True)
+
+        return result
 
 
 # Singleton instance
@@ -127,16 +225,24 @@ _bs4_fetcher: ListFetcherBs4 | None = None
 
 
 def get_bs4_fetcher(timeout: float = 15.0) -> ListFetcherBs4:
-    """
-    Get or create singleton BS4 list fetcher.
-
-    Args:
-        timeout: Request timeout in seconds
-
-    Returns:
-        ListFetcherBs4 instance
-    """
+    """Get or create singleton BS4 list fetcher."""
     global _bs4_fetcher
     if _bs4_fetcher is None:
         _bs4_fetcher = ListFetcherBs4(timeout=timeout)
     return _bs4_fetcher
+
+
+# Standalone function for testing
+def _parse_item_raw(elem: BeautifulSoup, region: int) -> ListRawData:
+    """
+    Parse a single item element and return raw data (standalone function for testing).
+
+    Args:
+        elem: BeautifulSoup element for the item
+        region: Region code
+
+    Returns:
+        ListRawData dictionary
+    """
+    fetcher = ListFetcherBs4()
+    return fetcher._parse_item_raw(elem, region)
