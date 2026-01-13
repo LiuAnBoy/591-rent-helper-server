@@ -270,15 +270,15 @@ class PostgresConnection:
 
     # ========== Crawler Runs ==========
 
-    async def start_crawler_run(self, region: int, section: Optional[int] = None) -> int:
+    async def start_crawler_run(self, region: int) -> int:
         """Record start of a crawler run. Returns run ID."""
         query = """
-        INSERT INTO crawler_runs (region, section, status)
-        VALUES ($1, $2, 'running')
+        INSERT INTO crawler_runs (region, status)
+        VALUES ($1, 'running')
         RETURNING id
         """
         async with self.pool.acquire() as conn:
-            result = await conn.fetchrow(query, region, section)
+            result = await conn.fetchrow(query, region)
             return result["id"]
 
     async def finish_crawler_run(
@@ -295,7 +295,7 @@ class PostgresConnection:
         SET finished_at = NOW(),
             status = $2,
             total_fetched = $3,
-            new_listings = $4,
+            new_objects = $4,
             error_message = $5
         WHERE id = $1
         """

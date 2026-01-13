@@ -424,7 +424,6 @@ class Checker:
     async def check(
         self,
         region: int,
-        section: Optional[int] = None,
         max_items: Optional[int] = None,
         force_notify: bool = False,
     ) -> dict:
@@ -444,7 +443,6 @@ class Checker:
 
         Args:
             region: City code (1=Taipei, 3=New Taipei)
-            section: Optional district code
             max_items: Override max items (default: NORMAL_CRAWL_COUNT)
             force_notify: Force notifications even for uninitialized subs (for testing)
 
@@ -459,13 +457,12 @@ class Checker:
         checker_log.info(f"Checking region={region} | max_items={max_items}")
 
         # Start crawler run tracking
-        run_id = await self._postgres.start_crawler_run(region, section)
+        run_id = await self._postgres.start_crawler_run(region)
 
         try:
             # Step 1: Crawl list page (with fallback)
             objects = await self._list_fetcher.fetch_objects(
                 region=region,
-                section=section,
                 sort="posttime_desc",
                 max_items=max_items,
             )

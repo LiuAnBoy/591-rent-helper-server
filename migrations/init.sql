@@ -290,12 +290,11 @@ CREATE INDEX IF NOT EXISTS idx_notified_objects_notified_at ON notified_objects(
 CREATE TABLE IF NOT EXISTS crawler_runs (
     id              SERIAL PRIMARY KEY,
     region          INTEGER NOT NULL,
-    section         INTEGER,
     started_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     finished_at     TIMESTAMP WITH TIME ZONE,
     status          VARCHAR(20) DEFAULT 'running',  -- running, success, failed
     total_fetched   INTEGER DEFAULT 0,
-    new_listings    INTEGER DEFAULT 0,
+    new_objects     INTEGER DEFAULT 0,
     error_message   TEXT
 );
 
