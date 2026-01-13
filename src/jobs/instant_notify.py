@@ -440,17 +440,16 @@ class InstantNotifier:
             if sub.get("area_max") is not None and obj_area > float(sub["area_max"]):
                 return False
 
-        # Layout
+        # Layout - obj.layout in sub.layout list (4 means 4+)
         if sub.get("layout"):
-            layout_str = obj.get("layout_str", "") or ""
-            obj_rooms = self._extract_room_count(layout_str)
-            if obj_rooms is not None:
+            obj_layout = obj.get("layout")
+            if obj_layout is not None:
                 matched = False
                 for required in sub["layout"]:
-                    if required == 4 and obj_rooms >= 4:
+                    if required == 4 and obj_layout >= 4:
                         matched = True
                         break
-                    elif obj_rooms == required:
+                    elif obj_layout == required:
                         matched = True
                         break
                 if not matched:
@@ -473,13 +472,6 @@ class InstantNotifier:
                 return False
 
         return True
-
-    def _extract_room_count(self, layout_str: str) -> Optional[int]:
-        """Extract room count from layout string like '2房1廳'."""
-        if not layout_str:
-            return None
-        match = re.search(r"(\d+)房", layout_str)
-        return int(match.group(1)) if match else None
 
     def _rental_object_to_dict(self, obj: RentalObject) -> dict:
         """Convert RentalObject to dict for matching."""

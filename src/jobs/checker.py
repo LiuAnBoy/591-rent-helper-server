@@ -264,19 +264,18 @@ class Checker:
             if sub.get("area_max") is not None and obj_area > float(sub["area_max"]):
                 return False
 
-        # Layout (格局) - extract room count from layout_str like "2房1廳1衛"
+        # Layout (格局) - obj.layout in sub.layout list
+        # sub.layout is like [1, 2, 3, 4] where 4 means 4+
         if sub.get("layout"):
-            layout_str = obj.get("layout_str", "") or ""
-            obj_rooms = self._extract_room_count(layout_str)
-            if obj_rooms is not None:
-                # sub.layout is like [1, 2, 3, 4] where 4 means 4+
+            obj_layout = obj.get("layout")
+            if obj_layout is not None:
                 matched = False
                 for required in sub["layout"]:
                     if required == 4:  # 4房以上
-                        if obj_rooms >= 4:
+                        if obj_layout >= 4:
                             matched = True
                             break
-                    elif obj_rooms == required:
+                    elif obj_layout == required:
                         matched = True
                         break
                 if not matched:
@@ -359,22 +358,6 @@ class Checker:
                 return False
 
         return True
-
-    def _extract_room_count(self, layout_str: str) -> Optional[int]:
-        """
-        Extract room count from layout string.
-
-        Args:
-            layout_str: String like "2房1廳1衛" or "3房2廳2衛"
-
-        Returns:
-            Number of rooms or None if cannot extract
-        """
-        import re
-        match = re.search(r"(\d+)房", layout_str)
-        if match:
-            return int(match.group(1))
-        return None
 
     def _extract_floor_number(self, floor_name: str) -> Optional[int]:
         """

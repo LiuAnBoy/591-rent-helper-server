@@ -113,8 +113,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     area_max        DECIMAL(10, 2),             -- 最大坪數
 
     -- ========== 樓層 floor ==========
-    -- '1_1'=1樓, '2_6'=2-6層, '6_12'=6-12層, '13_'=12樓以上
-    floor           TEXT[],                     -- ['1_1', '2_6']
+    floor_min       INTEGER,                    -- 最低樓層
+    floor_max       INTEGER,                    -- 最高樓層
 
     -- ========== 衛浴 bathroom ==========
     -- 1=1衛, 2=2衛, 3=3衛, '4_'=4衛以上
@@ -150,6 +150,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_region ON subscriptions(region);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_enabled ON subscriptions(enabled);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_floor_min ON subscriptions(floor_min);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_floor_max ON subscriptions(floor_max);
 
 CREATE TRIGGER update_subscriptions_updated_at
     BEFORE UPDATE ON subscriptions
