@@ -247,13 +247,27 @@ uv run uvicorn src.api.main:app --reload
 | 最高租金 | `price_max`       | int   | 價格上限                               |
 | 最小坪數 | `area_min`        | float | 坪數下限                               |
 | 最大坪數 | `area_max`        | float | 坪數上限                               |
-| 格局     | `layout`          | int[] | 1=1 房, 2=2 房, 3=3 房, 4=4 房以上     |
-| 樓層     | `floor`           | str[] | "1*1", "2_6", "6_12", "13*"            |
-| 特色     | `features`        | str[] | near_subway, pet, cook, lift 等        |
+| 格局     | `layout`          | int[] | 1=1房, 2=2房, 3=3房, 4=4房以上         |
+| 建物型態 | `shape`           | int[] | 1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅   |
+| 樓層     | `floor`           | str[] | "1", "2_6", "6_12", "13_"              |
+| 衛浴     | `bathroom`        | int[] | 1=1衛, 2=2衛, 3=3衛, 4=4衛以上         |
+| 裝潢     | `fitment`         | int[] | 99=新裝潢, 3=中檔, 4=高檔              |
+| 特色     | `other`           | str[] | near_subway, pet, cook, lift 等        |
 | 設備     | `options`         | str[] | cold, washer, icebox 等                |
 | 排除頂加 | `exclude_rooftop` | bool  | 排除頂樓加蓋                           |
 | 性別限制 | `gender`          | str   | boy=限男, girl=限女, null=不限         |
 | 需可養寵 | `pet_required`    | bool  | 需要可養寵物                           |
+
+### 比對邏輯
+
+| 類型 | 條件 | 規則 |
+| ---- | ---- | ---- |
+| 範圍 | 價格、坪數、樓層 | `min ≤ obj ≤ max` |
+| 列表 | 類型、區段、建物、格局、衛浴、裝潢 | `obj IN sub`（4=4以上） |
+| 子集 | 特色、設備 | `sub ⊆ obj`（全部都要有） |
+| 布林 | 排除頂加 | `sub=true` → `obj.is_rooftop=false` |
+| 布林 | 需可養寵 | `sub=true` → `obj.pet_allowed≠false` |
+| 性別 | 性別限制 | `sub=boy` → `obj=boy/all`<br>`sub=girl` → `obj=girl/all` |
 
 詳細選項代碼請參考 [docs/OPTIONS.md](docs/OPTIONS.md)
 
