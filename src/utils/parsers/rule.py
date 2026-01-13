@@ -38,7 +38,7 @@ def parse_rule(rule: str | None) -> dict:
     elif "限女" in rule:
         gender = "girl"
 
-    # Parse pet policy - only True if explicitly allowed
+    # Parse pet policy - only True if "可養寵物" tag exists
     pet_allowed = "可養寵物" in rule
 
     return {"gender": gender, "pet_allowed": pet_allowed}
