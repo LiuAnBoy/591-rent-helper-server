@@ -83,6 +83,12 @@ python scripts/test_detail_playwright.py <object_id>
 ## Architecture
 
 ```
+scripts/                   # Manual test scripts
+├── test_list_bs4.py      # BS4 list fetcher test
+├── test_list_playwright.py # Playwright list fetcher test
+├── test_detail_bs4.py    # BS4 detail fetcher test
+└── test_detail_playwright.py # Playwright detail fetcher test
+
 src/
 ├── api/                    # FastAPI application
 │   ├── main.py            # App entry point, lifespan management
