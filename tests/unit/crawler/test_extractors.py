@@ -8,13 +8,13 @@ from bs4 import BeautifulSoup
 from src.crawler.extractors.combiner import combine_raw_data, combine_with_detail_only
 from src.crawler.extractors.list_extractor import _parse_item_raw
 from src.crawler.extractors.detail_extractor import _parse_detail_raw
-from src.crawler.extractors.list_extractor_nuxt import (
+from src.crawler.extractors.list_extractor_playwright import (
     extract_list_raw_from_nuxt,
     _find_items,
     _parse_item_raw_from_nuxt,
     get_total_from_nuxt,
 )
-from src.crawler.extractors.detail_extractor_nuxt import (
+from src.crawler.extractors.detail_extractor_playwright import (
     extract_detail_raw_from_nuxt,
     _find_detail_data,
     _parse_detail_raw_from_nuxt,
@@ -106,7 +106,7 @@ class TestCombineWithDetailOnly:
 
 
 # ============================================================
-# list_extractor_nuxt.py tests
+# list_extractor_playwright.py tests
 # ============================================================
 
 
@@ -194,7 +194,7 @@ class TestGetTotalFromNuxt:
 
 
 # ============================================================
-# detail_extractor_nuxt.py tests
+# detail_extractor_playwright.py tests
 # ============================================================
 
 

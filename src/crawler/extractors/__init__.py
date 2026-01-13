@@ -15,7 +15,7 @@ from src.crawler.extractors.detail_extractor import (
 from src.crawler.extractors.detail_extractor import (
     extract_detail_raw,
 )
-from src.crawler.extractors.detail_extractor_nuxt import (
+from src.crawler.extractors.detail_extractor_playwright import (
     extract_detail_raw_from_nuxt,
 )
 from src.crawler.extractors.list_extractor import (
@@ -24,7 +24,7 @@ from src.crawler.extractors.list_extractor import (
 from src.crawler.extractors.list_extractor import (
     extract_list_raw,
 )
-from src.crawler.extractors.list_extractor_nuxt import (
+from src.crawler.extractors.list_extractor_playwright import (
     extract_list_raw_from_nuxt,
     get_total_from_nuxt,
 )

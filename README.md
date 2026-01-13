@@ -330,9 +330,9 @@ python scripts/test_detail_playwright.py <object_id>
 │   │   └── extractors/               # ETL Extract 層
 │   │       ├── types.py              # Raw data 型別定義
 │   │       ├── list_extractor.py     # BS4 列表解析
-│   │       ├── list_extractor_nuxt.py # NUXT JSON 列表解析
+│   │       ├── list_extractor_playwright.py # Playwright JSON 解析
 │   │       ├── detail_extractor.py   # BS4 詳情解析
-│   │       ├── detail_extractor_nuxt.py # NUXT JSON 詳情解析
+│   │       ├── detail_extractor_playwright.py # Playwright JSON 解析
 │   │       └── combiner.py           # Raw data 合併
 │   ├── jobs/
 │   │   ├── scheduler.py         # 排程器

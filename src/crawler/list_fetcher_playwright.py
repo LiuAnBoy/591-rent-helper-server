@@ -12,7 +12,7 @@ from loguru import logger
 from playwright.async_api import Browser, Page, async_playwright
 
 from src.crawler.extractors import ListRawData
-from src.crawler.extractors.list_extractor_nuxt import (
+from src.crawler.extractors.list_extractor_playwright import (
     extract_list_raw_from_nuxt,
 )
 from src.modules.objects import RentalObject

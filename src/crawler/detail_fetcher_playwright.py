@@ -10,7 +10,7 @@ from loguru import logger
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from src.crawler.extractors import DetailRawData
-from src.crawler.extractors.detail_extractor_nuxt import extract_detail_raw_from_nuxt
+from src.crawler.extractors.detail_extractor_playwright import extract_detail_raw_from_nuxt
 
 fetcher_log = logger.bind(module="Playwright")
 
