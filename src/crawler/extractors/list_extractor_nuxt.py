@@ -98,7 +98,6 @@ def _parse_item_raw_from_nuxt(item: dict, region: int) -> ListRawData:
         "price_raw": "",
         "tags": [],
         "kind_name": "",
-        "layout_str": "",
         "area_raw": "",
         "floor_raw": "",
         "address_raw": "",
@@ -131,10 +130,7 @@ def _parse_item_raw_from_nuxt(item: dict, region: int) -> ListRawData:
     # Kind name
     result["kind_name"] = item.get("kind_name", "") or item.get("kindName", "")
 
-    # Layout
-    layout = item.get("layoutStr") or item.get("layout_str") or item.get("layout")
-    if layout:
-        result["layout_str"] = str(layout)
+    # Note: layout is obtained from detail page for accuracy
 
     # Area - format as "X坪"
     area = item.get("area")

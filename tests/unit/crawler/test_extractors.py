@@ -61,11 +61,11 @@ class TestCombineRawData:
         assert "可養寵物" in result["tags"]
         assert "有電梯" in result["tags"]
 
-    def test_list_priority_for_layout(self, sample_list_raw, sample_detail_raw):
+    def test_layout_from_detail_only(self, sample_list_raw, sample_detail_raw):
         result = combine_raw_data(sample_list_raw, sample_detail_raw)
 
-        # Layout uses List priority (layout_str from List)
-        assert result["layout_raw"] == "2房1廳"
+        # Layout comes from Detail only (more accurate with 廳/衛 info)
+        assert result["layout_raw"] == "2房1廳1衛"
 
     def test_detail_fallback_when_list_empty(self, sample_detail_raw):
         list_data = {
@@ -76,7 +76,6 @@ class TestCombineRawData:
             "price_raw": "",
             "tags": [],
             "kind_name": "獨立套房",
-            "layout_str": "",
             "area_raw": "",
             "floor_raw": "",
             "address_raw": "",
@@ -154,7 +153,7 @@ class TestParseItemRawFromNuxt:
         assert result["price_raw"] == "15000元/月"
         assert result["tags"] == ["近捷運"]
         assert result["kind_name"] == "獨立套房"
-        assert result["layout_str"] == "2房1廳"
+        # Note: layout is now obtained from detail page only
         assert result["area_raw"] == "10坪"
         assert result["floor_raw"] == "3F/5F"
 
@@ -307,7 +306,7 @@ class TestParseItemRaw:
         assert result["price_raw"] == "15,000元/月"
         assert "近捷運" in result["tags"]
         assert result["kind_name"] == "獨立套房"
-        assert result["layout_str"] == "2房1廳"
+        # Note: layout is now obtained from detail page only
         assert result["area_raw"] == "10坪"
         assert result["floor_raw"] == "3F/10F"
 

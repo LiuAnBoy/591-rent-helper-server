@@ -243,7 +243,8 @@ class DetailFetcherPlaywright:
                 fetcher_log.debug(f"Object {object_id} redirected (removed)")
                 return None
 
-            await page.wait_for_timeout(500)
+            # Wait for page to fully load before extracting data
+            await page.wait_for_timeout(3000)
 
             # Extract NUXT data
             nuxt_data = await self._extract_nuxt_data(page)

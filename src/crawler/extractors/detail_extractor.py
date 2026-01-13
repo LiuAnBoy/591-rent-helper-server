@@ -157,10 +157,18 @@ def _parse_detail_raw(
             result["floor_raw"] = text
             break
 
-    # Layout from page text (avoid matching "591房")
-    m = re.search(r"([1-9]房(?:\d+廳)?(?:\d+衛)?|開放格局)", page_text)
-    if m:
-        result["layout_raw"] = m.group(1)
+    # Layout from page text - prioritize longer matches (4房2廳2衛 > 1房)
+    layout_patterns = [
+        r"([1-9]房\d+廳\d+衛)",  # Full: 4房2廳2衛
+        r"([1-9]房\d+廳)",       # Partial: 2房1廳
+        r"([1-9]房\d+衛)",       # Partial: 2房1衛
+        r"([1-9]房|開放格局)",   # Fallback: 1房 or 開放格局
+    ]
+    for pattern in layout_patterns:
+        m = re.search(pattern, page_text)
+        if m:
+            result["layout_raw"] = m.group(1)
+            break
 
     # Area from page text
     m = re.search(r"[\d.]+\s*坪", page_text)

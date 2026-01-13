@@ -108,7 +108,6 @@ def _parse_item_raw(elem: BeautifulSoup, region: int) -> ListRawData:
         "price_raw": "",
         "tags": [],
         "kind_name": "",
-        "layout_str": "",
         "area_raw": "",
         "floor_raw": "",
         "address_raw": "",
@@ -143,7 +142,8 @@ def _parse_item_raw(elem: BeautifulSoup, region: int) -> ListRawData:
             tags.append(tag_text)
     result["tags"] = tags
 
-    # Info row parsing (kind_name, layout_str, area_raw, floor_raw, address_raw)
+    # Info row parsing (kind_name, area_raw, floor_raw, address_raw)
+    # Note: layout is obtained from detail page for accuracy
     txt_elems = elem.select(".item-info-txt")
     for txt_elem in txt_elems:
         has_home = txt_elem.select_one(".house-home")
@@ -160,9 +160,6 @@ def _parse_item_raw(elem: BeautifulSoup, region: int) -> ListRawData:
                 # kind_name: exact match for property types
                 if text in KIND_NAMES:
                     result["kind_name"] = text
-                # layout_str: contains "房" (e.g., "2房1廳")
-                elif "房" in text:
-                    result["layout_str"] = text
                 # area_raw: contains "坪" (e.g., "10坪")
                 elif "坪" in text:
                     result["area_raw"] = text

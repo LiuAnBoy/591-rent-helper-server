@@ -13,6 +13,7 @@ class ListRawData(TypedDict):
     Raw data extracted from 591 list page.
 
     All values are kept as-is from the HTML, no transformation applied.
+    Note: layout is obtained from detail page for accuracy (includes 廳/衛 info).
 
     Attributes:
         region: Region code (e.g., 1 for Taipei)
@@ -22,7 +23,6 @@ class ListRawData(TypedDict):
         price_raw: Price string including unit (e.g., "8,500元/月")
         tags: List of tags from .item-tags span (e.g., ["近捷運", "可養寵物"])
         kind_name: Property type (整層住家, 獨立套房, 分租套房, 雅房, 車位, 其他)
-        layout_str: Layout string containing "房" (e.g., "2房1廳")
         area_raw: Area string containing "坪" (e.g., "10坪")
         floor_raw: Floor string containing "F" (e.g., "3F/5F")
         address_raw: Address from .item-info-txt (house-place)
@@ -35,7 +35,6 @@ class ListRawData(TypedDict):
     price_raw: str
     tags: list[str]
     kind_name: str
-    layout_str: str
     area_raw: str
     floor_raw: str
     address_raw: str
@@ -94,7 +93,7 @@ class CombinedRawData(TypedDict):
     - id, url, kind_name: from List
     - title, price_raw, address_raw, floor_raw, area_raw: Detail > List
     - tags: merged from both (deduplicated)
-    - layout_raw: List > Detail (List is cleaner)
+    - layout_raw: from Detail only (more accurate with 廳/衛 info)
     - region, section, kind: from Detail
     - gender_raw, shape_raw, fitment_raw, options: from Detail only
     - surrounding_type, surrounding_raw: from Detail only
@@ -113,7 +112,7 @@ class CombinedRawData(TypedDict):
         section: Section code from Detail
         kind: Kind code from Detail
         floor_raw: Floor string (Detail priority)
-        layout_raw: Layout string (List priority)
+        layout_raw: Layout string (from Detail only)
         area_raw: Area string (Detail priority)
         gender_raw: Gender restriction from Detail
         shape_raw: Building shape from Detail

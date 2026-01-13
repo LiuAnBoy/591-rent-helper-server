@@ -21,7 +21,6 @@ def sample_list_raw():
         "price_raw": "15,000元/月",
         "tags": ["近捷運", "有陽台"],
         "kind_name": "獨立套房",
-        "layout_str": "2房1廳",
         "area_raw": "10坪",
         "floor_raw": "3F/10F",
         "address_raw": "信義區信義路",

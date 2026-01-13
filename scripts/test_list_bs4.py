@@ -3,7 +3,8 @@
 Test script for BS4 list fetcher.
 
 Usage:
-    python .local-docs/scripts/test_list_bs4.py --region 1 --limit 5
+    uv run python scripts/test_list_bs4.py --region 1 --limit 5
+    uv run python scripts/test_list_bs4.py --region 3 --limit 10 --raw
 """
 
 import argparse
@@ -13,7 +14,7 @@ import sys
 from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.crawler.list_fetcher_bs4 import ListFetcherBs4
 
@@ -31,7 +32,7 @@ async def main(region: int, limit: int, raw: bool = False):
         await fetcher.start()
 
         print("Fetching objects...")
-        objects = await fetcher.fetch_objects(region=region, limit=limit)
+        objects = await fetcher.fetch_objects_raw(region=region, limit=limit)
 
         print(f"\n{'='*60}")
         print(f"Results: {len(objects)} objects")
@@ -42,17 +43,16 @@ async def main(region: int, limit: int, raw: bool = False):
             if raw:
                 print(json.dumps(obj, ensure_ascii=False, indent=2))
             else:
-                # Print key fields only
                 print(json.dumps({
                     "id": obj.get("id"),
                     "title": obj.get("title"),
-                    "price": obj.get("price"),
+                    "price_raw": obj.get("price_raw"),
                     "kind_name": obj.get("kind_name"),
                     "region": obj.get("region"),
-                    "section": obj.get("section"),
-                    "area": obj.get("area"),
-                    "floor_str": obj.get("floor_str"),
+                    "area_raw": obj.get("area_raw"),
+                    "floor_raw": obj.get("floor_raw"),
                     "layout_str": obj.get("layout_str"),
+                    "address_raw": obj.get("address_raw"),
                     "tags": obj.get("tags"),
                 }, ensure_ascii=False, indent=2))
             print()
