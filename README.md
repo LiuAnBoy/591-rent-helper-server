@@ -33,28 +33,31 @@
 
 ## 執行流程
 
-### 定時爬取流程
+### 定時爬取流程（ETL）
 
 ```
 排程器觸發
     ↓
 查詢 Redis 取得有訂閱的區域
     ↓
-對每個區域執行檢查：
+對每個區域執行 ETL Pipeline：
     ↓
 ┌─────────────────────────────────────────────────────────┐
-│ 1. 爬取列表頁                                            │
-│    └─ BS4 解析（失敗則通知管理員）                        │
+│ 1. Extract - 列表頁                                      │
+│    └─ BS4 解析 → ListRawData（失敗則通知管理員）         │
 │ 2. Redis 過濾                                            │
 │    └─ 比對已爬取 ID，找出新物件                          │
-│ 3. 抓取詳情頁（有備援機制）                               │
-│    └─ BS4 重試 → Playwright fallback                     │
-│ 4. 合併 & 儲存                                           │
-│    └─ 列表 + 詳情資料合併，存入 PostgreSQL + Redis        │
-│ 5. 訂閱比對                                              │
-│    └─ 根據用戶訂閱條件進行匹配                           │
-│ 6. 推播通知                                              │
-│    └─ 符合條件的物件發送 Telegram 通知                   │
+│ 3. Extract - 詳情頁（有備援機制）                        │
+│    └─ BS4 重試 → Playwright fallback → DetailRawData    │
+│ 4. Combine - 合併原始資料                                │
+│    └─ ListRawData + DetailRawData → CombinedRawData     │
+│    └─ layout 只從 Detail 取得（含廳/衛資訊）             │
+│ 5. Transform - 轉換為 DB 格式                            │
+│    └─ CombinedRawData → DBReadyData                     │
+│ 6. Load - 儲存                                           │
+│    └─ 存入 PostgreSQL + Redis                           │
+│ 7. 訂閱比對 & 推播通知                                   │
+│    └─ 根據訂閱條件匹配，發送 Telegram 通知               │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -323,7 +326,14 @@ python scripts/test_detail_playwright.py <object_id>
 │   │   ├── list_fetcher_playwright.py # Playwright 列表爬蟲
 │   │   ├── detail_fetcher.py         # 詳情爬蟲（自動備援）
 │   │   ├── detail_fetcher_bs4.py     # BS4 詳情解析
-│   │   └── detail_fetcher_playwright.py # Playwright 詳情爬蟲
+│   │   ├── detail_fetcher_playwright.py # Playwright 詳情爬蟲
+│   │   └── extractors/               # ETL Extract 層
+│   │       ├── types.py              # Raw data 型別定義
+│   │       ├── list_extractor.py     # BS4 列表解析
+│   │       ├── list_extractor_nuxt.py # NUXT JSON 列表解析
+│   │       ├── detail_extractor.py   # BS4 詳情解析
+│   │       ├── detail_extractor_nuxt.py # NUXT JSON 詳情解析
+│   │       └── combiner.py           # Raw data 合併
 │   ├── jobs/
 │   │   ├── scheduler.py         # 排程器
 │   │   ├── checker.py           # 物件比對
@@ -339,7 +349,8 @@ python scripts/test_detail_playwright.py <object_id>
 │   │   ├── bindings/            # 綁定模組（通知開關同步）
 │   │   └── objects/             # 物件模組
 │   └── utils/
-│       └── mappings.py          # 常數對照表
+│       ├── mappings.py          # 常數對照表
+│       └── transformers.py      # ETL Transform 層
 ├── scripts/
 │   ├── test_list_bs4.py         # BS4 列表爬蟲測試
 │   ├── test_list_playwright.py  # Playwright 列表爬蟲測試
