@@ -161,8 +161,11 @@ Authorization: Bearer <token>
 | `area_min` | float | | 最小坪數 |
 | `area_max` | float | | 最大坪數 |
 | `layout` | int[] | | 1=1房, 2=2房, 3=3房, 4=4房以上 |
+| `shape` | int[] | | 1=公寓, 2=電梯大樓, 3=透天厝, 4=別墅 |
 | `floor` | str[] | | "1_1", "2_6", "6_12", "13_" |
-| `features` | str[] | | near_subway, pet, cook, lift 等 |
+| `bathroom` | int[] | | 1=1衛, 2=2衛, 3=3衛, 4=4衛以上 |
+| `fitment` | int[] | | 99=新裝潢, 3=中檔, 4=高檔 |
+| `other` | str[] | | near_subway, pet, cook, lift 等 |
 | `options` | str[] | | cold, washer, icebox 等 |
 | `exclude_rooftop` | bool | | 排除頂樓加蓋 (預設 false) |
 | `gender` | string | | boy=限男, girl=限女, null=不限 |
@@ -214,8 +217,12 @@ Authorization: Bearer <token>
   "area_min": 5.0,
   "area_max": 15.0,
   "layout": [1],
-  "floor": null,
-  "features": ["near_subway"],
+  "shape": [1, 2],
+  "floor_min": 2,
+  "floor_max": 12,
+  "bathroom": [1, 2],
+  "fitment": [99, 3],
+  "other": ["near_subway"],
   "options": ["cold", "washer"],
   "exclude_rooftop": true,
   "gender": null,
