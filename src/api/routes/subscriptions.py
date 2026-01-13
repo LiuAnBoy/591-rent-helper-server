@@ -95,9 +95,19 @@ async def create_subscription(
         )
 
     try:
+        # Convert floor list to floor_min/floor_max for storage
+        create_data = data.model_dump()
+        if "floor" in create_data and create_data["floor"]:
+            floor_list = create_data.pop("floor")
+            floor_min, floor_max = parse_floor_ranges(floor_list)
+            create_data["floor_min"] = floor_min
+            create_data["floor_max"] = floor_max
+        elif "floor" in create_data:
+            create_data.pop("floor")
+
         subscription = await repo.create(
             user_id=current_user.id,
-            data=data.model_dump()
+            data=create_data
         )
 
         # Sync all user subscriptions to Redis (includes provider info)

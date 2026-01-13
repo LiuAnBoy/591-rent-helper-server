@@ -109,7 +109,7 @@ class SubscriptionBase(BaseModel):
     area_min: Optional[Decimal] = Field(None, ge=0, description="最小坪數")
     area_max: Optional[Decimal] = Field(None, ge=0, description="最大坪數")
 
-    # Floor
+    # Floor (存 floor_min/floor_max)
     floor_min: Optional[int] = Field(None, description="最低樓層 (0=頂加, 負數=地下)")
     floor_max: Optional[int] = Field(None, description="最高樓層")
 
@@ -148,7 +148,8 @@ class SubscriptionBase(BaseModel):
 class SubscriptionCreate(SubscriptionBase):
     """Model for creating a subscription."""
 
-    pass
+    # 前端傳 floor 陣列，API 轉成 floor_min/floor_max 存
+    floor: Optional[list[str]] = Field(None, description="樓層 (1, 2_6, 6_12, 12_)")
 
 
 class SubscriptionUpdate(BaseModel):
