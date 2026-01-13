@@ -53,12 +53,17 @@ def extract_detail_raw(
     Raises:
         requests.RequestException: If HTTP request fails
     """
+    import time
+
     if session is None:
         session = requests.Session()
         session.headers.update(HEADERS)
 
     url = f"https://rent.591.com.tw/{object_id}"
     logger.debug(f"Fetching detail page: {url}")
+
+    # Wait before fetching to avoid rate limiting
+    time.sleep(3)
 
     resp = session.get(url, timeout=15, verify=False)
 
