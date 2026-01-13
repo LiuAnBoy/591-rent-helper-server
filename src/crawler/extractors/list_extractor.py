@@ -17,7 +17,7 @@ from src.crawler.extractors.types import ListRawData
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-extractor_log = logger.bind(module="ListExtractorBS4")
+extractor_log = logger.bind(module="BS4")
 
 BASE_URL = "https://rent.591.com.tw/list"
 

@@ -17,7 +17,7 @@ from src.crawler.extractors.types import DetailRawData
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-extractor_log = logger.bind(module="DetailExtractorBS4")
+extractor_log = logger.bind(module="BS4")
 
 HEADERS = {
     "User-Agent": (

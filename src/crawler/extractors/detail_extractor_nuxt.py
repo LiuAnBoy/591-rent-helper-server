@@ -9,7 +9,7 @@ from loguru import logger
 
 from src.crawler.extractors.types import DetailRawData
 
-extractor_log = logger.bind(module="DetailExtractorNuxt")
+extractor_log = logger.bind(module="Playwright")
 
 
 def extract_detail_raw_from_nuxt(
