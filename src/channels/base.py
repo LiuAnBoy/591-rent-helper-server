@@ -34,15 +34,15 @@ class BaseFormatter(ABC):
         pass
 
     @abstractmethod
-    def format_listing(self, listing: Any) -> str:
+    def format_object(self, obj: Any) -> str:
         """
-        Format a rental listing for notification.
+        Format a rental object for notification.
 
         Args:
-            listing: RentalObject to format
+            obj: RentalObject to format
 
         Returns:
-            Formatted listing message
+            Formatted object message
         """
         pass
 

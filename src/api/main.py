@@ -105,7 +105,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="591 Crawler API",
-    description="591 rental listing crawler with notification system",
+    description="591 rental object crawler with notification system",
     version="0.1.0",
     lifespan=lifespan,
 )

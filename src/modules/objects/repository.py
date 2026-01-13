@@ -1,7 +1,7 @@
 """
 Object Repository.
 
-Data access layer for object (listing) operations.
+Data access layer for rental object operations.
 """
 
 import re

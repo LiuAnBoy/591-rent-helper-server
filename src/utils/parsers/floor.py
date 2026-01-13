@@ -1,7 +1,7 @@
 """
 Floor parsing utilities.
 
-Parse floor-related fields from rental listing data.
+Parse floor-related fields from rental object data.
 """
 
 import re

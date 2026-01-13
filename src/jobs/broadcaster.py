@@ -75,7 +75,7 @@ class Broadcaster:
     async def send_telegram_notification(
         self,
         chat_id: str,
-        listing: RentalObject,
+        obj: RentalObject,
         subscription_name: Optional[str] = None,
     ) -> bool:
         """
@@ -83,7 +83,7 @@ class Broadcaster:
 
         Args:
             chat_id: Telegram chat ID
-            listing: RentalObject to send
+            obj: RentalObject to send
             subscription_name: Optional subscription name for context
 
         Returns:
@@ -95,7 +95,7 @@ class Broadcaster:
 
         try:
             # Use formatter to create message
-            message = self._telegram_formatter.format_listing(listing)
+            message = self._telegram_formatter.format_object(obj)
 
             # Add subscription context if provided
             if subscription_name:
@@ -109,7 +109,7 @@ class Broadcaster:
                 disable_web_page_preview=False,
             )
 
-            broadcast_log.info(f"Sent Telegram notification to {chat_id} for object {listing.id}")
+            broadcast_log.info(f"Sent Telegram notification to {chat_id} for object {obj.id}")
             return True
 
         except Exception as e:
@@ -120,7 +120,7 @@ class Broadcaster:
         self,
         service: str,
         service_id: str,
-        listing: RentalObject,
+        obj: RentalObject,
         subscription_name: Optional[str] = None,
     ) -> bool:
         """
@@ -129,7 +129,7 @@ class Broadcaster:
         Args:
             service: Service name (telegram, line, etc.)
             service_id: Service-specific user ID
-            listing: RentalObject to send
+            obj: RentalObject to send
             subscription_name: Optional subscription name for context
 
         Returns:
@@ -138,7 +138,7 @@ class Broadcaster:
         if service == "telegram":
             return await self.send_telegram_notification(
                 chat_id=service_id,
-                listing=listing,
+                obj=obj,
                 subscription_name=subscription_name,
             )
         # Future: Add LINE, Discord, etc.
@@ -206,10 +206,10 @@ class Broadcaster:
         matches: list[tuple[RentalObject, list[dict]]],
     ) -> dict:
         """
-        Broadcast notifications for matched listings (concurrent).
+        Broadcast notifications for matched objects (concurrent).
 
         Args:
-            matches: List of (listing, subscriptions) tuples from Checker
+            matches: List of (obj, subscriptions) tuples from Checker
 
         Returns:
             Dict with broadcast results:
@@ -222,7 +222,7 @@ class Broadcaster:
         tasks = []
         task_info = []  # Track service for each task
 
-        for listing, subscriptions in matches:
+        for obj, subscriptions in matches:
             for sub in subscriptions:
                 service = sub.get("service")
                 service_id = sub.get("service_id")
@@ -235,7 +235,7 @@ class Broadcaster:
                 task = self.send_notification(
                     service=service,
                     service_id=service_id,
-                    listing=listing,
+                    obj=obj,
                     subscription_name=sub_name,
                 )
                 tasks.append(task)
@@ -309,8 +309,8 @@ async def main():
     """Test the broadcaster."""
     from src.channels.telegram import get_telegram_formatter
 
-    # Create a test listing
-    test_listing = RentalObject(
+    # Create a test object
+    test_object = RentalObject(
         id=12345678,
         type=1,
         kind=2,
@@ -330,7 +330,7 @@ async def main():
     )
 
     formatter = get_telegram_formatter()
-    message = formatter.format_listing(test_listing)
+    message = formatter.format_object(test_object)
     print("Formatted message:")
     print("-" * 40)
     print(message)

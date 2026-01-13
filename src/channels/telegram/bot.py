@@ -137,7 +137,7 @@ class TelegramBot:
             tg_log.error(f"Failed to send photo to {chat_id}: {e}")
             return False
 
-    async def send_listing_notification(
+    async def send_object_notification(
         self,
         chat_id: int | str,
         title: str,
@@ -148,14 +148,14 @@ class TelegramBot:
         photo_url: Optional[str] = None,
     ) -> bool:
         """
-        Send a rental listing notification.
+        Send a rental object notification.
 
         Args:
             chat_id: Target chat ID
-            title: Listing title
+            title: Object title
             price: Monthly rent
             address: Address
-            url: Listing URL
+            url: Object URL
             subscription_name: Subscription name that matched
             photo_url: Optional photo URL
 

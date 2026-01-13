@@ -206,27 +206,27 @@ class InstantNotifier:
             await fetcher.start()
 
             try:
-                listings = await fetcher.fetch_objects(
+                fetched_objects = await fetcher.fetch_objects(
                     region=region,
                     sort="posttime_desc",
                     max_items=self.FETCH_COUNT,
                 )
-                notify_log.info(f"Crawled {len(listings)} objects for region {region}")
+                notify_log.info(f"Crawled {len(fetched_objects)} objects for region {region}")
 
                 # Save to DB
                 repo = ObjectRepository(self._postgres.pool)
                 all_ids = set()
 
-                for listing in listings:
-                    all_ids.add(listing.id)
-                    await repo.save(listing)
+                for fetched_obj in fetched_objects:
+                    all_ids.add(fetched_obj.id)
+                    await repo.save(fetched_obj)
 
                 # Add to seen_ids
                 if all_ids:
                     await self._redis.add_seen_ids(region, all_ids)
 
                 # Convert to dict for matching
-                objects = [self._rental_object_to_dict(obj) for obj in listings]
+                objects = [self._rental_object_to_dict(o) for o in fetched_objects]
 
             finally:
                 await fetcher.close()
@@ -253,7 +253,7 @@ class InstantNotifier:
                         await self._broadcaster.send_notification(
                             service=service,
                             service_id=service_id,
-                            listing=rental_obj,
+                            obj=rental_obj,
                             subscription_name=sub_name,
                         )
                         total_notified += 1
@@ -310,25 +310,25 @@ class InstantNotifier:
         await fetcher.start()
 
         try:
-            # Crawl listings
-            listings = await fetcher.fetch_objects(
+            # Crawl objects
+            fetched_objects = await fetcher.fetch_objects(
                 region=region,
                 sort="posttime_desc",
                 max_items=self.FETCH_COUNT,
             )
 
-            notify_log.info(f"Crawled {len(listings)} objects for region {region}")
+            notify_log.info(f"Crawled {len(fetched_objects)} objects for region {region}")
 
             # Save to DB and filter new ones
             repo = ObjectRepository(self._postgres.pool)
             new_objects = []
             all_ids = set()
 
-            for listing in listings:
-                all_ids.add(listing.id)
-                is_new = await repo.save(listing)
+            for fetched_obj in fetched_objects:
+                all_ids.add(fetched_obj.id)
+                is_new = await repo.save(fetched_obj)
                 if is_new:
-                    new_objects.append(listing)
+                    new_objects.append(fetched_obj)
 
             # Add to seen_ids
             if all_ids:
@@ -384,7 +384,7 @@ class InstantNotifier:
                     await self._broadcaster.send_notification(
                         service=service,
                         service_id=service_id,
-                        listing=rental_obj,
+                        obj=rental_obj,
                         subscription_name=sub_name,
                     )
                     notified += 1

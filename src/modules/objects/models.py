@@ -1,7 +1,7 @@
 """
 Object Models.
 
-Pydantic model for 591 rental listing data.
+Pydantic model for 591 rental object data.
 """
 
 from typing import Any, Optional

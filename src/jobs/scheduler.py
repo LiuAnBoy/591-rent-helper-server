@@ -44,7 +44,7 @@ async def close_checker() -> None:
 
 async def run_checker_job(skip_night: bool = False) -> None:
     """
-    Scheduled job to check for new listings in active regions.
+    Scheduled job to check for new objects in active regions.
 
     Args:
         skip_night: If True, skip execution during night hours (for interval-based daytime job)

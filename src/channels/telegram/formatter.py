@@ -221,53 +221,53 @@ class TelegramFormatter(BaseFormatter):
 
         return "\n".join(lines)
 
-    def format_listing(self, listing: Any) -> str:
+    def format_object(self, obj: Any) -> str:
         """
-        Format a rental listing for Telegram notification.
+        Format a rental object for Telegram notification.
 
         Args:
-            listing: RentalObject to format
+            obj: RentalObject to format
 
         Returns:
-            HTML formatted listing message
+            HTML formatted object message
         """
-        if not isinstance(listing, RentalObject):
-            return str(listing)
+        if not isinstance(obj, RentalObject):
+            return str(obj)
 
         # Price formatting
-        price_display = f"${listing.price}/月" if listing.price else "價格洽詢"
+        price_display = f"${obj.price}/月" if obj.price else "價格洽詢"
 
         lines = [
-            f"🏠 <b>{self._escape_html(listing.title)}</b>",
+            f"🏠 <b>{self._escape_html(obj.title)}</b>",
             "",
             f"💰 <b>{price_display}</b>",
         ]
 
-        if listing.kind_name:
-            lines.append(f"🏷️ {listing.kind_name}")
+        if obj.kind_name:
+            lines.append(f"🏷️ {obj.kind_name}")
 
-        if listing.area:
-            lines.append(f"📐 {listing.area} 坪")
+        if obj.area:
+            lines.append(f"📐 {obj.area} 坪")
 
-        if listing.layout_str:
-            lines.append(f"🛏️ {listing.layout_str}")
+        if obj.layout_str:
+            lines.append(f"🛏️ {obj.layout_str}")
 
-        if listing.floor_name:
-            lines.append(f"🏢 {listing.floor_name}")
+        if obj.floor_name:
+            lines.append(f"🏢 {obj.floor_name}")
 
-        if listing.address:
-            lines.append(f"📍 {self._escape_html(listing.address)}")
+        if obj.address:
+            lines.append(f"📍 {self._escape_html(obj.address)}")
 
-        if listing.surrounding and listing.surrounding.desc:
-            distance = listing.surrounding.distance or ""
-            lines.append(f"🚇 {listing.surrounding.desc} {distance}")
+        if obj.surrounding and obj.surrounding.desc:
+            distance = obj.surrounding.distance or ""
+            lines.append(f"🚇 {obj.surrounding.desc} {distance}")
 
-        if listing.tags:
-            tags_str = " ".join(f"#{tag}" for tag in listing.tags[:5])
+        if obj.tags:
+            tags_str = " ".join(f"#{tag}" for tag in obj.tags)
             lines.append(f"\n{tags_str}")
 
-        if listing.url:
-            lines.append(f'\n🔗 <a href="{listing.url}">查看詳情</a>')
+        if obj.url:
+            lines.append(f'\n🔗 <a href="{obj.url}">查看詳情</a>')
 
         return "\n".join(lines)
 

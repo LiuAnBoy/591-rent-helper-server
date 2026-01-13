@@ -1,7 +1,7 @@
 """
 List fetcher using Playwright browser automation.
 
-Reliable method for fetching rental listings from 591.
+Reliable method for fetching rental objects from 591.
 """
 
 import asyncio

@@ -196,7 +196,7 @@ class SubscriptionResponse(SubscriptionBase):
 
 
 class SubscriptionListResponse(BaseModel):
-    """Model for listing subscriptions."""
+    """Model for object subscriptions."""
 
     total: int
     items: list[SubscriptionResponse]

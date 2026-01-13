@@ -1,7 +1,7 @@
 """
 List fetcher using requests + BeautifulSoup.
 
-Lightweight alternative to Playwright for fetching rental listings.
+Lightweight alternative to Playwright for fetching rental objects.
 Note: 591 list pages use NUXT which requires JavaScript execution,
 so this fetcher may fail and fallback to Playwright is expected.
 """
@@ -29,7 +29,7 @@ class ListFetcherBs4:
     """
     Lightweight list fetcher using requests + BeautifulSoup.
 
-    Attempts to parse rental listings from HTML.
+    Attempts to parse rental objects from HTML.
     May fail on 591 as it requires JavaScript for NUXT data.
     """
 
