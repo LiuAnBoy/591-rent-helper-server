@@ -9,7 +9,7 @@ import asyncio
 from loguru import logger
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
-from src.crawler.types import DetailRawData, calculate_detail_workers
+from src.crawler.types import DetailFetchStatus, DetailRawData, calculate_detail_workers
 
 fetcher_log = logger.bind(module="Playwright")
 
@@ -378,7 +378,7 @@ class DetailFetcherPlaywright:
         self,
         object_id: int,
         page: Page | None = None,
-    ) -> DetailRawData | None:
+    ) -> tuple[DetailRawData | None, DetailFetchStatus]:
         """
         Fetch detail page and return raw data (no transformation).
 
@@ -389,7 +389,7 @@ class DetailFetcherPlaywright:
             page: Optional page to use (for parallel fetching)
 
         Returns:
-            DetailRawData or None if failed
+            Tuple of (DetailRawData or None, status)
         """
         if not self._browser:
             await self.start()
@@ -409,17 +409,17 @@ class DetailFetcherPlaywright:
             if response:
                 status = response.status
                 if status == 404:
-                    fetcher_log.debug(f"Object {object_id} not found (404 - removed)")
-                    return None
+                    fetcher_log.debug(f"Object {object_id} not found (404)")
+                    return None, "not_found"
                 if status >= 400:
                     fetcher_log.warning(f"Object {object_id} returned HTTP {status}")
-                    return None
+                    return None, "error"
 
             # Check if redirected (listing removed -> redirects to list page)
             current_url = page.url
             if f"/{object_id}" not in current_url:
                 fetcher_log.debug(f"Object {object_id} redirected (removed)")
-                return None
+                return None, "not_found"
 
             # Wait for page to fully load before extracting data
             await page.wait_for_timeout(3000)
@@ -428,15 +428,16 @@ class DetailFetcherPlaywright:
             nuxt_data = await self._extract_nuxt_data(page)
             if not nuxt_data:
                 fetcher_log.warning(f"No NUXT data found for object {object_id}")
-                return None
+                return None, "error"
 
             # Use NUXT extractor
             result = extract_detail_raw_from_nuxt(nuxt_data, object_id)
 
             if result:
                 fetcher_log.debug(f"Parsed detail raw {object_id}")
+                return result, "success"
 
-            return result
+            return None, "error"
 
         except Exception as e:
             error_msg = str(e)
@@ -444,18 +445,19 @@ class DetailFetcherPlaywright:
                 fetcher_log.debug(
                     f"Object {object_id} navigation aborted (likely removed)"
                 )
+                return None, "not_found"
             elif "Timeout" in error_msg:
                 fetcher_log.warning(f"Object {object_id} timeout - network slow")
             else:
                 fetcher_log.error(f"Object {object_id} fetch_detail_raw failed: {e}")
-            return None
+            return None, "error"
 
     async def _fetch_raw_with_worker(
         self,
         object_id: int,
         worker_id: int,
         progress: dict,
-    ) -> tuple[int, DetailRawData | None]:
+    ) -> tuple[int, DetailRawData | None, DetailFetchStatus]:
         """
         Fetch detail raw data using a specific worker.
 
@@ -465,7 +467,7 @@ class DetailFetcherPlaywright:
             progress: Shared progress dict for logging
 
         Returns:
-            Tuple of (object_id, DetailRawData)
+            Tuple of (object_id, DetailRawData, status)
         """
         async with self._page_locks[worker_id]:
             # Rate limiting
@@ -478,13 +480,13 @@ class DetailFetcherPlaywright:
                 f"{progress['completed']}/{progress['total']}: {object_id}"
             )
 
-            result = await self.fetch_detail_raw(object_id, self._pages[worker_id])
-            return object_id, result
+            data, status = await self.fetch_detail_raw(object_id, self._pages[worker_id])
+            return object_id, data, status
 
     async def fetch_details_batch_raw(
         self,
         object_ids: list[int],
-    ) -> dict[int, DetailRawData]:
+    ) -> tuple[dict[int, DetailRawData], int, int]:
         """
         Fetch detail raw data for multiple objects in parallel.
 
@@ -494,15 +496,15 @@ class DetailFetcherPlaywright:
             object_ids: List of object IDs to fetch
 
         Returns:
-            Dict mapping object_id to DetailRawData
+            Tuple of (results dict, not_found count, error count)
         """
         if not object_ids:
-            return {}
+            return {}, 0, 0
 
         # Dynamic worker scaling
         actual_workers = await self._ensure_workers(len(object_ids))
         if actual_workers == 0:
-            return {}
+            return {}, 0, 0
 
         fetcher_log.info(
             f"Fetching {len(object_ids)} detail pages (raw) "
@@ -510,12 +512,14 @@ class DetailFetcherPlaywright:
         )
 
         results: dict[int, DetailRawData] = {}
+        not_found_count = 0
+        error_count = 0
         progress = {"completed": 0, "total": len(object_ids)}
 
         # Create tasks with worker assignment
         async def fetch_with_semaphore(
             object_id: int,
-        ) -> tuple[int, DetailRawData | None]:
+        ) -> tuple[int, DetailRawData | None, DetailFetchStatus]:
             async with self._semaphore:
                 # Find available worker
                 worker_id = None
@@ -536,16 +540,21 @@ class DetailFetcherPlaywright:
         for result in task_results:
             if isinstance(result, Exception):
                 fetcher_log.error(f"Task failed: {result}")
+                error_count += 1
                 continue
-            obj_id, detail = result
+            obj_id, detail, status = result
             if detail:
                 results[obj_id] = detail
+            elif status == "not_found":
+                not_found_count += 1
+            else:
+                error_count += 1
 
         fetcher_log.info(
             f"Fetched {len(results)}/{len(object_ids)} detail pages (raw)"
         )
 
-        return results
+        return results, not_found_count, error_count
 
 
 # Singleton instance

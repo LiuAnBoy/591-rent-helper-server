@@ -11,7 +11,7 @@ from loguru import logger
 
 from src.crawler.detail_fetcher_bs4 import DetailFetcherBs4
 from src.crawler.detail_fetcher_playwright import DetailFetcherPlaywright
-from src.crawler.types import DetailRawData
+from src.crawler.types import DetailFetchStatus, DetailRawData
 
 fetcher_log = logger.bind(module="DetailFetcher")
 
@@ -76,7 +76,9 @@ class DetailFetcher:
             await self._playwright_fetcher.start()
             self._playwright_started = True
 
-    async def fetch_detail_raw(self, object_id: int) -> DetailRawData | None:
+    async def fetch_detail_raw(
+        self, object_id: int
+    ) -> tuple[DetailRawData | None, DetailFetchStatus]:
         """
         Fetch detail with automatic fallback, returning raw data.
 
@@ -87,18 +89,23 @@ class DetailFetcher:
             object_id: The rental object ID
 
         Returns:
-            DetailRawData or None if all methods failed
+            Tuple of (DetailRawData or None, status)
         """
         if self._bs4_fetcher is None:
             await self.start()
 
         # Try bs4 first
         for attempt in range(self._max_retries):
-            result = await self._bs4_fetcher.fetch_detail_raw(object_id)
+            result, status = await self._bs4_fetcher.fetch_detail_raw(object_id)
+
+            # If not_found, don't retry - object is removed
+            if status == "not_found":
+                return None, "not_found"
+
             if result:
                 # Check if we got meaningful data (tags should not be empty)
                 if result.get("tags"):
-                    return result
+                    return result, "success"
                 fetcher_log.warning(
                     f"bs4 raw attempt {attempt + 1}/{self._max_retries} returned empty tags for {object_id}"
                 )
@@ -114,15 +121,12 @@ class DetailFetcher:
         # Fallback to Playwright
         fetcher_log.debug(f"BS4 raw failed, falling back to Playwright for {object_id}")
         await self._ensure_playwright()
-        result = await self._playwright_fetcher.fetch_detail_raw(object_id)
-
-        # Playwright fetcher already logs specific failure reason
-        return result
+        return await self._playwright_fetcher.fetch_detail_raw(object_id)
 
     async def fetch_details_batch_raw(
         self,
         object_ids: list[int],
-    ) -> dict[int, DetailRawData]:
+    ) -> tuple[dict[int, DetailRawData], int, int]:
         """
         Fetch multiple details with automatic fallback, returning raw data.
 
@@ -135,10 +139,10 @@ class DetailFetcher:
             object_ids: List of object IDs to fetch
 
         Returns:
-            Dict mapping object_id to DetailRawData
+            Tuple of (results dict, not_found count, error count)
         """
         if not object_ids:
-            return {}
+            return {}, 0, 0
 
         if self._bs4_fetcher is None:
             await self.start()
@@ -154,24 +158,27 @@ class DetailFetcher:
 
         # Process results
         results: dict[int, DetailRawData] = {}
+        not_found_count = 0
         error_count = 0
-        skipped_count = 0
         for oid, result in zip(object_ids, results_list, strict=False):
             if isinstance(result, Exception):
                 fetcher_log.error(f"Fetch raw exception for {oid}: {result}")
                 error_count += 1
-            elif result:
-                results[oid] = result
-            else:
-                # None = object removed/unavailable (already logged by fetcher)
-                skipped_count += 1
+            elif isinstance(result, tuple):
+                data, status = result
+                if data:
+                    results[oid] = data
+                elif status == "not_found":
+                    not_found_count += 1
+                else:
+                    error_count += 1
 
         fetcher_log.info(
             f"Fetched {len(results)}/{len(object_ids)} detail pages (raw) "
-            f"({skipped_count} unavailable, {error_count} errors)"
+            f"({not_found_count} not found, {error_count} errors)"
         )
 
-        return results
+        return results, not_found_count, error_count
 
 
 # Singleton instance

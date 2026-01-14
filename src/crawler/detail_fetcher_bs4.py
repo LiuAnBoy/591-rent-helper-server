@@ -14,7 +14,7 @@ import urllib3
 from bs4 import BeautifulSoup
 from loguru import logger
 
-from src.crawler.types import DetailRawData, calculate_detail_workers
+from src.crawler.types import DetailFetchStatus, DetailRawData, calculate_detail_workers
 
 # Suppress SSL warnings for 591's certificate issues
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -126,7 +126,9 @@ class DetailFetcherBs4:
 
         return optimal
 
-    def _fetch_and_parse(self, object_id: int) -> DetailRawData | None:
+    def _fetch_and_parse(
+        self, object_id: int
+    ) -> tuple[DetailRawData | None, DetailFetchStatus]:
         """
         Fetch and parse detail page (synchronous).
 
@@ -134,7 +136,7 @@ class DetailFetcherBs4:
             object_id: The rental object ID
 
         Returns:
-            DetailRawData or None if failed
+            Tuple of (DetailRawData or None, status)
         """
         url = f"https://rent.591.com.tw/{object_id}"
         fetcher_log.debug(f"Fetching detail page: {url}")
@@ -145,20 +147,25 @@ class DetailFetcherBs4:
         try:
             resp = self._session.get(url, timeout=self._timeout, verify=False)
 
+            if resp.status_code == 404:
+                fetcher_log.debug(f"Object {object_id} not found (404)")
+                return None, "not_found"
+
             if resp.status_code != 200:
                 fetcher_log.warning(
                     f"Failed to fetch detail page {object_id}: HTTP {resp.status_code}"
                 )
-                return None
+                return None, "error"
 
             soup = BeautifulSoup(resp.text, "html.parser")
             page_text = soup.get_text()
 
-            return self._parse_detail_raw(soup, page_text, object_id)
+            data = self._parse_detail_raw(soup, page_text, object_id)
+            return data, "success" if data else "error"
 
         except requests.RequestException as e:
             fetcher_log.error(f"Request failed for {object_id}: {e}")
-            return None
+            return None, "error"
 
     def _parse_detail_raw(
         self, soup: BeautifulSoup, page_text: str, object_id: int
@@ -301,7 +308,9 @@ class DetailFetcherBs4:
 
         return result
 
-    async def fetch_detail_raw(self, object_id: int) -> DetailRawData | None:
+    async def fetch_detail_raw(
+        self, object_id: int
+    ) -> tuple[DetailRawData | None, DetailFetchStatus]:
         """
         Fetch detail page and return raw data (no transformation).
 
@@ -309,7 +318,7 @@ class DetailFetcherBs4:
             object_id: The rental object ID
 
         Returns:
-            DetailRawData or None if failed
+            Tuple of (DetailRawData or None, status)
         """
         if self._session is None:
             await self.start()

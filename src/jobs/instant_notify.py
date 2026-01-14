@@ -228,7 +228,7 @@ class InstantNotifier:
 
                 # Extract: Fetch detail raw data for all items
                 object_ids = [int(item["id"]) for item in list_raw_items]
-                details = await detail_fetcher.fetch_details_batch_raw(object_ids)
+                details, _, _ = await detail_fetcher.fetch_details_batch_raw(object_ids)
 
                 # Transform and Save
                 repo = ObjectRepository(self._postgres.pool)
@@ -376,7 +376,7 @@ class InstantNotifier:
 
             # Extract: Fetch detail raw data for all items
             object_ids = [int(item["id"]) for item in list_raw_items]
-            details = await detail_fetcher.fetch_details_batch_raw(object_ids)
+            details, _, _ = await detail_fetcher.fetch_details_batch_raw(object_ids)
 
             # Transform, Save, and filter new ones
             repo = ObjectRepository(self._postgres.pool)

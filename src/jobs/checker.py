@@ -542,6 +542,8 @@ class Checker:
             initialized_subs = []
             broadcast_result = {"total": 0, "success": 0, "failed": 0}
             detail_fetched = 0
+            detail_not_found = 0
+            detail_failed = 0
             processed_objects = []
 
             # Track pre-filter stats for result
@@ -597,19 +599,20 @@ class Checker:
                         f"Fetching detail for {len(new_object_ids)} objects (ETL)"
                     )
 
-                    details = await self._detail_fetcher.fetch_details_batch_raw(
-                        new_object_ids
+                    details, detail_not_found, detail_failed = (
+                        await self._detail_fetcher.fetch_details_batch_raw(
+                            new_object_ids
+                        )
                     )
                     detail_fetched = len(details)
 
-                    # Notify admin if some detail fetches failed
-                    failed_detail_count = len(new_object_ids) - detail_fetched
-                    if failed_detail_count > 0 and self._broadcaster:
+                    # Notify admin only for actual errors (not 404s)
+                    if detail_failed > 0 and self._broadcaster:
                         failed_ids = [oid for oid in new_object_ids if oid not in details]
                         await self._broadcaster.notify_admin(
                             error_type=ErrorType.DETAIL_FETCH_FAILED,
                             region=region,
-                            details=f"共 {failed_detail_count} 個物件詳情頁抓取失敗\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
+                            details=f"{detail_failed} detail pages failed\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
                         )
 
                     # Step 4: Transform each new object (no I/O)
@@ -714,6 +717,8 @@ class Checker:
                 "pre_filter_output": pre_filter_output,
                 "pre_filter_skipped": pre_filter_skipped,
                 "detail_fetched": detail_fetched,
+                "detail_not_found": detail_not_found,
+                "detail_failed": detail_failed,
                 "matches": matches,
                 "broadcast": broadcast_result,
                 "initialized_subs": initialized_subs,
@@ -729,8 +734,15 @@ class Checker:
                 log_parts.append(
                     f"pre-filter={pre_filter_output}/{pre_filter_input}"
                 )
+            # Detail stats: fetched/not_found/failed
+            detail_stats = f"detail={detail_fetched}"
+            if detail_not_found > 0 or detail_failed > 0:
+                detail_stats += f"({detail_not_found} not_found"
+                if detail_failed > 0:
+                    detail_stats += f", {detail_failed} failed"
+                detail_stats += ")"
+            log_parts.append(detail_stats)
             log_parts.extend([
-                f"detail={detail_fetched}",
                 f"matches={len(matches)}",
                 f"initialized={len(initialized_subs)}",
                 f"notified={broadcast_result['success']}/{broadcast_result['total']}",

@@ -5,7 +5,10 @@ These TypedDicts define the structure of raw data extracted from 591.
 No transformation is done at this stage - values are kept as-is from the HTML.
 """
 
-from typing import TypedDict
+from typing import Literal, TypedDict
+
+# Detail fetch status
+DetailFetchStatus = Literal["success", "not_found", "error"]
 
 
 class ListRawData(TypedDict):
