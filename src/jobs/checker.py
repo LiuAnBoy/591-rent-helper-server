@@ -550,21 +550,30 @@ class Checker:
             pre_filter_skipped = 0
 
             if new_ids:
-                # Build lookup dict for list raw data
-                list_data_by_id = {int(item["id"]): item for item in list_raw_items}
+                # Build lookup dict for list raw data (skip empty IDs)
+                list_data_by_id = {
+                    int(item["id"]): item
+                    for item in list_raw_items
+                    if item.get("id")
+                }
+
+                # Get only NEW items for pre-filtering
+                new_items = [
+                    list_data_by_id[oid] for oid in new_ids if oid in list_data_by_id
+                ]
 
                 # Step 2.5: Pre-filter before detail fetch
                 # Only fetch detail for objects that might match some subscription
                 all_subs = await self._redis.get_subscriptions_by_region(region)
 
-                pre_filter_input = len(list_raw_items)
+                pre_filter_input = len(new_items)
                 if all_subs:
                     filtered_items, pre_filter_skipped = filter_objects(
-                        list_raw_items, all_subs
+                        new_items, all_subs
                     )
                     pre_filter_output = len(filtered_items)
 
-                    # Update IDs to fetch based on filtered items
+                    # Get IDs from filtered items
                     new_object_ids = [int(item["id"]) for item in filtered_items]
 
                     checker_log.info(
