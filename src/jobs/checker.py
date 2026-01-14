@@ -498,13 +498,15 @@ class Checker:
                 pages_fetched += 1
                 total_fetched += len(page_items)
 
-                # Check which items are new
-                page_ids = {int(item["id"]) for item in page_items}
+                # Check which items are new (skip items with empty ID)
+                page_ids = {
+                    int(item["id"]) for item in page_items if item.get("id")
+                }
                 new_ids_in_page = await self._redis.get_new_ids(region, page_ids)
 
                 # Collect new items
                 for item in page_items:
-                    if int(item["id"]) in new_ids_in_page:
+                    if item.get("id") and int(item["id"]) in new_ids_in_page:
                         all_list_items.append(item)
                         all_new_ids.add(int(item["id"]))
 

@@ -227,7 +227,7 @@ class InstantNotifier:
                 )
 
                 # Extract: Fetch detail raw data for all items
-                object_ids = [int(item["id"]) for item in list_raw_items]
+                object_ids = [int(item["id"]) for item in list_raw_items if item.get("id")]
                 details, _, _ = await detail_fetcher.fetch_details_batch_raw(object_ids)
 
                 # Transform and Save
@@ -236,6 +236,8 @@ class InstantNotifier:
                 all_ids = set()
 
                 for list_data in list_raw_items:
+                    if not list_data.get("id"):
+                        continue
                     object_id = int(list_data["id"])
                     detail_data = details.get(object_id)
 
@@ -375,7 +377,7 @@ class InstantNotifier:
             )
 
             # Extract: Fetch detail raw data for all items
-            object_ids = [int(item["id"]) for item in list_raw_items]
+            object_ids = [int(item["id"]) for item in list_raw_items if item.get("id")]
             details, _, _ = await detail_fetcher.fetch_details_batch_raw(object_ids)
 
             # Transform, Save, and filter new ones
@@ -384,6 +386,8 @@ class InstantNotifier:
             all_ids = set()
 
             for list_data in list_raw_items:
+                if not list_data.get("id"):
+                    continue
                 object_id = int(list_data["id"])
                 detail_data = details.get(object_id)
 
