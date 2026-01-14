@@ -17,9 +17,8 @@ def combine_raw_data(
 
     Priority rules:
     - id, url, kind_name: from List
-    - title, price_raw, address_raw, floor_raw, area_raw: Detail > List
+    - title, price_raw, address_raw, floor_raw, area_raw, layout_raw: Detail > List
     - tags: merged from both (deduplicated)
-    - layout_raw: from Detail only (more accurate with 廳/衛 info)
     - region, section, kind: from Detail
     - gender_raw, shape_raw, fitment_raw, options: from Detail only
     - surrounding_type, surrounding_raw: from Detail only
@@ -49,8 +48,7 @@ def combine_raw_data(
         or list_data.get("address_raw", ""),
         "floor_raw": detail_data.get("floor_raw") or list_data.get("floor_raw", ""),
         "area_raw": detail_data.get("area_raw") or list_data.get("area_raw", ""),
-        # From Detail only (more accurate with 廳/衛 info)
-        "layout_raw": detail_data.get("layout_raw", ""),
+        "layout_raw": detail_data.get("layout_raw") or list_data.get("layout_raw", ""),
         # Merged
         "tags": merged_tags,
         # From Detail only

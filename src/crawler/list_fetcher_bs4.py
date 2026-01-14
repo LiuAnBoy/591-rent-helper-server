@@ -165,6 +165,7 @@ class ListFetcherBs4:
             "price_raw": "",
             "tags": [],
             "kind_name": "",
+            "layout_raw": "",
             "area_raw": "",
             "floor_raw": "",
             "address_raw": "",
@@ -214,13 +215,26 @@ class ListFetcherBs4:
 
                     if text in KIND_NAMES:
                         result["kind_name"] = text
+                    elif re.match(r"\d房", text):
+                        # Layout: "2房1廳", "3房2廳" etc.
+                        result["layout_raw"] = text
                     elif "坪" in text:
                         result["area_raw"] = text
                     elif "F" in text or "層" in text:
                         result["floor_raw"] = text
 
             elif has_place:
-                result["address_raw"] = txt_elem.get_text(strip=True)
+                # Address: may have community name before actual address
+                # e.g., ['仁愛新城', '中正區-仁愛路一段'] -> take the one with "區-"
+                spans = txt_elem.find_all("span")
+                for span in reversed(spans):
+                    text = span.get_text(strip=True)
+                    if text and ("區-" in text or "區－" in text):
+                        result["address_raw"] = text
+                        break
+                else:
+                    # Fallback: use full text if no "區-" found
+                    result["address_raw"] = txt_elem.get_text(strip=True)
 
         return result
 

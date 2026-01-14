@@ -146,6 +146,7 @@ class ListFetcherPlaywright:
             "price_raw": "",
             "tags": [],
             "kind_name": "",
+            "layout_raw": "",
             "area_raw": "",
             "floor_raw": "",
             "address_raw": "",
@@ -175,6 +176,9 @@ class ListFetcherPlaywright:
 
         # Kind name
         result["kind_name"] = item.get("kind_name", "") or item.get("kindName", "")
+
+        # Layout
+        result["layout_raw"] = item.get("layoutStr", "")
 
         # Area
         area = item.get("area")
