@@ -15,6 +15,7 @@ from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
 from src.crawler.types import CombinedRawData, DetailRawData, ListRawData
 from src.jobs.broadcaster import Broadcaster, ErrorType, get_broadcaster
+from src.jobs.pre_filter import filter_objects
 from src.modules.objects import ObjectRepository
 from src.utils import (
     DBReadyData,
@@ -543,47 +544,79 @@ class Checker:
             detail_fetched = 0
             processed_objects = []
 
+            # Track pre-filter stats for result
+            pre_filter_input = 0
+            pre_filter_output = 0
+            pre_filter_skipped = 0
+
             if new_ids:
                 # Build lookup dict for list raw data
                 list_data_by_id = {int(item["id"]): item for item in list_raw_items}
-                new_object_ids = list(new_ids)
+
+                # Step 2.5: Pre-filter before detail fetch
+                # Only fetch detail for objects that might match some subscription
+                all_subs = await self._redis.get_subscriptions_by_region(region)
+
+                pre_filter_input = len(list_raw_items)
+                if all_subs:
+                    filtered_items, pre_filter_skipped = filter_objects(
+                        list_raw_items, all_subs
+                    )
+                    pre_filter_output = len(filtered_items)
+
+                    # Update IDs to fetch based on filtered items
+                    new_object_ids = [int(item["id"]) for item in filtered_items]
+
+                    checker_log.info(
+                        f"Pre-filter: {pre_filter_input} → {pre_filter_output} "
+                        f"(skipped {pre_filter_skipped} by price/area)"
+                    )
+                else:
+                    # No subscriptions = nothing to match, skip all detail fetches
+                    new_object_ids = []
+                    pre_filter_output = 0
+                    pre_filter_skipped = pre_filter_input
+                    checker_log.info(
+                        f"No subscriptions for region {region}, skipping detail fetch"
+                    )
 
                 # Step 3: Fetch detail raw data via fetcher (with retry + fallback)
-                # Wait 1 second after list fetch before detail fetch
-                await asyncio.sleep(1)
-                checker_log.info(
-                    f"Fetching detail for {len(new_object_ids)} new objects (ETL)"
-                )
-
-                details = await self._detail_fetcher.fetch_details_batch_raw(
-                    new_object_ids
-                )
-                detail_fetched = len(details)
-
-                # Notify admin if some detail fetches failed
-                failed_detail_count = len(new_object_ids) - detail_fetched
-                if failed_detail_count > 0 and self._broadcaster:
-                    failed_ids = [oid for oid in new_object_ids if oid not in details]
-                    await self._broadcaster.notify_admin(
-                        error_type=ErrorType.DETAIL_FETCH_FAILED,
-                        region=region,
-                        details=f"共 {failed_detail_count} 個物件詳情頁抓取失敗\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
+                if new_object_ids:
+                    # Wait 1 second after list fetch before detail fetch
+                    await asyncio.sleep(1)
+                    checker_log.info(
+                        f"Fetching detail for {len(new_object_ids)} objects (ETL)"
                     )
 
-                # Step 4: Transform each new object (no I/O)
-                for object_id in new_object_ids:
-                    list_data = list_data_by_id[object_id]
-                    detail_data = details.get(object_id)
-                    processed_obj = self._transform_object(
-                        list_data, detail_data, region
+                    details = await self._detail_fetcher.fetch_details_batch_raw(
+                        new_object_ids
                     )
-                    processed_objects.append(processed_obj)
+                    detail_fetched = len(details)
 
-                # Step 5: Batch save to DB and Redis
-                await self._save_objects_batch(processed_objects, region)
+                    # Notify admin if some detail fetches failed
+                    failed_detail_count = len(new_object_ids) - detail_fetched
+                    if failed_detail_count > 0 and self._broadcaster:
+                        failed_ids = [oid for oid in new_object_ids if oid not in details]
+                        await self._broadcaster.notify_admin(
+                            error_type=ErrorType.DETAIL_FETCH_FAILED,
+                            region=region,
+                            details=f"共 {failed_detail_count} 個物件詳情頁抓取失敗\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
+                        )
+
+                    # Step 4: Transform each new object (no I/O)
+                    for object_id in new_object_ids:
+                        list_data = list_data_by_id[object_id]
+                        detail_data = details.get(object_id)
+                        processed_obj = self._transform_object(
+                            list_data, detail_data, region
+                        )
+                        processed_objects.append(processed_obj)
+
+                    # Step 5: Batch save to DB and Redis
+                    await self._save_objects_batch(processed_objects, region)
 
                 # Step 6: Subscription matching
-                all_subs = await self._redis.get_subscriptions_by_region(region)
+                # Reuse all_subs from pre-filter step (already fetched above)
                 uninitialized_subs = await self._redis.get_uninitialized_subscriptions(
                     all_subs
                 )
@@ -668,18 +701,32 @@ class Checker:
                 "region": region,
                 "fetched": total_fetched,
                 "new_count": len(new_ids),
+                "pre_filter_input": pre_filter_input,
+                "pre_filter_output": pre_filter_output,
+                "pre_filter_skipped": pre_filter_skipped,
                 "detail_fetched": detail_fetched,
                 "matches": matches,
                 "broadcast": broadcast_result,
                 "initialized_subs": initialized_subs,
             }
 
-            checker_log.info(
-                f"Check complete: region={region} fetched={result['fetched']} "
-                f"new={result['new_count']} detail={detail_fetched} "
-                f"matches={len(matches)} initialized={len(initialized_subs)} "
-                f"notified={broadcast_result['success']}/{broadcast_result['total']}"
-            )
+            # Build log message
+            log_parts = [
+                f"Check complete: region={region}",
+                f"fetched={result['fetched']}",
+                f"new={result['new_count']}",
+            ]
+            if pre_filter_input > 0:
+                log_parts.append(
+                    f"pre-filter={pre_filter_output}/{pre_filter_input}"
+                )
+            log_parts.extend([
+                f"detail={detail_fetched}",
+                f"matches={len(matches)}",
+                f"initialized={len(initialized_subs)}",
+                f"notified={broadcast_result['success']}/{broadcast_result['total']}",
+            ])
+            checker_log.info(" ".join(log_parts))
 
             return result
 
