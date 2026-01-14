@@ -176,4 +176,4 @@ Key variables (see `.env.example` for full list):
 - `TELEGRAM_BOT_TOKEN` - Bot authentication
 - `TELEGRAM_ADMIN_ID` - Admin notifications
 - `JWT_SECRET` - API authentication
-- `CRAWLER_INTERVAL_MINUTES` - Crawl frequency (default: 15)
+- `CRAWLER_INTERVAL_MINUTES` - Crawl frequency (default: 10)

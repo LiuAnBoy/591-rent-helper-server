@@ -63,7 +63,7 @@
 
 **排程設定**（可透過環境變數調整）：
 
-- 白天：每 15 分鐘 (`CRAWLER_INTERVAL_MINUTES`)
+- 白天：每 10 分鐘 (`CRAWLER_INTERVAL_MINUTES`)
 - 夜間：每 60 分鐘 (`CRAWLER_NIGHT_INTERVAL_MINUTES`)
 - 夜間時段：01:00-08:00 (`CRAWLER_NIGHT_START_HOUR`, `CRAWLER_NIGHT_END_HOUR`)
 
@@ -203,7 +203,7 @@ python scripts/test_detail_playwright.py <object_id>
 | `TELEGRAM_WEBHOOK_URL`           | Telegram Webhook URL                 | -         |
 | `TELEGRAM_ADMIN_ID`              | 管理員 ID（錯誤通知用，可選）        | -         |
 | `JWT_SECRET`                     | JWT 密鑰                             | -         |
-| `CRAWLER_INTERVAL_MINUTES`       | 白天爬取間隔（分鐘），間隔式排程     | 15        |
+| `CRAWLER_INTERVAL_MINUTES`       | 白天爬取間隔（分鐘），間隔式排程     | 10        |
 | `CRAWLER_NIGHT_INTERVAL_MINUTES` | 夜間爬取間隔（分鐘），固定時間點     | 60        |
 | `CRAWLER_NIGHT_START_HOUR`       | 夜間開始時間                         | 1         |
 | `CRAWLER_NIGHT_END_HOUR`         | 夜間結束時間                         | 8         |

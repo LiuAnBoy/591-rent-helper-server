@@ -76,6 +76,7 @@ class ListFetcherBs4:
         price_max: int | None = None,
         other: list[str] | None = None,
         sort: str = "posttime_desc",
+        first_row: int = 0,
     ) -> str:
         """Build the 591 list URL with query parameters."""
         params: dict[str, str | int] = {"region": region}
@@ -90,6 +91,8 @@ class ListFetcherBs4:
         if other:
             params["other"] = ",".join(other)
         params["sort"] = sort
+        if first_row > 0:
+            params["firstRow"] = first_row
 
         return f"{self.BASE_URL}?{urlencode(params)}"
 
@@ -98,6 +101,7 @@ class ListFetcherBs4:
         region: int,
         sort: str = "posttime_desc",
         max_items: int | None = None,
+        first_row: int = 0,
     ) -> list[ListRawData]:
         """
         Fetch rental objects from list page, returning raw data.
@@ -106,6 +110,7 @@ class ListFetcherBs4:
             region: City code (1=Taipei, 3=New Taipei)
             sort: Sort order (default: posttime_desc)
             max_items: Maximum number of items to return
+            first_row: Pagination offset (0=page 1, 30=page 2, etc.)
 
         Returns:
             List of ListRawData or empty list if failed
@@ -113,8 +118,8 @@ class ListFetcherBs4:
         if self._session is None:
             await self.start()
 
-        # Build URL
-        url = f"{self.BASE_URL}?region={region}&sort={sort}"
+        # Build URL with pagination support
+        url = self._build_url(region=region, sort=sort, first_row=first_row)
         fetcher_log.debug(f"Fetching list page: {url}")
 
         resp = self._session.get(url, timeout=self._timeout, verify=False)

@@ -82,6 +82,7 @@ class ListFetcher:
         region: int,
         sort: str = "posttime_desc",
         max_items: int | None = None,
+        first_row: int = 0,
     ) -> list[ListRawData]:
         """
         Fetch rental objects from list page, returning raw data.
@@ -93,6 +94,7 @@ class ListFetcher:
             region: City code (1=Taipei, 3=New Taipei)
             sort: Sort order (default: posttime_desc)
             max_items: Maximum number of items to return
+            first_row: Pagination offset (0=page 1, 30=page 2, etc.)
 
         Returns:
             List of ListRawData or empty list if failed
@@ -106,6 +108,7 @@ class ListFetcher:
                 region=region,
                 sort=sort,
                 max_items=max_items,
+                first_row=first_row,
             )
             if items:
                 fetcher_log.info(
@@ -131,6 +134,7 @@ class ListFetcher:
             region=region,
             sort=sort,
             max_items=max_items,
+            first_row=first_row,
         )
 
         if not result:

@@ -306,6 +306,7 @@ class ListFetcherPlaywright:
         region: int,
         sort: str = "posttime_desc",
         max_items: int | None = None,
+        first_row: int = 0,
     ) -> list[ListRawData]:
         """
         Fetch rental objects and return raw data (no transformation).
@@ -314,6 +315,7 @@ class ListFetcherPlaywright:
             region: City code (1=Taipei, 3=New Taipei)
             sort: Sort order (default: posttime_desc)
             max_items: Maximum number of items to return
+            first_row: Pagination offset (0=page 1, 30=page 2, etc.)
 
         Returns:
             List of ListRawData
@@ -321,7 +323,7 @@ class ListFetcherPlaywright:
         if not self._browser:
             await self.start()
 
-        url = self._build_url(region=region, sort=sort)
+        url = self._build_url(region=region, sort=sort, first_row=first_row)
         fetcher_log.info(f"Playwright fetching raw: {url}")
 
         await self._page.goto(url, wait_until="domcontentloaded")

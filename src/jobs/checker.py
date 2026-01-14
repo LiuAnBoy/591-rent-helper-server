@@ -36,9 +36,9 @@ class Checker:
     3. All matching done in Redis (no PostgreSQL queries during crawl)
     """
 
-    # Crawl settings
-    INIT_CRAWL_COUNT = 5  # Items to crawl on first run (no notify)
-    NORMAL_CRAWL_COUNT = 30  # Items to crawl on normal run
+    # Pagination settings
+    PAGE_SIZE = 30  # Items per page
+    MAX_PAGES = 2  # Maximum pages to fetch (60 items max)
 
     def __init__(
         self,
@@ -418,14 +418,13 @@ class Checker:
     async def check(
         self,
         region: int,
-        max_items: int | None = None,
         force_notify: bool = False,
     ) -> dict:
         """
         Check for new objects in a region.
 
-        Optimized Flow:
-        1. Crawl list page (BS4 → Playwright fallback)
+        Flow:
+        1. Crawl list pages with auto-pagination (up to MAX_PAGES)
         2. Redis filter: find new IDs only
         3. For each new object:
            - Fetch detail (BS4 → Playwright fallback)
@@ -437,7 +436,6 @@ class Checker:
 
         Args:
             region: City code (1=Taipei, 3=New Taipei)
-            max_items: Override max items (default: NORMAL_CRAWL_COUNT)
             force_notify: Force notifications even for uninitialized subs (for testing)
 
         Returns:
@@ -445,57 +443,101 @@ class Checker:
         """
         await self._ensure_connections()
 
-        if max_items is None:
-            max_items = self.NORMAL_CRAWL_COUNT
-
-        checker_log.info(f"Checking region={region} | max_items={max_items}")
+        checker_log.info(f"Checking region={region}")
 
         # Start crawler run tracking
         run_id = await self._postgres.start_crawler_run(region)
 
         try:
-            # Step 1: Fetch list raw data via fetcher (with retry + fallback)
-            list_raw_items = await self._list_fetcher.fetch_objects_raw(
-                region=region,
-                sort="posttime_desc",
-                max_items=max_items,
-            )
+            # Step 1: Fetch list with auto-pagination
+            # If page 1 is all new items, automatically fetch page 2
+            all_list_items: list[ListRawData] = []
+            all_new_ids: set[int] = set()
+            total_fetched = 0
+            pages_fetched = 0
 
-            if not list_raw_items:
-                checker_log.warning("No objects fetched")
-                # Notify admin about list fetch failure
-                if self._broadcaster:
-                    await self._broadcaster.notify_admin(
-                        error_type=ErrorType.LIST_FETCH_FAILED,
-                        region=region,
-                        details="ListFetcher 無法抓取列表頁 (ETL raw)",
-                    )
-                await self._postgres.finish_crawler_run(
-                    run_id=run_id,
-                    status="success",
-                    total_fetched=0,
-                    new_objects=0,
+            for page in range(self.MAX_PAGES):
+                first_row = page * self.PAGE_SIZE
+
+                # Fetch page
+                page_items = await self._list_fetcher.fetch_objects_raw(
+                    region=region,
+                    sort="posttime_desc",
+                    first_row=first_row,
                 )
-                return {
-                    "region": region,
-                    "fetched": 0,
-                    "new_count": 0,
-                    "matches": [],
-                    "detail_fetched": 0,
-                    "broadcast": {"total": 0, "success": 0, "failed": 0},
-                    "initialized_subs": [],
-                }
 
-            checker_log.info(f"Fetched {len(list_raw_items)} objects from list (ETL)")
+                if not page_items:
+                    if page == 0:
+                        # First page failed - this is an error
+                        checker_log.warning("No objects fetched from page 1")
+                        if self._broadcaster:
+                            await self._broadcaster.notify_admin(
+                                error_type=ErrorType.LIST_FETCH_FAILED,
+                                region=region,
+                                details="ListFetcher 無法抓取列表頁 (ETL raw)",
+                            )
+                        await self._postgres.finish_crawler_run(
+                            run_id=run_id,
+                            status="success",
+                            total_fetched=0,
+                            new_objects=0,
+                        )
+                        return {
+                            "region": region,
+                            "fetched": 0,
+                            "new_count": 0,
+                            "matches": [],
+                            "detail_fetched": 0,
+                            "broadcast": {"total": 0, "success": 0, "failed": 0},
+                            "initialized_subs": [],
+                        }
+                    # Later pages empty - just stop pagination
+                    break
 
-            # Step 2: Redis filter - find new IDs (don't save to DB yet)
-            fetched_ids = {int(item["id"]) for item in list_raw_items}
-            new_ids = await self._redis.get_new_ids(region, fetched_ids)
-            checker_log.info(f"Found {len(new_ids)} new objects")
+                pages_fetched += 1
+                total_fetched += len(page_items)
+
+                # Check which items are new
+                page_ids = {int(item["id"]) for item in page_items}
+                new_ids_in_page = await self._redis.get_new_ids(region, page_ids)
+
+                # Collect new items
+                for item in page_items:
+                    if int(item["id"]) in new_ids_in_page:
+                        all_list_items.append(item)
+                        all_new_ids.add(int(item["id"]))
+
+                checker_log.info(
+                    f"Page {page + 1}: {len(new_ids_in_page)}/{len(page_items)} new"
+                )
+
+                # Decide if we need next page
+                if len(new_ids_in_page) < len(page_items):
+                    # Found some old items, no need for next page
+                    break
+
+                # All items are new, might need next page
+                if page < self.MAX_PAGES - 1:
+                    checker_log.info("All items are new, fetching next page...")
+                    await asyncio.sleep(1)  # Rate limit between pages
+
+            # Log summary
+            if pages_fetched > 1:
+                checker_log.info(
+                    f"Fetched {total_fetched} objects from {pages_fetched} pages, "
+                    f"{len(all_new_ids)} new"
+                )
+            else:
+                checker_log.info(
+                    f"Fetched {total_fetched} objects from list, {len(all_new_ids)} new"
+                )
+
+            # Use collected data for rest of flow
+            list_raw_items = all_list_items
+            new_ids = all_new_ids
 
             # Initialize result variables
             matches = []
-            init_matches = []
             initialized_subs = []
             broadcast_result = {"total": 0, "success": 0, "failed": 0}
             detail_fetched = 0
@@ -556,8 +598,7 @@ class Checker:
 
                         sub_id = sub["id"]
                         if sub_id in uninitialized_ids:
-                            # Uninitialized subscription - match but don't notify
-                            init_matches.append((obj, sub))
+                            # Uninitialized subscription - mark as initialized, don't notify
                             if sub_id not in initialized_subs:
                                 initialized_subs.append(sub_id)
                         else:
@@ -619,13 +660,13 @@ class Checker:
             await self._postgres.finish_crawler_run(
                 run_id=run_id,
                 status="success",
-                total_fetched=len(list_raw_items),
+                total_fetched=total_fetched,
                 new_objects=len(new_ids),
             )
 
             result = {
                 "region": region,
-                "fetched": len(list_raw_items),
+                "fetched": total_fetched,
                 "new_count": len(new_ids),
                 "detail_fetched": detail_fetched,
                 "matches": matches,

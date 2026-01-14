@@ -34,7 +34,9 @@ class PostgresSettings(BaseSettings):
 class RedisSettings(BaseSettings):
     """Redis connection settings."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="REDIS_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_prefix="REDIS_", extra="ignore"
+    )
 
     host: str = "localhost"
     port: int = 6379
@@ -52,7 +54,9 @@ class RedisSettings(BaseSettings):
 class TelegramSettings(BaseSettings):
     """Telegram bot settings."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="TELEGRAM_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_prefix="TELEGRAM_", extra="ignore"
+    )
 
     bot_token: str = ""
     webhook_url: str = ""  # TELEGRAM_WEBHOOK_URL
@@ -65,12 +69,12 @@ class CrawlerSettings(BaseSettings):
     default_region: int = 1  # Taipei
 
     # Crawl interval in minutes
-    interval_minutes: int = 15        # Daytime (8:00-01:00): every 15 min
+    interval_minutes: int = 10  # Daytime (8:00-01:00): every 10 min
     night_interval_minutes: int = 120  # Night (01:00-08:00): every 2 hours
 
     # Night hours (24h format)
-    night_start_hour: int = 1   # 01:00
-    night_end_hour: int = 8     # 08:00
+    night_start_hour: int = 1  # 01:00
+    night_end_hour: int = 8  # 08:00
 
     model_config = SettingsConfigDict(env_prefix="CRAWLER_")
 
