@@ -318,7 +318,6 @@ async def main():
     # Create a test object
     test_object = RentalObject(
         id=12345678,
-        type=1,
         kind=2,
         kind_name="獨立套房",
         title="測試物件 - 近捷運優質套房",
@@ -327,11 +326,10 @@ async def main():
         price_unit="元/月",
         floor_name="3F/5F",
         area=10.5,
-        area_name="10.5坪",
-        layout_str="1房1廳1衛",
+        layoutStr="1房1廳1衛",
         address="台北市大安區忠孝東路",
-        region=1,
-        section=5,
+        regionid=1,
+        sectionid=5,
         tags=["近捷運", "新上架", "可養寵物"],
     )
 

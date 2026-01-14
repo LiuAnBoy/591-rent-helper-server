@@ -128,9 +128,8 @@ src/
 │
 ├── modules/               # Domain modules (repository pattern)
 │   ├── users/            # User management
-│   ├── providers/        # Auth providers (Telegram)
+│   ├── providers/        # Auth providers (Telegram) & Redis sync
 │   ├── subscriptions/    # Subscription CRUD & matching
-│   ├── bindings/         # Channel bindings (notification toggles)
 │   └── objects/          # Rental object storage
 │
 └── utils/

@@ -15,7 +15,7 @@ async def trigger_checker() -> dict:
     """Manually trigger checker job."""
     checker_log.info("Manually triggering checker job...")
     checker = scheduler.get_checker()
-    results = await checker.check_all_regions(max_items=10)
+    results = await checker.check_active_regions()
     return {
         "status": True,
         "results": [

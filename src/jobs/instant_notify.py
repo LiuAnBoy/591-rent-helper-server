@@ -8,10 +8,10 @@ from loguru import logger
 
 from src.connections.postgres import get_postgres
 from src.connections.redis import get_redis
-from src.crawler.detail_fetcher import get_detail_fetcher
 from src.crawler.combiner import combine_raw_data
-from src.crawler.types import CombinedRawData
+from src.crawler.detail_fetcher import get_detail_fetcher
 from src.crawler.list_fetcher import get_list_fetcher
+from src.crawler.types import CombinedRawData
 from src.jobs.broadcaster import get_broadcaster
 from src.modules.objects import ObjectRepository
 from src.utils import DBReadyData, transform_to_db_ready
@@ -45,7 +45,7 @@ class InstantNotifier:
         user_id: int,
         subscription: dict,
         service: str = "telegram",
-        service_id: str = None,
+        service_id: str | None = None,
     ) -> dict:
         """
         Check and notify user for a subscription immediately.
@@ -109,7 +109,7 @@ class InstantNotifier:
         user_id: int,
         subscriptions: list[dict],
         service: str = "telegram",
-        service_id: str = None,
+        service_id: str | None = None,
     ) -> dict:
         """
         Notify for multiple subscriptions efficiently.
@@ -585,7 +585,7 @@ async def notify_for_new_subscription(
     user_id: int,
     subscription: dict,
     service: str = "telegram",
-    service_id: str = None,
+    service_id: str | None = None,
 ) -> dict:
     """
     Convenience function to notify for a new subscription.
@@ -609,7 +609,7 @@ async def notify_for_subscriptions_batch(
     user_id: int,
     subscriptions: list[dict],
     service: str = "telegram",
-    service_id: str = None,
+    service_id: str | None = None,
 ) -> dict:
     """
     Notify for multiple subscriptions efficiently.

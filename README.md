@@ -339,9 +339,8 @@ python scripts/test_detail_playwright.py <object_id>
 │   │   └── cors.py              # CORS 設定
 │   ├── modules/
 │   │   ├── users/               # 使用者模組
-│   │   ├── providers/           # 登入提供者模組（Telegram 等）
+│   │   ├── providers/           # 登入提供者模組 & Redis 同步
 │   │   ├── subscriptions/       # 訂閱模組
-│   │   ├── bindings/            # 綁定模組（通知開關同步）
 │   │   └── objects/             # 物件模組
 │   └── utils/
 │       ├── mappings.py          # 常數對照表

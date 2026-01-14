@@ -10,10 +10,10 @@ from loguru import logger
 
 from src.connections.postgres import PostgresConnection, get_postgres
 from src.connections.redis import RedisConnection, get_redis
-from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.combiner import combine_raw_data
-from src.crawler.types import CombinedRawData, DetailRawData, ListRawData
+from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
+from src.crawler.types import CombinedRawData, DetailRawData, ListRawData
 from src.jobs.broadcaster import Broadcaster, ErrorType, get_broadcaster
 from src.modules.objects import ObjectRepository
 from src.utils import (

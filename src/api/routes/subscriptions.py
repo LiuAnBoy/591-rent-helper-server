@@ -73,28 +73,29 @@ async def create_subscription(
         # Get subscription with provider info for Redis sync
         sub_with_provider = await repo.get_by_id_with_provider(subscription["id"])
 
-        # Sync single subscription to Redis
-        await sync_subscription_to_redis(sub_with_provider)
+        if sub_with_provider:
+            # Sync single subscription to Redis
+            await sync_subscription_to_redis(sub_with_provider)
+
+            # Trigger instant notification in background if provider enabled
+            if sub_with_provider.get("service") and sub_with_provider.get("service_id"):
+                from src.jobs.instant_notify import notify_for_new_subscription
+
+                asyncio.create_task(
+                    notify_for_new_subscription(
+                        user_id=current_user.id,
+                        subscription=sub_with_provider,
+                        service=sub_with_provider["service"],
+                        service_id=sub_with_provider["service_id"],
+                    )
+                )
+                subs_log.info(
+                    f"Triggered instant notify for subscription {subscription['id']}"
+                )
 
         subs_log.info(
             f"Created subscription {subscription['id']} for user {current_user.id}"
         )
-
-        # Trigger instant notification in background if provider enabled
-        if sub_with_provider.get("service") and sub_with_provider.get("service_id"):
-            from src.jobs.instant_notify import notify_for_new_subscription
-
-            asyncio.create_task(
-                notify_for_new_subscription(
-                    user_id=current_user.id,
-                    subscription=sub_with_provider,
-                    service=sub_with_provider["service"],
-                    service_id=sub_with_provider["service_id"],
-                )
-            )
-            subs_log.info(
-                f"Triggered instant notify for subscription {subscription['id']}"
-            )
 
         return {"success": True}
     except Exception as e:
@@ -199,7 +200,8 @@ async def update_subscription(
 
         # Get updated subscription with provider info and sync to Redis
         sub_with_provider = await repo.get_by_id_with_provider(subscription_id)
-        await sync_subscription_to_redis(sub_with_provider)
+        if sub_with_provider:
+            await sync_subscription_to_redis(sub_with_provider)
 
         subs_log.info(f"Updated subscription {subscription_id}")
         return {"success": True}
@@ -276,24 +278,25 @@ async def toggle_subscription(
 
     # Get updated subscription with provider info and sync to Redis
     sub_with_provider = await repo.get_by_id_with_provider(subscription_id)
-    await sync_subscription_to_redis(sub_with_provider, was_disabled=was_disabled)
+    if sub_with_provider:
+        await sync_subscription_to_redis(sub_with_provider, was_disabled=was_disabled)
 
-    # If re-enabling, trigger instant notification
-    if was_disabled and new_status:
-        if sub_with_provider.get("service") and sub_with_provider.get("service_id"):
-            from src.jobs.instant_notify import notify_for_new_subscription
+        # If re-enabling, trigger instant notification
+        if was_disabled and new_status:
+            if sub_with_provider.get("service") and sub_with_provider.get("service_id"):
+                from src.jobs.instant_notify import notify_for_new_subscription
 
-            asyncio.create_task(
-                notify_for_new_subscription(
-                    user_id=current_user.id,
-                    subscription=sub_with_provider,
-                    service=sub_with_provider["service"],
-                    service_id=sub_with_provider["service_id"],
+                asyncio.create_task(
+                    notify_for_new_subscription(
+                        user_id=current_user.id,
+                        subscription=sub_with_provider,
+                        service=sub_with_provider["service"],
+                        service_id=sub_with_provider["service_id"],
+                    )
                 )
-            )
-            subs_log.info(
-                f"Triggered instant notify for re-enabled subscription {subscription_id}"
-            )
+                subs_log.info(
+                    f"Triggered instant notify for re-enabled subscription {subscription_id}"
+                )
 
     subs_log.info(f"Toggled subscription {subscription_id} to {new_status}")
     return {"success": True}
