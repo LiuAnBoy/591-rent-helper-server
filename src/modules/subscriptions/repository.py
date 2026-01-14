@@ -84,6 +84,27 @@ class SubscriptionRepository:
             row = await conn.fetchrow(query, subscription_id)
             return dict(row) if row else None
 
+    async def get_by_id_with_provider(self, subscription_id: int) -> dict | None:
+        """
+        Get subscription by ID with provider info for notifications.
+
+        Args:
+            subscription_id: Subscription ID
+
+        Returns:
+            Subscription record with service/service_id fields, or None if not found
+        """
+        query = """
+            SELECT s.*, up.provider AS service, up.provider_id AS service_id
+            FROM subscriptions s
+            LEFT JOIN user_providers up
+                ON s.user_id = up.user_id AND up.notify_enabled = TRUE
+            WHERE s.id = $1
+        """
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(query, subscription_id)
+            return dict(row) if row else None
+
     async def get_by_user(self, user_id: int, enabled_only: bool = False) -> list[dict]:
         """
         Get all subscriptions for a user.

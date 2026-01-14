@@ -8,8 +8,10 @@ from src.api.dependencies import CurrentUser
 subs_log = logger.bind(module="Subscriptions")
 
 from src.connections.postgres import get_postgres  # noqa: E402
-from src.connections.redis import get_redis  # noqa: E402
-from src.modules.providers import sync_user_subscriptions_to_redis  # noqa: E402
+from src.modules.providers import (  # noqa: E402
+    remove_subscription_from_redis,
+    sync_subscription_to_redis,
+)
 from src.modules.subscriptions import (  # noqa: E402
     SubscriptionCreate,
     SubscriptionListResponse,
@@ -29,40 +31,6 @@ async def get_repository() -> SubscriptionRepository:
     return SubscriptionRepository(postgres.pool)
 
 
-async def remove_subscription_from_redis(
-    region: int, subscription_id: int, max_retries: int = 3, retry_delay: float = 0.5
-) -> None:
-    """
-    Remove a subscription from Redis cache with retry mechanism.
-
-    Args:
-        region: Region code
-        subscription_id: Subscription ID
-        max_retries: Maximum retry attempts
-        retry_delay: Initial delay between retries (exponential backoff)
-    """
-    import asyncio
-
-    for attempt in range(max_retries):
-        try:
-            redis = await get_redis()
-            await redis.remove_subscription(region, subscription_id)
-            return
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = retry_delay * (2**attempt)
-                subs_log.warning(
-                    f"Redis remove failed (attempt {attempt + 1}/{max_retries}): {e}. "
-                    f"Retrying in {wait_time}s..."
-                )
-                await asyncio.sleep(wait_time)
-            else:
-                subs_log.error(
-                    f"Redis remove failed after {max_retries} attempts: {e}. "
-                    f"Subscription {subscription_id} may still exist in Redis."
-                )
-
-
 @router.post("", status_code=201)
 async def create_subscription(
     data: SubscriptionCreate,
@@ -78,10 +46,8 @@ async def create_subscription(
     """
     import asyncio
 
-    from src.modules.providers import UserProviderRepository
-
-    repo = await get_repository()
     postgres = await get_postgres()
+    repo = SubscriptionRepository(postgres.pool)
     user_repo = UserRepository(postgres.pool)
 
     # Check subscription limit based on user role
@@ -104,29 +70,26 @@ async def create_subscription(
 
         subscription = await repo.create(user_id=current_user.id, data=create_data)
 
-        # Sync all user subscriptions to Redis (includes provider info)
-        await sync_user_subscriptions_to_redis(current_user.id)
+        # Get subscription with provider info for Redis sync
+        sub_with_provider = await repo.get_by_id_with_provider(subscription["id"])
+
+        # Sync single subscription to Redis
+        await sync_subscription_to_redis(sub_with_provider)
 
         subs_log.info(
             f"Created subscription {subscription['id']} for user {current_user.id}"
         )
 
-        # Trigger instant notification in background
-        provider_repo = UserProviderRepository(postgres.pool)
-        providers = await provider_repo.get_by_user(current_user.id)
-
-        # Find active provider with notifications enabled
-        active_provider = next((p for p in providers if p.notify_enabled), None)
-
-        if active_provider:
+        # Trigger instant notification in background if provider enabled
+        if sub_with_provider.get("service") and sub_with_provider.get("service_id"):
             from src.jobs.instant_notify import notify_for_new_subscription
 
             asyncio.create_task(
                 notify_for_new_subscription(
                     user_id=current_user.id,
-                    subscription=subscription,
-                    service=active_provider.provider,
-                    service_id=active_provider.provider_id,
+                    subscription=sub_with_provider,
+                    service=sub_with_provider["service"],
+                    service_id=sub_with_provider["service_id"],
                 )
             )
             subs_log.info(
@@ -219,11 +182,24 @@ async def update_subscription(
         update_data["floor_min"] = floor_min
         update_data["floor_max"] = floor_max
 
+    # Detect region change
+    old_region = existing["region"]
+    new_region = update_data.get("region", old_region)
+    region_changed = old_region != new_region
+
     try:
         await repo.update(subscription_id, update_data)
 
-        # Sync all user subscriptions to Redis (includes provider info)
-        await sync_user_subscriptions_to_redis(current_user.id)
+        # If region changed, remove from old region first
+        if region_changed:
+            await remove_subscription_from_redis(old_region, subscription_id)
+            subs_log.info(
+                f"Subscription {subscription_id} region changed: {old_region} -> {new_region}"
+            )
+
+        # Get updated subscription with provider info and sync to Redis
+        sub_with_provider = await repo.get_by_id_with_provider(subscription_id)
+        await sync_subscription_to_redis(sub_with_provider)
 
         subs_log.info(f"Updated subscription {subscription_id}")
         return {"success": True}
@@ -283,10 +259,7 @@ async def toggle_subscription(
     """
     import asyncio
 
-    from src.modules.providers import UserProviderRepository
-
     repo = await get_repository()
-    postgres = await get_postgres()
 
     # Check ownership
     existing = await repo.get_by_id(subscription_id)
@@ -297,31 +270,25 @@ async def toggle_subscription(
         raise HTTPException(status_code=403, detail="無權限修改此訂閱")
 
     # Toggle
-    was_disabled = not existing[
-        "enabled"
-    ]  # True if currently disabled, will be enabled
+    was_disabled = not existing["enabled"]  # True if currently disabled, will be enabled
     new_status = not existing["enabled"]
-    subscription = await repo.update(subscription_id, {"enabled": new_status})
+    await repo.update(subscription_id, {"enabled": new_status})
 
-    # Sync all user subscriptions to Redis (includes provider info)
-    await sync_user_subscriptions_to_redis(current_user.id)
+    # Get updated subscription with provider info and sync to Redis
+    sub_with_provider = await repo.get_by_id_with_provider(subscription_id)
+    await sync_subscription_to_redis(sub_with_provider, was_disabled=was_disabled)
 
     # If re-enabling, trigger instant notification
     if was_disabled and new_status:
-        provider_repo = UserProviderRepository(postgres.pool)
-        providers = await provider_repo.get_by_user(current_user.id)
-
-        active_provider = next((p for p in providers if p.notify_enabled), None)
-
-        if active_provider:
+        if sub_with_provider.get("service") and sub_with_provider.get("service_id"):
             from src.jobs.instant_notify import notify_for_new_subscription
 
             asyncio.create_task(
                 notify_for_new_subscription(
                     user_id=current_user.id,
-                    subscription=subscription,
-                    service=active_provider.provider,
-                    service_id=active_provider.provider_id,
+                    subscription=sub_with_provider,
+                    service=sub_with_provider["service"],
+                    service_id=sub_with_provider["service_id"],
                 )
             )
             subs_log.info(
