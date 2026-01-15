@@ -5,6 +5,7 @@ Test script for BS4 detail fetcher.
 Usage:
     uv run python scripts/test_detail_bs4.py 20506491
     uv run python scripts/test_detail_bs4.py 20506491 20506488 20506485
+    uv run python scripts/test_detail_bs4.py 99999999  # Test 404 handling
 """
 
 import argparse
@@ -28,6 +29,8 @@ async def main(object_ids: list[int]):
 
     fetcher = DetailFetcherBs4()
 
+    stats = {"success": 0, "not_found": 0, "error": 0}
+
     try:
         await fetcher.start()
 
@@ -35,13 +38,17 @@ async def main(object_ids: list[int]):
             print(f"\n--- Object {object_id} ---")
             print(f"Fetching detail...")
 
-            result = await fetcher.fetch_detail_raw(object_id)
+            result, status = await fetcher.fetch_detail_raw(object_id)
 
-            if result:
+            stats[status] += 1
+
+            if status == "success":
                 print(f"Status: SUCCESS")
                 print(json.dumps(result, ensure_ascii=False, indent=2))
+            elif status == "not_found":
+                print("Status: NOT_FOUND (404)")
             else:
-                print(f"Status: FAILED (returned None)")
+                print("Status: ERROR")
 
             print()
 
@@ -52,6 +59,11 @@ async def main(object_ids: list[int]):
 
     finally:
         await fetcher.close()
+
+    # Print summary
+    print(f"{'='*60}")
+    print(f"Summary: {stats['success']} success, {stats['not_found']} not_found, {stats['error']} error")
+    print(f"{'='*60}")
 
 
 if __name__ == "__main__":

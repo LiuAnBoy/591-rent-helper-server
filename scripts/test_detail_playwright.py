@@ -5,6 +5,7 @@ Test script for Playwright detail fetcher.
 Usage:
     uv run python scripts/test_detail_playwright.py 20506491
     uv run python scripts/test_detail_playwright.py 20506491 20506488 20506485
+    uv run python scripts/test_detail_playwright.py 99999999  # Test 404 handling
 """
 
 import argparse
@@ -22,26 +23,32 @@ from src.crawler.detail_fetcher_playwright import DetailFetcherPlaywright
 async def main(object_ids: list[int]):
     """Run Playwright detail fetch test."""
     print(f"\n{'='*60}")
-    print(f"Playwright Detail Fetcher Test")
+    print("Playwright Detail Fetcher Test")
     print(f"Object IDs: {object_ids}")
     print(f"{'='*60}\n")
 
     fetcher = DetailFetcherPlaywright()
+
+    stats = {"success": 0, "not_found": 0, "error": 0}
 
     try:
         await fetcher.start()
 
         for object_id in object_ids:
             print(f"\n--- Object {object_id} ---")
-            print(f"Fetching detail...")
+            print("Fetching detail...")
 
-            result = await fetcher.fetch_detail_raw(object_id)
+            result, status = await fetcher.fetch_detail_raw(object_id)
 
-            if result:
-                print(f"Status: SUCCESS")
+            stats[status] += 1
+
+            if status == "success":
+                print("Status: SUCCESS")
                 print(json.dumps(result, ensure_ascii=False, indent=2))
+            elif status == "not_found":
+                print("Status: NOT_FOUND (404)")
             else:
-                print(f"Status: FAILED (returned None)")
+                print("Status: ERROR")
 
             print()
 
@@ -52,6 +59,11 @@ async def main(object_ids: list[int]):
 
     finally:
         await fetcher.close()
+
+    # Print summary
+    print(f"{'='*60}")
+    print(f"Summary: {stats['success']} success, {stats['not_found']} not_found, {stats['error']} error")
+    print(f"{'='*60}")
 
 
 if __name__ == "__main__":

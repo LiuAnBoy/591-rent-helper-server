@@ -32,7 +32,7 @@ async def main(region: int, limit: int, raw: bool = False):
         await fetcher.start()
 
         print("Fetching objects...")
-        objects = await fetcher.fetch_objects_raw(region=region, limit=limit)
+        objects = await fetcher.fetch_objects_raw(region=region, max_items=limit)
 
         print(f"\n{'='*60}")
         print(f"Results: {len(objects)} objects")
@@ -46,12 +46,13 @@ async def main(region: int, limit: int, raw: bool = False):
                 print(json.dumps({
                     "id": obj.get("id"),
                     "title": obj.get("title"),
+                    "url": obj.get("url"),
                     "price_raw": obj.get("price_raw"),
                     "kind_name": obj.get("kind_name"),
                     "region": obj.get("region"),
                     "area_raw": obj.get("area_raw"),
                     "floor_raw": obj.get("floor_raw"),
-                    "layout_str": obj.get("layout_str"),
+                    "layout_raw": obj.get("layout_raw"),
                     "address_raw": obj.get("address_raw"),
                     "tags": obj.get("tags"),
                 }, ensure_ascii=False, indent=2))

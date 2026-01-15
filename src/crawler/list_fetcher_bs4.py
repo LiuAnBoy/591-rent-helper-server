@@ -171,15 +171,15 @@ class ListFetcherBs4:
             "address_raw": "",
         }
 
-        # URL and ID from link
+        # ID - directly from data-id attribute
+        data_id = elem.get("data-id")
+        if data_id:
+            result["id"] = str(data_id)
+
+        # URL from link
         link = elem.find("a", href=re.compile(r"rent\.591\.com\.tw/(\d+)"))
         if link:
-            href = link.get("href", "")
-            result["url"] = href
-            # Extract ID from URL
-            id_match = re.search(r"/(\d+)$", href)
-            if id_match:
-                result["id"] = id_match.group(1)
+            result["url"] = link.get("href", "")
 
         # Title
         title_elem = elem.select_one(".item-info-title a")

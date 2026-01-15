@@ -6,7 +6,6 @@ Reliable method for fetching rental objects from 591.
 
 import asyncio
 import random
-import re
 from urllib.parse import urlencode
 
 from loguru import logger
@@ -153,14 +152,13 @@ class ListFetcherPlaywright:
             "address_raw": "",
         }
 
-        # URL and ID
-        url = item.get("url", "")
-        if url:
-            result["url"] = url
-            # Extract ID from URL
-            id_match = re.search(r"/(\d+)$", url)
-            if id_match:
-                result["id"] = id_match.group(1)
+        # ID - directly from NUXT data
+        item_id = item.get("id")
+        if item_id is not None:
+            result["id"] = str(item_id)
+
+        # URL
+        result["url"] = item.get("url", "")
 
         # Title
         result["title"] = item.get("title", "")

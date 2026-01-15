@@ -136,6 +136,7 @@ class TestParseItemRawFromNuxt:
     def test_parse_nuxt_item(self):
         item = {
             "id": 12345678,
+            "url": "https://rent.591.com.tw/12345678",
             "title": "測試套房",
             "price": 15000,
             "tags": [{"id": 1, "value": "近捷運"}],
@@ -157,8 +158,9 @@ class TestParseItemRawFromNuxt:
         assert result["area_raw"] == "10坪"
         assert result["floor_raw"] == "3F/5F"
 
-    def test_parse_nuxt_item_with_post_id(self):
-        item = {"post_id": 99999999, "title": "測試"}
+    def test_parse_nuxt_item_with_id_field(self):
+        """Test that ID is extracted directly from 'id' field."""
+        item = {"id": 99999999, "title": "測試"}
         result = _parse_item_raw_from_nuxt(item, region=1)
 
         assert result["id"] == "99999999"

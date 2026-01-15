@@ -177,3 +177,63 @@ Key variables (see `.env.example` for full list):
 - `TELEGRAM_ADMIN_ID` - Admin notifications
 - `JWT_SECRET` - API authentication
 - `CRAWLER_INTERVAL_MINUTES` - Crawl frequency (default: 10)
+
+## Test Coverage
+
+**Total: 181 unit tests**
+
+⚠️ **IMPORTANT: If you modify any code in the areas below, run `uv run pytest` to verify tests pass.**
+
+### Unit Tests (`tests/unit/`)
+
+| Module | Test File | Tests | Coverage |
+|--------|-----------|-------|----------|
+| `src/channels/telegram/formatter.py` | `test_formatter.py` | 22 | Message formatting, HTML escaping, command results |
+| `src/crawler/` (extractors) | `test_extractors.py` | 29 | Data extraction, NUXT parsing, HTML parsing, raw data combining |
+| `src/jobs/checker.py` | `test_checker.py` | 49 | Subscription matching logic, floor extraction |
+| `src/utils/` (transformers) | `test_transformers.py` | 81 | All data transformers (price, floor, layout, area, address, etc.) |
+
+### Test Details
+
+**Channels (`test_formatter.py`)**
+- `TestFormatObject` - Rental object formatting for Telegram
+- `TestEscapeHtml` - HTML special character escaping
+- `TestFormatCommandResult` - Bot command response formatting
+
+**Crawler (`test_extractors.py`)**
+- `TestCombineRawData` - Merging list + detail raw data
+- `TestParseItemRawFromNuxt` - Playwright NUXT data parsing
+- `TestParseItemRaw` / `TestParseDetailRaw` - BS4 HTML parsing
+- `TestExtractSurrounding` - Surrounding info extraction
+
+**Jobs (`test_checker.py`)**
+- `TestMatchObjectToSubscription` - All subscription filter matching (price, kind, section, shape, area, layout, bathroom, floor, fitment, gender, pet, options)
+- `TestMatchFloor` / `TestExtractFloorNumber` - Floor number extraction and matching
+
+**Utils (`test_transformers.py`)**
+- Transform functions: ID, price, floor, layout, area, address, shape, fitment, gender, pet, options, surrounding
+- `TestTransformToDbReady` - Full transformation pipeline
+
+### Manual Test Scripts (`scripts/`)
+
+```bash
+# List fetchers (test ID extraction, pagination)
+uv run python scripts/test_list_bs4.py --region 1 --limit 5
+uv run python scripts/test_list_playwright.py --region 1 --limit 5
+
+# Detail fetchers (test 404 handling, data parsing)
+uv run python scripts/test_detail_bs4.py <object_id>
+uv run python scripts/test_detail_playwright.py <object_id>
+
+# Test 404 handling
+uv run python scripts/test_detail_bs4.py 99999999
+```
+
+### Not Yet Covered
+
+The following areas do not have unit tests:
+- `src/api/` - API routes, dependencies
+- `src/connections/` - Database connections
+- `src/modules/` - Repository layer
+- `src/jobs/broadcaster.py`, `instant_notify.py` - Notification jobs
+- `src/crawler/*_fetcher.py` - Fetcher orchestrators (only extractors tested)
