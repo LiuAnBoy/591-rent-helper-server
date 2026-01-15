@@ -230,7 +230,8 @@ CREATE TABLE IF NOT EXISTS objects (
     updated_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
     -- ========== 狀態 ==========
-    is_active       BOOLEAN DEFAULT TRUE        -- 物件是否還在線上
+    is_active       BOOLEAN DEFAULT TRUE,       -- 物件是否還在線上
+    has_detail      BOOLEAN NOT NULL DEFAULT false  -- 是否已有完整 detail 資料
 );
 
 -- 索引
@@ -253,6 +254,8 @@ CREATE INDEX IF NOT EXISTS idx_objects_surrounding_distance ON objects(surroundi
 CREATE INDEX IF NOT EXISTS idx_objects_first_seen_at ON objects(first_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_objects_is_active ON objects(is_active);
 CREATE INDEX IF NOT EXISTS idx_objects_region_created_at ON objects(region, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_objects_region_has_detail ON objects(region, has_detail);
+CREATE INDEX IF NOT EXISTS idx_objects_created_at ON objects(created_at DESC);
 
 CREATE TRIGGER update_objects_updated_at
     BEFORE UPDATE ON objects
@@ -350,7 +353,8 @@ SELECT
     last_seen_at,
     created_at,
     updated_at,
-    is_active
+    is_active,
+    has_detail
 FROM objects
 WHERE first_seen_at > NOW() - INTERVAL '7 days'
   AND is_active = TRUE

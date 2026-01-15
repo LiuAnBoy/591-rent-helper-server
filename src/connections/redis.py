@@ -217,6 +217,96 @@ class RedisConnection:
                 objects.append(json.loads(data))
         return objects
 
+    # ========== Region Objects Cache Operations ==========
+
+    TTL_REGION_OBJECTS = 60 * 30  # 30 minutes
+
+    def _region_objects_key(self, region: int) -> str:
+        """Generate key for region objects cache (Hash)."""
+        return f"region:{region}:objects"
+
+    async def get_region_objects(self, region: int) -> list[dict] | None:
+        """
+        Get all cached objects for a region.
+
+        Args:
+            region: Region code (1=Taipei, 3=New Taipei)
+
+        Returns:
+            List of object dictionaries, or None if cache miss
+        """
+        key = self._region_objects_key(region)
+        data = await self.client.hgetall(key)
+        if not data:
+            return None
+        return [json.loads(v) for v in data.values()]
+
+    async def set_region_objects(
+        self, region: int, objects: list[dict], ttl: int | None = None
+    ) -> None:
+        """
+        Set region objects cache (clears existing data first).
+        Used for initialization or full rebuild.
+
+        Args:
+            region: Region code
+            objects: List of object dictionaries (must have 'id' field)
+            ttl: TTL in seconds (default: 30 minutes)
+        """
+        key = self._region_objects_key(region)
+        ttl = ttl or self.TTL_REGION_OBJECTS
+
+        pipe = self.client.pipeline()
+        pipe.delete(key)
+
+        if objects:
+            mapping = {
+                str(obj["id"]): json.dumps(obj, ensure_ascii=False, default=str)
+                for obj in objects
+            }
+            pipe.hset(key, mapping=mapping)
+
+        pipe.expire(key, ttl)
+        await pipe.execute()
+        redis_log.debug(f"Set {len(objects)} objects for region {region}")
+
+    async def update_region_objects(self, region: int, objects: list[dict]) -> None:
+        """
+        Update/add objects to region cache (does not delete other objects).
+        Refreshes TTL on each call.
+
+        Args:
+            region: Region code
+            objects: List of object dictionaries to update/add
+        """
+        if not objects:
+            return
+
+        key = self._region_objects_key(region)
+        mapping = {
+            str(obj["id"]): json.dumps(obj, ensure_ascii=False, default=str)
+            for obj in objects
+        }
+
+        pipe = self.client.pipeline()
+        pipe.hset(key, mapping=mapping)
+        pipe.expire(key, self.TTL_REGION_OBJECTS)
+        await pipe.execute()
+        redis_log.debug(f"Updated {len(objects)} objects for region {region}")
+
+    async def has_region_objects(self, region: int) -> bool:
+        """
+        Check if a region has cached objects.
+
+        Args:
+            region: Region code
+
+        Returns:
+            True if region has cached objects
+        """
+        key = self._region_objects_key(region)
+        return await self.client.exists(key) > 0
+
     # ========== Subscription Initialization Operations ==========
 
     def _subscription_initialized_key(self, subscription_id: int) -> str:

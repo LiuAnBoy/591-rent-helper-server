@@ -8,11 +8,10 @@ from loguru import logger
 
 from src.connections.postgres import get_postgres
 from src.connections.redis import get_redis
-from src.crawler.combiner import combine_raw_data
 from src.crawler.detail_fetcher import get_detail_fetcher
-from src.crawler.list_fetcher import get_list_fetcher
 from src.crawler.types import CombinedRawData
 from src.jobs.broadcaster import get_broadcaster
+from src.jobs.pre_filter import filter_redis_objects
 from src.modules.objects import ObjectRepository
 from src.utils import DBReadyData, transform_to_db_ready
 
@@ -76,19 +75,11 @@ class InstantNotifier:
         )
 
         try:
-            # Check if region has existing data
-            has_data = await self._redis.has_seen_ids(region)
-
-            if has_data:
-                # Region already has data - fetch from DB
-                result = await self._notify_from_db(
-                    subscription, service, service_id, sub_name
-                )
-            else:
-                # Region has no data - need to crawl
-                result = await self._notify_from_crawl(
-                    subscription, service, service_id, sub_name
-                )
+            # Use Redis cache with fallback to DB
+            # If Redis and DB are both empty, will crawl
+            result = await self._notify_from_redis(
+                subscription, service, service_id, sub_name
+            )
 
             # Mark subscription as initialized
             await self._redis.mark_subscription_initialized(sub_id)
@@ -186,8 +177,17 @@ class InstantNotifier:
         """
         Notify for multiple subscriptions in the same region.
 
-        Fetches objects once and matches against all subscriptions.
-        Uses ETL pipeline for data processing.
+        Uses Redis cache with fallback to DB. Fetches objects once
+        and matches against all subscriptions.
+
+        Flow:
+        1. Get objects from Redis region cache (fallback to DB)
+        2. Pre-filter objects for all subscriptions
+        3. Find objects with has_detail=false
+        4. Fetch detail for those objects
+        5. Update DB and Redis
+        6. Match only has_detail=true objects against each subscription
+        7. Send notifications
 
         Args:
             region: Region code
@@ -198,92 +198,120 @@ class InstantNotifier:
         Returns:
             Result dict
         """
-        # Check if region has existing data
-        has_data = await self._redis.has_seen_ids(region)
+        repo = ObjectRepository(self._postgres.pool)
 
-        if has_data:
-            # Region has data - fetch from DB
-            repo = ObjectRepository(self._postgres.pool)
+        # Step 1: Get objects from Redis (fallback to DB)
+        objects = await self._redis.get_region_objects(region)
+
+        if objects is None:
+            # Redis miss - load from DB and populate Redis
+            notify_log.info(f"Redis cache miss for region {region}, loading from DB")
             db_objects = await repo.get_latest_by_region(region, self.FETCH_COUNT)
-            # DB returns list[dict], use directly as DBReadyData
-            objects: list[DBReadyData] = db_objects
-            notify_log.info(f"Found {len(objects)} objects in DB for region {region}")
+            objects = db_objects
+
+            if objects:
+                # Populate Redis cache
+                await self._redis.set_region_objects(region, objects)
+                notify_log.info(f"Loaded {len(objects)} objects from DB for region {region}")
+            else:
+                notify_log.info(f"No objects in DB for region {region}")
+                return {"checked": 0, "matched": 0, "notified": 0}
         else:
-            # Region has no data - need to crawl using ETL
-            list_fetcher = get_list_fetcher()
+            notify_log.info(f"Found {len(objects)} objects in Redis for region {region}")
+
+        if not objects:
+            return {"checked": 0, "matched": 0, "notified": 0}
+
+        # Step 2: Pre-filter for all subscriptions (union of conditions)
+        filtered_objects, skipped = filter_redis_objects(objects, subscriptions)
+        notify_log.info(
+            f"Pre-filter: {len(objects)} → {len(filtered_objects)} "
+            f"(skipped {skipped} by price/area)"
+        )
+
+        if not filtered_objects:
+            return {"checked": len(objects), "matched": 0, "notified": 0}
+
+        # Step 3: Find objects that need detail
+        objects_need_detail = [
+            obj for obj in filtered_objects if not obj.get("has_detail", False)
+        ]
+
+        # Step 4: Fetch detail for objects without it
+        if objects_need_detail:
+            notify_log.info(
+                f"Fetching detail for {len(objects_need_detail)} objects without detail"
+            )
+
             detail_fetcher = get_detail_fetcher()
-            await list_fetcher.start()
             await detail_fetcher.start()
 
             try:
-                # Extract: Fetch list raw data
-                list_raw_items = await list_fetcher.fetch_objects_raw(
-                    region=region,
-                    sort="posttime_desc",
-                    max_items=self.FETCH_COUNT,
-                )
-                notify_log.info(
-                    f"Crawled {len(list_raw_items)} objects for region {region}"
-                )
+                ids_to_fetch = [obj["id"] for obj in objects_need_detail]
+                details, _, _ = await detail_fetcher.fetch_details_batch_raw(ids_to_fetch)
 
-                # Extract: Fetch detail raw data for all items
-                object_ids = [int(item["id"]) for item in list_raw_items if item.get("id")]
-                details, _, _ = await detail_fetcher.fetch_details_batch_raw(object_ids)
+                # Update objects with fetched details
+                updated_objects = []
+                for obj in objects_need_detail:
+                    obj_id = obj["id"]
+                    detail_data = details.get(obj_id)
 
-                # Transform and Save
-                repo = ObjectRepository(self._postgres.pool)
-                objects: list[DBReadyData] = []
-                all_ids = set()
-
-                for list_data in list_raw_items:
-                    if not list_data.get("id"):
-                        continue
-                    object_id = int(list_data["id"])
-                    detail_data = details.get(object_id)
-
-                    # Combine raw data
                     if detail_data:
-                        combined = combine_raw_data(list_data, detail_data)
-                    else:
+                        # Create combined data and transform
                         combined: CombinedRawData = {
-                            "id": list_data.get("id", ""),
-                            "url": list_data.get("url", ""),
-                            "title": list_data.get("title", ""),
-                            "price_raw": list_data.get("price_raw", ""),
-                            "tags": list_data.get("tags", []),
-                            "kind_name": list_data.get("kind_name", ""),
-                            "address_raw": list_data.get("address_raw", ""),
-                            "surrounding_type": None,
-                            "surrounding_raw": None,
+                            "id": str(obj_id),
+                            "url": obj.get("url", ""),
+                            "title": obj.get("title", ""),
+                            "price_raw": str(obj.get("price", "")),
+                            "tags": obj.get("tags", []),
+                            "kind_name": obj.get("kind_name", ""),
+                            "address_raw": obj.get("address", ""),
+                            "surrounding_type": detail_data.get("surrounding_type"),
+                            "surrounding_raw": detail_data.get("surrounding_raw"),
                             "region": str(region),
-                            "section": "",
-                            "kind": "",
-                            "floor_raw": list_data.get("floor_raw", ""),
-                            "layout_raw": list_data.get("layout_str", ""),
-                            "area_raw": list_data.get("area_raw", ""),
-                            "gender_raw": None,
-                            "shape_raw": None,
-                            "fitment_raw": None,
-                            "options": [],
+                            "section": str(obj.get("section", "")),
+                            "kind": str(obj.get("kind", "")),
+                            "floor_raw": detail_data.get("floor_raw", ""),
+                            "layout_raw": detail_data.get("layout_raw", ""),
+                            "area_raw": detail_data.get("area_raw", ""),
+                            "gender_raw": detail_data.get("gender_raw"),
+                            "shape_raw": detail_data.get("shape_raw"),
+                            "fitment_raw": detail_data.get("fitment_raw"),
+                            "options": detail_data.get("options", []),
+                            "has_detail": True,
                         }
 
-                    # Transform to DB-ready format
-                    db_ready = transform_to_db_ready(combined)
-                    objects.append(db_ready)
-                    all_ids.add(db_ready["id"])
+                        db_ready = transform_to_db_ready(combined)
+                        updated_objects.append(db_ready)
 
-                    # Save to DB
-                    await repo.save(db_ready)
+                        # Update DB
+                        await repo.update_with_detail(obj_id, db_ready)
 
-                # Add to seen_ids
-                if all_ids:
-                    await self._redis.add_seen_ids(region, all_ids)
+                # Update Redis cache with new data
+                if updated_objects:
+                    await self._redis.update_region_objects(region, updated_objects)
+                    notify_log.info(f"Updated {len(updated_objects)} objects with detail")
+
+                    # Update filtered_objects with new data
+                    updated_by_id = {obj["id"]: obj for obj in updated_objects}
+                    filtered_objects = [
+                        updated_by_id.get(obj["id"], obj) for obj in filtered_objects
+                    ]
 
             finally:
-                await list_fetcher.close()
                 await detail_fetcher.close()
 
-        # Match objects against ALL subscriptions for this region
+        # Step 5: Match only objects with has_detail=true
+        objects_with_detail = [
+            obj for obj in filtered_objects if obj.get("has_detail", False)
+        ]
+
+        notify_log.info(
+            f"Matching {len(objects_with_detail)} objects with detail "
+            f"(out of {len(filtered_objects)} filtered)"
+        )
+
+        # Step 6: Match and notify for each subscription
         total_matched = 0
         total_notified = 0
 
@@ -291,7 +319,7 @@ class InstantNotifier:
             sub_name = sub.get("name", f"訂閱 {sub.get('id')}")
             matched_objects = []
 
-            for obj in objects:
+            for obj in objects_with_detail:
                 if self._matches_subscription(obj, sub):
                     matched_objects.append(obj)
 
@@ -301,7 +329,6 @@ class InstantNotifier:
             if matched_objects and service_id:
                 for obj in matched_objects:
                     try:
-                        # Send DBReadyData directly (broadcaster now supports dict)
                         await self._broadcaster.send_notification(
                             service=service,
                             service_id=service_id,
@@ -324,7 +351,7 @@ class InstantNotifier:
             "notified": total_notified,
         }
 
-    async def _notify_from_db(
+    async def _notify_from_redis(
         self,
         subscription: dict,
         service: str,
@@ -332,114 +359,135 @@ class InstantNotifier:
         sub_name: str,
     ) -> dict:
         """
-        Notify using existing data from database.
+        Notify using Redis cache with fallback to DB.
+
+        Flow:
+        1. Get objects from Redis region cache
+        2. If Redis miss, load from DB and populate Redis
+        3. Pre-filter objects by price/area
+        4. Find objects with has_detail=false
+        5. Fetch detail for those objects
+        6. Update DB and Redis
+        7. Match only has_detail=true objects against subscription
+        8. Send notifications
         """
         region = subscription["region"]
-
-        # Get latest objects from DB
         repo = ObjectRepository(self._postgres.pool)
-        objects = await repo.get_latest_by_region(region, self.FETCH_COUNT)
 
-        notify_log.info(f"Found {len(objects)} objects in DB for region {region}")
+        # Step 1: Try Redis first
+        objects = await self._redis.get_region_objects(region)
 
-        # Match and notify
-        return await self._match_and_notify(
-            objects, subscription, service, service_id, sub_name
+        if objects is None:
+            # Redis miss - load from DB and populate Redis
+            notify_log.info(f"Redis cache miss for region {region}, loading from DB")
+            db_objects = await repo.get_latest_by_region(region, self.FETCH_COUNT)
+            objects = db_objects
+
+            if objects:
+                # Populate Redis cache
+                await self._redis.set_region_objects(region, objects)
+            else:
+                notify_log.info(f"No objects in DB for region {region}")
+                return {"checked": 0, "matched": 0, "notified": 0}
+        else:
+            notify_log.info(f"Found {len(objects)} objects in Redis for region {region}")
+
+        if not objects:
+            return {"checked": 0, "matched": 0, "notified": 0}
+
+        # Step 2: Pre-filter by price/area
+        filtered_objects, skipped = filter_redis_objects(objects, [subscription])
+        notify_log.info(
+            f"Pre-filter: {len(objects)} → {len(filtered_objects)} "
+            f"(skipped {skipped} by price/area)"
         )
 
-    async def _notify_from_crawl(
-        self,
-        subscription: dict,
-        service: str,
-        service_id: str,
-        sub_name: str,
-    ) -> dict:
-        """
-        Crawl new data and notify using ETL pipeline.
-        """
-        region = subscription["region"]
+        if not filtered_objects:
+            return {"checked": len(objects), "matched": 0, "notified": 0}
 
-        # Initialize fetchers
-        list_fetcher = get_list_fetcher()
-        detail_fetcher = get_detail_fetcher()
-        await list_fetcher.start()
-        await detail_fetcher.start()
+        # Step 3: Find objects that need detail
+        objects_need_detail = [
+            obj for obj in filtered_objects if not obj.get("has_detail", False)
+        ]
 
-        try:
-            # Extract: Fetch list raw data
-            list_raw_items = await list_fetcher.fetch_objects_raw(
-                region=region,
-                sort="posttime_desc",
-                max_items=self.FETCH_COUNT,
-            )
+        # Step 4: Fetch detail for objects without it
+        if objects_need_detail:
             notify_log.info(
-                f"Crawled {len(list_raw_items)} objects for region {region}"
+                f"Fetching detail for {len(objects_need_detail)} objects without detail"
             )
 
-            # Extract: Fetch detail raw data for all items
-            object_ids = [int(item["id"]) for item in list_raw_items if item.get("id")]
-            details, _, _ = await detail_fetcher.fetch_details_batch_raw(object_ids)
+            detail_fetcher = get_detail_fetcher()
+            await detail_fetcher.start()
 
-            # Transform, Save, and filter new ones
-            repo = ObjectRepository(self._postgres.pool)
-            new_objects: list[DBReadyData] = []
-            all_ids = set()
+            try:
+                ids_to_fetch = [obj["id"] for obj in objects_need_detail]
+                details, _, _ = await detail_fetcher.fetch_details_batch_raw(ids_to_fetch)
 
-            for list_data in list_raw_items:
-                if not list_data.get("id"):
-                    continue
-                object_id = int(list_data["id"])
-                detail_data = details.get(object_id)
+                # Update objects with fetched details
+                updated_objects = []
+                for obj in objects_need_detail:
+                    obj_id = obj["id"]
+                    detail_data = details.get(obj_id)
 
-                # Combine raw data
-                if detail_data:
-                    combined = combine_raw_data(list_data, detail_data)
-                else:
-                    combined: CombinedRawData = {
-                        "id": list_data.get("id", ""),
-                        "url": list_data.get("url", ""),
-                        "title": list_data.get("title", ""),
-                        "price_raw": list_data.get("price_raw", ""),
-                        "tags": list_data.get("tags", []),
-                        "kind_name": list_data.get("kind_name", ""),
-                        "address_raw": list_data.get("address_raw", ""),
-                        "surrounding_type": None,
-                        "surrounding_raw": None,
-                        "region": str(region),
-                        "section": "",
-                        "kind": "",
-                        "floor_raw": list_data.get("floor_raw", ""),
-                        "layout_raw": list_data.get("layout_str", ""),
-                        "area_raw": list_data.get("area_raw", ""),
-                        "gender_raw": None,
-                        "shape_raw": None,
-                        "fitment_raw": None,
-                        "options": [],
-                    }
+                    if detail_data:
+                        # Create combined data and transform
+                        combined: CombinedRawData = {
+                            "id": str(obj_id),
+                            "url": obj.get("url", ""),
+                            "title": obj.get("title", ""),
+                            "price_raw": str(obj.get("price", "")),
+                            "tags": obj.get("tags", []),
+                            "kind_name": obj.get("kind_name", ""),
+                            "address_raw": obj.get("address", ""),
+                            "surrounding_type": detail_data.get("surrounding_type"),
+                            "surrounding_raw": detail_data.get("surrounding_raw"),
+                            "region": str(region),
+                            "section": str(obj.get("section", "")),
+                            "kind": str(obj.get("kind", "")),
+                            "floor_raw": detail_data.get("floor_raw", ""),
+                            "layout_raw": detail_data.get("layout_raw", ""),
+                            "area_raw": detail_data.get("area_raw", ""),
+                            "gender_raw": detail_data.get("gender_raw"),
+                            "shape_raw": detail_data.get("shape_raw"),
+                            "fitment_raw": detail_data.get("fitment_raw"),
+                            "options": detail_data.get("options", []),
+                            "has_detail": True,
+                        }
 
-                # Transform to DB-ready format
-                db_ready = transform_to_db_ready(combined)
-                all_ids.add(db_ready["id"])
+                        db_ready = transform_to_db_ready(combined)
+                        updated_objects.append(db_ready)
 
-                # Save to DB and check if new
-                is_new = await repo.save(db_ready)
-                if is_new:
-                    new_objects.append(db_ready)
+                        # Update DB
+                        await repo.update_with_detail(obj_id, db_ready)
 
-            # Add to seen_ids
-            if all_ids:
-                await self._redis.add_seen_ids(region, all_ids)
+                # Update Redis cache with new data
+                if updated_objects:
+                    await self._redis.update_region_objects(region, updated_objects)
+                    notify_log.info(f"Updated {len(updated_objects)} objects with detail")
 
-            notify_log.info(f"Saved {len(new_objects)} new objects to DB")
+                    # Update filtered_objects with new data
+                    updated_by_id = {obj["id"]: obj for obj in updated_objects}
+                    filtered_objects = [
+                        updated_by_id.get(obj["id"], obj) for obj in filtered_objects
+                    ]
 
-            # Match and notify (only new objects)
-            return await self._match_and_notify(
-                new_objects, subscription, service, service_id, sub_name
-            )
+            finally:
+                await detail_fetcher.close()
 
-        finally:
-            await list_fetcher.close()
-            await detail_fetcher.close()
+        # Step 5: Match only objects with has_detail=true
+        objects_with_detail = [
+            obj for obj in filtered_objects if obj.get("has_detail", False)
+        ]
+
+        notify_log.info(
+            f"Matching {len(objects_with_detail)} objects with detail "
+            f"(out of {len(filtered_objects)} filtered)"
+        )
+
+        # Step 6: Match and notify
+        return await self._match_and_notify(
+            objects_with_detail, subscription, service, service_id, sub_name
+        )
 
     async def _match_and_notify(
         self,

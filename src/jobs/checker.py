@@ -145,6 +145,8 @@ class Checker:
             DBReadyData dict (for subscription matching)
         """
         # Step 1: Combine raw data
+        has_detail = detail_data is not None
+
         if detail_data:
             combined = combine_raw_data(list_data, detail_data)
         else:
@@ -171,6 +173,9 @@ class Checker:
                 "options": [],
             }
 
+        # Set has_detail flag for DB storage
+        combined["has_detail"] = has_detail
+
         # Step 2: Transform to DB-ready format
         return transform_to_db_ready(combined)
 
@@ -189,16 +194,16 @@ class Checker:
         if not objects:
             return
 
-        # Save to DB
-        for obj in objects:
-            await self._object_repo.save(obj)
+        # Save to DB (batch UPSERT)
+        inserted = await self._object_repo.save_batch(objects)
+        checker_log.info(f"Batch saved {len(objects)} objects ({inserted} new)")
 
         # Add to Redis seen set (batch)
         all_ids = {obj["id"] for obj in objects}
         await self._redis.add_seen_ids(region, all_ids)
 
-        # Save to Redis object cache (batch)
-        await self._redis.save_objects(objects)
+        # Update Redis region objects cache (incremental, no delete)
+        await self._redis.update_region_objects(region, objects)
 
         # Log summary
         id_list = ", ".join(str(obj["id"]) for obj in objects)
@@ -571,72 +576,82 @@ class Checker:
                 all_subs = await self._redis.get_subscriptions_by_region(region)
 
                 pre_filter_input = len(new_items)
+                details: dict[int, DetailRawData] = {}
+
                 if all_subs:
                     filtered_items, pre_filter_skipped = filter_objects(
                         new_items, all_subs
                     )
                     pre_filter_output = len(filtered_items)
 
-                    # Get IDs from filtered items
-                    new_object_ids = [int(item["id"]) for item in filtered_items]
+                    # Get IDs from filtered items (need detail)
+                    ids_need_detail = [int(item["id"]) for item in filtered_items]
 
                     checker_log.info(
                         f"Pre-filter: {pre_filter_input} → {pre_filter_output} "
                         f"(skipped {pre_filter_skipped} by price/area)"
                     )
+
+                    # Step 3: Fetch detail raw data for filtered items only
+                    if ids_need_detail:
+                        await asyncio.sleep(1)
+                        checker_log.info(
+                            f"Fetching detail for {len(ids_need_detail)} objects (ETL)"
+                        )
+
+                        details, detail_not_found, detail_failed = (
+                            await self._detail_fetcher.fetch_details_batch_raw(
+                                ids_need_detail
+                            )
+                        )
+                        detail_fetched = len(details)
+
+                        # Notify admin only for actual errors (not 404s)
+                        if detail_failed > 0 and self._broadcaster:
+                            failed_ids = [oid for oid in ids_need_detail if oid not in details]
+                            await self._broadcaster.notify_admin(
+                                error_type=ErrorType.DETAIL_FETCH_FAILED,
+                                region=region,
+                                details=f"{detail_failed} detail pages failed\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
+                            )
                 else:
                     # No subscriptions = nothing to match, skip all detail fetches
-                    new_object_ids = []
                     pre_filter_output = 0
                     pre_filter_skipped = pre_filter_input
                     checker_log.info(
                         f"No subscriptions for region {region}, skipping detail fetch"
                     )
 
-                # Step 3: Fetch detail raw data via fetcher (with retry + fallback)
-                if new_object_ids:
-                    # Wait 1 second after list fetch before detail fetch
-                    await asyncio.sleep(1)
-                    checker_log.info(
-                        f"Fetching detail for {len(new_object_ids)} objects (ETL)"
+                # Step 4: Transform ALL new objects (with or without detail)
+                # Objects with detail → has_detail=true
+                # Objects without detail → has_detail=false
+                for object_id in new_ids:
+                    if object_id not in list_data_by_id:
+                        continue
+                    list_data = list_data_by_id[object_id]
+                    detail_data = details.get(object_id)  # None if not fetched
+                    processed_obj = self._transform_object(
+                        list_data, detail_data, region
                     )
+                    processed_objects.append(processed_obj)
 
-                    details, detail_not_found, detail_failed = (
-                        await self._detail_fetcher.fetch_details_batch_raw(
-                            new_object_ids
-                        )
-                    )
-                    detail_fetched = len(details)
-
-                    # Notify admin only for actual errors (not 404s)
-                    if detail_failed > 0 and self._broadcaster:
-                        failed_ids = [oid for oid in new_object_ids if oid not in details]
-                        await self._broadcaster.notify_admin(
-                            error_type=ErrorType.DETAIL_FETCH_FAILED,
-                            region=region,
-                            details=f"{detail_failed} detail pages failed\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
-                        )
-
-                    # Step 4: Transform each new object (no I/O)
-                    for object_id in new_object_ids:
-                        list_data = list_data_by_id[object_id]
-                        detail_data = details.get(object_id)
-                        processed_obj = self._transform_object(
-                            list_data, detail_data, region
-                        )
-                        processed_objects.append(processed_obj)
-
-                    # Step 5: Batch save to DB and Redis
+                # Step 5: Batch save ALL new objects to DB and Redis
+                if processed_objects:
                     await self._save_objects_batch(processed_objects, region)
 
-                # Step 6: Subscription matching
+                # Step 6: Subscription matching (only for objects with detail)
                 # Reuse all_subs from pre-filter step (already fetched above)
                 uninitialized_subs = await self._redis.get_uninitialized_subscriptions(
                     all_subs
                 )
                 uninitialized_ids = {sub["id"] for sub in uninitialized_subs}
 
-                for obj in processed_objects:
+                # Only match objects with has_detail=true
+                objects_with_detail = [
+                    obj for obj in processed_objects if obj.get("has_detail", False)
+                ]
+
+                for obj in objects_with_detail:
                     # obj is already DBReadyData (dict), no conversion needed
 
                     for sub in all_subs:

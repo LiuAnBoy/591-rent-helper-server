@@ -51,6 +51,7 @@ class DBReadyData(TypedDict):
     surrounding_type: str | None
     surrounding_desc: str | None
     surrounding_distance: int | None
+    has_detail: bool
 
 
 # ============================================
@@ -587,6 +588,7 @@ def transform_to_db_ready(combined: dict) -> DBReadyData:
         "surrounding_type": combined.get("surrounding_type"),
         "surrounding_desc": surrounding_desc,
         "surrounding_distance": surrounding_distance,
+        "has_detail": combined.get("has_detail", True),
     }
 
     return result

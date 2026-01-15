@@ -82,6 +82,49 @@ async def sync_subscriptions_on_startup():
         log.error(f"Failed to sync subscriptions on startup: {e}")
 
 
+async def init_redis_objects_cache():
+    """
+    Initialize Redis objects cache on startup.
+
+    For each active region, check if Redis has cached objects.
+    If not, load from DB to populate the cache.
+    """
+    from src.connections.postgres import get_postgres
+    from src.connections.redis import get_redis
+    from src.modules.objects import ObjectRepository
+
+    try:
+        redis = await get_redis()
+        postgres = await get_postgres()
+        repo = ObjectRepository(postgres.pool)
+
+        # Get active regions from subscriptions
+        active_regions = await redis.get_active_regions()
+
+        if not active_regions:
+            log.info("Startup: No active regions, skipping objects cache init")
+            return
+
+        log.info(f"Startup: Initializing Redis objects cache for {len(active_regions)} regions")
+
+        for region in active_regions:
+            # Check if Redis already has objects for this region
+            if await redis.has_region_objects(region):
+                log.debug(f"Region {region}: objects cache already exists, skipping")
+                continue
+
+            # Load from DB
+            objects = await repo.get_latest_by_region(region, 30)
+            if objects:
+                await redis.set_region_objects(region, objects)
+                log.info(f"Region {region}: loaded {len(objects)} objects from DB to Redis")
+            else:
+                log.debug(f"Region {region}: no objects in DB")
+
+    except Exception as e:
+        log.error(f"Failed to initialize Redis objects cache: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan events."""
@@ -91,6 +134,9 @@ async def lifespan(app: FastAPI):
 
     # Sync subscriptions to Redis on startup
     await sync_subscriptions_on_startup()
+
+    # Initialize Redis objects cache
+    await init_redis_objects_cache()
 
     # Start scheduler
     scheduler.start()

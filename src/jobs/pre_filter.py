@@ -191,3 +191,105 @@ def filter_objects(
             skipped += 1
 
     return filtered, skipped
+
+
+def should_match_redis_object(obj: dict, subscriptions: list[dict]) -> bool:
+    """
+    Check if any subscription MIGHT match this Redis cached object.
+
+    Unlike should_fetch_detail, this uses already-parsed numeric fields
+    (price: int, area: float) instead of raw strings.
+
+    Args:
+        obj: Object dictionary from Redis cache (with parsed fields)
+        subscriptions: List of subscription dictionaries
+
+    Returns:
+        True if object might match some subscription.
+        False if definitely won't match any subscription.
+    """
+    if not subscriptions:
+        return False
+
+    price = obj.get("price")
+    area = obj.get("area")
+
+    for sub in subscriptions:
+        passes_price = True
+        passes_area = True
+
+        # Price check (already int)
+        if price is not None:
+            price_max = sub.get("price_max")
+            price_min = sub.get("price_min")
+
+            if price_max is not None and price > price_max:
+                passes_price = False
+            if price_min is not None and price < price_min:
+                passes_price = False
+
+        # Area check (already float)
+        if area is not None:
+            area_max = sub.get("area_max")
+            area_min = sub.get("area_min")
+
+            # Convert Decimal to float for comparison
+            if area_max is not None:
+                try:
+                    area_max = float(area_max)
+                except (ValueError, TypeError, InvalidOperation):
+                    area_max = None
+
+            if area_min is not None:
+                try:
+                    area_min = float(area_min)
+                except (ValueError, TypeError, InvalidOperation):
+                    area_min = None
+
+            if area_max is not None and area > area_max:
+                passes_area = False
+            if area_min is not None and area < area_min:
+                passes_area = False
+
+        if passes_price and passes_area:
+            return True
+
+    return False
+
+
+def filter_redis_objects(
+    objects: list[dict],
+    subscriptions: list[dict],
+) -> tuple[list[dict], int]:
+    """
+    Filter Redis cached objects to only those that might match subscriptions.
+
+    This is used by InstantNotify to pre-filter before fetching details.
+    Unlike filter_objects, this uses parsed numeric fields (price: int, area: float).
+
+    Args:
+        objects: List of object dictionaries from Redis cache
+        subscriptions: List of subscription dictionaries
+
+    Returns:
+        Tuple of (filtered_objects, skipped_count)
+    """
+    if not subscriptions:
+        return [], len(objects)
+
+    if not objects:
+        return [], 0
+
+    filtered = []
+    skipped = 0
+
+    for obj in objects:
+        if should_match_redis_object(obj, subscriptions):
+            filtered.append(obj)
+        else:
+            skipped += 1
+
+    pre_filter_log.debug(
+        f"Redis filter: {len(filtered)} passed, {skipped} skipped"
+    )
+    return filtered, skipped
