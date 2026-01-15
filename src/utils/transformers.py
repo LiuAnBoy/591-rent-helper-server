@@ -558,6 +558,15 @@ def transform_to_db_ready(combined: dict) -> DBReadyData:
     # Transform other (features) from tags
     other = transform_other(tags)
 
+    # Safe int conversion helper (handles empty string)
+    def safe_int(value, default: int = 0) -> int:
+        if value is None or value == "":
+            return default
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
     # Build result
     result: DBReadyData = {
         "id": obj_id,
@@ -565,9 +574,9 @@ def transform_to_db_ready(combined: dict) -> DBReadyData:
         "title": combined.get("title", ""),
         "price": price,
         "price_unit": price_unit,
-        "region": int(combined.get("region", 0)),
-        "section": int(combined.get("section", 0)),
-        "kind": int(combined.get("kind", 0)),
+        "region": safe_int(combined.get("region"), 0),
+        "section": safe_int(combined.get("section"), 0),
+        "kind": safe_int(combined.get("kind"), 0),
         "kind_name": combined.get("kind_name", ""),
         "address": address or "",
         "floor": floor,
