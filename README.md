@@ -8,6 +8,8 @@
 - 支援多條件訂閱篩選（區域、價格、坪數、格局等）
 - Telegram 即時推播通知
 - **新增訂閱或開啟通知時，立即檢查並推播符合條件的物件**
+- **增量詳情抓取** - 只在需要時抓取詳情頁，減少請求數量
+- **Redis 快取優先** - InstantNotify 優先使用 Redis 快取，提升回應速度
 - 平台無關的指令系統（未來可擴充 LINE、Discord）
 - JWT 身份驗證
 - 白天/夜間不同爬取間隔
@@ -23,43 +25,54 @@
                           ▼                    ▼
                    ┌─────────────┐     ┌─────────────┐
                    │    Redis    │◀───▶│   Checker   │
-                   └─────────────┘     └─────────────┘
-                                              │
-                                              ▼
-                                       ┌─────────────┐
-                                       │  Telegram   │
-                                       └─────────────┘
+                   │  - seen_ids │     └─────────────┘
+                   │  - objects  │            │
+                   └─────────────┘            ▼
+                          ▲            ┌─────────────┐
+                          │            │  Telegram   │
+                          │            └─────────────┘
+                          │
+                   ┌─────────────┐
+                   │InstantNotify│
+                   └─────────────┘
 ```
+
+**Redis 快取結構**：
+- `seen:{region}` - 已爬取物件 ID 集合（用於 Checker 過濾）
+- `region:{region}:objects` - 區域物件快取（30 分鐘 TTL，用於 InstantNotify）
 
 ## 執行流程
 
-### 定時爬取流程（ETL）
+### 定時爬取流程（Checker）
 
 ```
 排程器觸發
     ↓
 查詢 Redis 取得有訂閱的區域
     ↓
-對每個區域執行 ETL Pipeline：
+對每個區域執行：
     ↓
 ┌─────────────────────────────────────────────────────────┐
 │ 1. Extract - 列表頁                                      │
 │    └─ BS4 解析 → ListRawData（失敗則通知管理員）         │
-│ 2. Redis 過濾                                            │
+│ 2. Redis 過濾（seen_ids）                                │
 │    └─ 比對已爬取 ID，找出新物件                          │
-│ 3. Extract - 詳情頁（有備援機制）                        │
+│ 3. Pre-filter - 價格/坪數粗篩                            │
+│    └─ 根據訂閱條件快速過濾，減少詳情頁請求               │
+│ 4. Extract - 詳情頁（有備援機制）                        │
 │    └─ BS4 重試 → Playwright fallback → DetailRawData    │
-│ 4. Combine - 合併原始資料                                │
-│    └─ ListRawData + DetailRawData → CombinedRawData     │
-│    └─ layout 只從 Detail 取得（含廳/衛資訊）             │
-│ 5. Transform - 轉換為 DB 格式                            │
-│    └─ CombinedRawData → DBReadyData                     │
-│ 6. Load - 儲存                                           │
-│    └─ 存入 PostgreSQL + Redis                           │
+│ 5. Combine + Transform                                   │
+│    └─ ListRawData + DetailRawData → DBReadyData         │
+│    └─ has_detail=true（有詳情）或 false（只有列表）     │
+│ 6. Load - 儲存所有新物件                                 │
+│    └─ 存入 PostgreSQL + Redis（region objects cache）   │
 │ 7. 訂閱比對 & 推播通知                                   │
-│    └─ 根據訂閱條件匹配，發送 Telegram 通知               │
+│    └─ 只比對 has_detail=true 的物件                      │
+│    └─ 符合條件則發送 Telegram 通知                       │
 └─────────────────────────────────────────────────────────┘
 ```
+
+> **has_detail 機制**：新物件會先存入 DB（`has_detail=false`），只有通過 pre-filter 且成功抓取詳情的物件才會標記為 `has_detail=true`。這確保所有物件都被追蹤，同時避免不必要的詳情頁請求。
 
 **排程設定**（可透過環境變數調整）：
 
@@ -76,21 +89,32 @@
 
 > 詳情頁會先用 BS4 嘗試最多 3 次，若仍失敗或回傳空標籤，則自動降級為 Playwright 抓取
 
-### 即時通知流程
+### 即時通知流程（InstantNotify）
 
 當用戶**新增訂閱**或**開啟通知**時，系統會立即檢查並推播：
 
 ```
 新增訂閱 / 開啟通知
     ↓
-檢查該區域是否有人訂閱過
-    ├─ 有 → 從資料庫撈最新 10 筆該區域物件
-    └─ 無 → 爬取 10 筆並存入資料庫
-    ↓
-比對訂閱條件
-    ↓
-推播符合的物件給用戶
+┌─────────────────────────────────────────────────────────┐
+│ 1. 取得物件資料（Redis 優先）                            │
+│    ├─ Redis 有快取 → 直接使用                           │
+│    └─ Redis 無快取 → 從 DB 載入並寫入 Redis             │
+│ 2. Pre-filter - 價格/坪數粗篩                            │
+│    └─ 根據訂閱條件快速過濾                              │
+│ 3. 檢查 has_detail 狀態                                  │
+│    └─ 找出 has_detail=false 的物件                      │
+│ 4. 按需抓取詳情（Incremental Detail Fetch）              │
+│    └─ 只對 has_detail=false 的物件抓取詳情              │
+│    └─ 更新 DB + Redis                                   │
+│ 5. 訂閱比對                                              │
+│    └─ 只比對 has_detail=true 的物件                      │
+│ 6. 推播通知                                              │
+│    └─ 符合條件則發送 Telegram 通知                       │
+└─────────────────────────────────────────────────────────┘
 ```
+
+> **增量詳情抓取**：InstantNotify 會按需抓取缺少詳情的物件，確保用戶能即時收到完整的物件資訊，同時避免重複抓取已有詳情的物件。
 
 ---
 
@@ -297,7 +321,8 @@ python scripts/test_detail_playwright.py <object_id>
 ├── migrations/
 │   ├── init.sql                 # 資料庫初始化
 │   ├── 002_user_providers.sql   # 用戶 Provider 關聯
-│   └── 003_instant_notify_index.sql  # 即時通知索引
+│   ├── 003_instant_notify_index.sql  # 即時通知索引
+│   └── 20260116001_add_has_detail_column.sql  # has_detail 欄位
 ├── src/
 │   ├── api/
 │   │   ├── main.py              # FastAPI 應用程式
@@ -331,9 +356,10 @@ python scripts/test_detail_playwright.py <object_id>
 │   │   └── detail_fetcher_playwright.py # Playwright 詳情爬取+解析
 │   ├── jobs/
 │   │   ├── scheduler.py         # 排程器
-│   │   ├── checker.py           # 物件比對
+│   │   ├── checker.py           # 定時爬取 & 物件比對
 │   │   ├── broadcaster.py       # 推播通知
-│   │   ├── instant_notify.py    # 即時通知
+│   │   ├── instant_notify.py    # 即時通知（Redis 優先 + 增量詳情抓取）
+│   │   ├── pre_filter.py        # 價格/坪數粗篩
 │   │   └── parser.py            # 資料解析
 │   ├── middleware/
 │   │   └── cors.py              # CORS 設定
