@@ -120,12 +120,16 @@ async def telegram_login(data: TelegramLoginRequest) -> dict:
         # Get user providers for response
         providers = await provider_repo.get_by_user(user.id)
 
+        # Get max subscriptions for user's role
+        max_subscriptions = await user_repo.get_role_limit(user.role)
+
         return {
             "token": token,
             "user": {
                 "id": user.id,
                 "name": user.name,
                 "role": user.role,
+                "max_subscriptions": max_subscriptions,
                 "providers": [
                     {
                         "provider": p.provider,
