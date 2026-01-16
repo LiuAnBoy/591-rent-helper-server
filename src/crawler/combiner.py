@@ -51,9 +51,9 @@ def combine_raw_data(
         "layout_raw": detail_data.get("layout_raw") or list_data.get("layout_raw", ""),
         # Merged
         "tags": merged_tags,
-        # From Detail only
+        # From Detail (with List fallback for section)
         "region": detail_data.get("region", ""),
-        "section": detail_data.get("section", ""),
+        "section": detail_data.get("section") or list_data.get("section", ""),
         "kind": detail_data.get("kind", ""),
         "gender_raw": detail_data.get("gender_raw"),
         "shape_raw": detail_data.get("shape_raw"),

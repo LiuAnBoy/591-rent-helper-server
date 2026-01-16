@@ -20,6 +20,7 @@ class ListRawData(TypedDict):
 
     Attributes:
         region: Region code (e.g., 1 for Taipei)
+        section: Section code parsed from address_raw or sectionid (e.g., 5 for 大安區)
         id: Object ID from data-id attribute
         url: Full URL to detail page
         title: Listing title from .item-info-title a
@@ -33,6 +34,7 @@ class ListRawData(TypedDict):
     """
 
     region: int
+    section: str
     id: str
     url: str
     title: str

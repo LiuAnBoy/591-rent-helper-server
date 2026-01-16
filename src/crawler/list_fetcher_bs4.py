@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 from loguru import logger
 
 from src.crawler.types import ListRawData
+from src.utils.sections import get_section_from_address
 
 # Suppress SSL warnings for 591's certificate issues
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -159,6 +160,7 @@ class ListFetcherBs4:
         """
         result: ListRawData = {
             "region": region,
+            "section": "",
             "id": "",
             "url": "",
             "title": "",
@@ -235,6 +237,12 @@ class ListFetcherBs4:
                 else:
                     # Fallback: use full text if no "區-" found
                     result["address_raw"] = txt_elem.get_text(strip=True)
+
+        # Parse section from address_raw
+        if result["address_raw"]:
+            section = get_section_from_address(region, result["address_raw"])
+            if section:
+                result["section"] = str(section)
 
         return result
 

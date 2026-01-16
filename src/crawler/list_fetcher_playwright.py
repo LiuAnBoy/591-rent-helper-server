@@ -140,6 +140,7 @@ class ListFetcherPlaywright:
         """Parse a single item from NUXT structure into ListRawData."""
         result: ListRawData = {
             "region": region,
+            "section": "",
             "id": "",
             "url": "",
             "title": "",
@@ -151,6 +152,11 @@ class ListFetcherPlaywright:
             "floor_raw": "",
             "address_raw": "",
         }
+
+        # Section - directly from NUXT sectionid
+        section_id = item.get("sectionid")
+        if section_id is not None:
+            result["section"] = str(section_id)
 
         # ID - directly from NUXT data
         item_id = item.get("id")
