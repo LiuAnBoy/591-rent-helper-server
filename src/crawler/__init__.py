@@ -1,6 +1,10 @@
 """Crawler modules."""
 
-from src.crawler.combiner import combine_raw_data, combine_with_detail_only
+from src.crawler.combiner import (
+    combine_raw_data,
+    combine_with_detail_only,
+    combine_with_list_only,
+)
 from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.detail_fetcher_bs4 import DetailFetcherBs4
 from src.crawler.detail_fetcher_playwright import DetailFetcherPlaywright
@@ -17,6 +21,7 @@ __all__ = [
     # Combiner
     "combine_raw_data",
     "combine_with_detail_only",
+    "combine_with_list_only",
     # List fetchers
     "ListFetcher",
     "ListFetcherBs4",

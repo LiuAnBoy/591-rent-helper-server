@@ -67,6 +67,42 @@ def combine_raw_data(
     return result
 
 
+def combine_with_list_only(list_data: ListRawData) -> CombinedRawData:
+    """
+    Create CombinedRawData from list data only (when detail fetch failed/skipped).
+
+    Args:
+        list_data: Raw data from list page
+
+    Returns:
+        CombinedRawData with fields from list only
+    """
+    result: CombinedRawData = {
+        "id": list_data.get("id", ""),
+        "url": list_data.get("url", ""),
+        "title": list_data.get("title", ""),
+        "price_raw": list_data.get("price_raw", ""),
+        "tags": list_data.get("tags", []),
+        "kind_name": list_data.get("kind_name", ""),
+        "address_raw": list_data.get("address_raw", ""),
+        "surrounding_type": None,
+        "surrounding_raw": None,
+        "region": str(list_data.get("region", "")),
+        "section": list_data.get("section", ""),
+        "kind": "",  # Not available from list
+        "floor_raw": list_data.get("floor_raw", ""),
+        "layout_raw": list_data.get("layout_raw", ""),
+        "area_raw": list_data.get("area_raw", ""),
+        "gender_raw": None,
+        "shape_raw": None,
+        "fitment_raw": None,
+        "options": [],
+        "has_detail": False,
+    }
+
+    return result
+
+
 def combine_with_detail_only(
     detail_data: DetailRawData, url: str = ""
 ) -> CombinedRawData:

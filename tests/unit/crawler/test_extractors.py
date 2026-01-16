@@ -4,7 +4,11 @@ Unit tests for src/crawler/extractors/
 
 from bs4 import BeautifulSoup
 
-from src.crawler.combiner import combine_raw_data, combine_with_detail_only
+from src.crawler.combiner import (
+    combine_raw_data,
+    combine_with_detail_only,
+    combine_with_list_only,
+)
 from src.crawler.detail_fetcher_bs4 import _parse_detail_raw
 from src.crawler.detail_fetcher_playwright import (
     _extract_surrounding,
@@ -121,6 +125,55 @@ class TestCombineWithDetailOnly:
         result = combine_with_detail_only(sample_detail_raw, url=custom_url)
 
         assert result["url"] == custom_url
+
+
+class TestCombineWithListOnly:
+    """Tests for combine_with_list_only function."""
+
+    def test_basic_list_only(self, sample_list_raw):
+        result = combine_with_list_only(sample_list_raw)
+
+        assert result["id"] == "12345678"
+        assert result["url"] == "https://rent.591.com.tw/12345678"
+        assert result["title"] == "台北市信義區套房"
+        assert result["kind_name"] == "獨立套房"
+        assert result["has_detail"] is False
+
+    def test_list_only_preserves_section(self, sample_list_raw):
+        """Test that section from list is preserved."""
+        result = combine_with_list_only(sample_list_raw)
+        assert result["section"] == "7"
+
+    def test_list_only_preserves_layout(self):
+        """Test that layout_raw from list is preserved."""
+        list_data = {
+            "region": 1,
+            "section": "5",
+            "id": "123",
+            "url": "https://rent.591.com.tw/123",
+            "title": "測試",
+            "price_raw": "10,000元/月",
+            "tags": [],
+            "kind_name": "整層住家",
+            "layout_raw": "2房1廳",
+            "area_raw": "20坪",
+            "floor_raw": "3F/5F",
+            "address_raw": "大安區-忠孝東路",
+        }
+        result = combine_with_list_only(list_data)
+        assert result["layout_raw"] == "2房1廳"
+
+    def test_list_only_detail_fields_are_none(self, sample_list_raw):
+        """Test that detail-only fields are None/empty."""
+        result = combine_with_list_only(sample_list_raw)
+
+        assert result["kind"] == ""
+        assert result["gender_raw"] is None
+        assert result["shape_raw"] is None
+        assert result["fitment_raw"] is None
+        assert result["options"] == []
+        assert result["surrounding_type"] is None
+        assert result["surrounding_raw"] is None
 
 
 # ============================================================

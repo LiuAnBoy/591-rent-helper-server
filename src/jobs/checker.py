@@ -10,10 +10,10 @@ from loguru import logger
 
 from src.connections.postgres import PostgresConnection, get_postgres
 from src.connections.redis import RedisConnection, get_redis
-from src.crawler.combiner import combine_raw_data
+from src.crawler.combiner import combine_raw_data, combine_with_list_only
 from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
-from src.crawler.types import CombinedRawData, DetailRawData, ListRawData
+from src.crawler.types import DetailRawData, ListRawData
 from src.jobs.broadcaster import Broadcaster, ErrorType, get_broadcaster
 from src.matching import filter_objects, match_object_to_subscription
 from src.modules.objects import ObjectRepository
@@ -145,36 +145,11 @@ class Checker:
             DBReadyData dict (for subscription matching)
         """
         # Step 1: Combine raw data
-        has_detail = detail_data is not None
-
         if detail_data:
             combined = combine_raw_data(list_data, detail_data)
         else:
-            # If detail fetch failed, use list data only with minimal combined structure
-            combined: CombinedRawData = {
-                "id": list_data.get("id", ""),
-                "url": list_data.get("url", ""),
-                "title": list_data.get("title", ""),
-                "price_raw": list_data.get("price_raw", ""),
-                "tags": list_data.get("tags", []),
-                "kind_name": list_data.get("kind_name", ""),
-                "address_raw": list_data.get("address_raw", ""),
-                "surrounding_type": None,
-                "surrounding_raw": None,
-                "region": str(region),  # Use passed region
-                "section": "",
-                "kind": "",
-                "floor_raw": list_data.get("floor_raw", ""),
-                "layout_raw": list_data.get("layout_str", ""),
-                "area_raw": list_data.get("area_raw", ""),
-                "gender_raw": None,
-                "shape_raw": None,
-                "fitment_raw": None,
-                "options": [],
-            }
-
-        # Set has_detail flag for DB storage
-        combined["has_detail"] = has_detail
+            # If detail fetch failed, use list data only
+            combined = combine_with_list_only(list_data)
 
         # Step 2: Transform to DB-ready format
         return transform_to_db_ready(combined)
