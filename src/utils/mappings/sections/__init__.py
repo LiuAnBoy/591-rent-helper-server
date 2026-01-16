@@ -4,8 +4,8 @@ Section mappings for 591 regions.
 Each region has its own module with district name to section code mapping.
 """
 
-from src.utils.sections.new_taipei import NEW_TAIPEI_SECTIONS
-from src.utils.sections.taipei import TAIPEI_SECTIONS
+from src.utils.mappings.sections.new_taipei import NEW_TAIPEI_SECTIONS
+from src.utils.mappings.sections.taipei import TAIPEI_SECTIONS
 
 # Region code to section mapping
 SECTION_MAPPINGS: dict[int, dict[str, int]] = {
