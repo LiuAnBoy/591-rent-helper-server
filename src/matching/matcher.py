@@ -10,6 +10,8 @@ from decimal import InvalidOperation
 
 from loguru import logger
 
+from src.utils.mappings.kind import convert_kind_name_to_code
+
 matcher_log = logger.bind(module="Matcher")
 
 
@@ -143,6 +145,33 @@ def safe_float(value, default: float | None = None) -> float | None:
         return default
 
 
+def parse_layout_rooms(layout_raw: str | None) -> int | None:
+    """
+    Parse room count from layout_raw string.
+
+    Args:
+        layout_raw: Layout string like "2房1廳", "3房2廳1衛"
+
+    Returns:
+        Number of rooms or None if cannot parse
+
+    Examples:
+        >>> parse_layout_rooms("2房1廳")
+        2
+        >>> parse_layout_rooms("3房2廳1衛")
+        3
+        >>> parse_layout_rooms("")
+        None
+    """
+    if not layout_raw:
+        return None
+
+    match = re.match(r"(\d+)房", layout_raw)
+    if match:
+        return int(match.group(1))
+    return None
+
+
 # ============================================================
 # Floor functions
 # ============================================================
@@ -270,12 +299,162 @@ def match_area(
     return True
 
 
+def match_region(obj_region: int | str | None, sub_region: int | None) -> bool:
+    """
+    Check if object region matches subscription region.
+
+    Args:
+        obj_region: Object's region code (int or str)
+        sub_region: Subscription's region code, None = no filter
+
+    Returns:
+        True if region matches (or no filter set)
+    """
+    if sub_region is None:
+        return True  # No region filter
+
+    if obj_region is None:
+        return True  # No region info, don't filter
+
+    # Convert to int for comparison
+    try:
+        obj_region_int = int(obj_region)
+    except (ValueError, TypeError):
+        return True  # Cannot parse, assume match
+
+    return obj_region_int == sub_region
+
+
+def match_section_quick(
+    obj_section: str | None,
+    sub_section: list[str] | None,
+) -> bool:
+    """
+    Quick check if object section matches subscription sections.
+
+    Args:
+        obj_section: Object's section code (e.g., "5" for 大安區)
+        sub_section: List of allowed section codes, None = no filter
+
+    Returns:
+        True if section matches (or no filter set)
+    """
+    if not sub_section:
+        return True  # No section filter
+
+    if not obj_section:
+        return True  # No section info, don't filter
+
+    return obj_section in sub_section
+
+
+def match_kind_quick(
+    obj_kind_name: str | None,
+    sub_kind: list[int] | None,
+) -> bool:
+    """
+    Quick check if object kind matches subscription kinds.
+
+    Converts kind_name (Chinese) to kind code for comparison.
+
+    Args:
+        obj_kind_name: Object's kind name (e.g., "整層住家", "獨立套房")
+        sub_kind: List of allowed kind codes, None = no filter
+
+    Returns:
+        True if kind matches (or no filter set)
+    """
+    if not sub_kind:
+        return True  # No kind filter
+
+    if not obj_kind_name:
+        return True  # No kind info, don't filter
+
+    obj_kind_code = convert_kind_name_to_code(obj_kind_name)
+    if obj_kind_code is None:
+        return True  # Cannot convert, assume match
+
+    return obj_kind_code in sub_kind
+
+
+def match_layout_quick(
+    obj_layout_raw: str | None,
+    sub_layout: list[int] | None,
+) -> bool:
+    """
+    Quick check if object layout matches subscription layouts.
+
+    Only applies to 整層住家 which has layout info.
+    Layout 4 means 4+ rooms.
+
+    Args:
+        obj_layout_raw: Object's layout string (e.g., "2房1廳")
+        sub_layout: List of allowed room counts, None = no filter
+
+    Returns:
+        True if layout matches (or no filter set)
+    """
+    if not sub_layout:
+        return True  # No layout filter
+
+    if not obj_layout_raw:
+        return True  # No layout info (套房/雅房), don't filter
+
+    rooms = parse_layout_rooms(obj_layout_raw)
+    if rooms is None:
+        return True  # Cannot parse, assume match
+
+    # Check if room count matches any required layout
+    for required in sub_layout:
+        if required == 4 and rooms >= 4:
+            return True
+        elif rooms == required:
+            return True
+
+    return False
+
+
+def match_floor_quick(
+    obj_floor_raw: str | None,
+    floor_min: int | None,
+    floor_max: int | None,
+) -> bool:
+    """
+    Quick check if object floor matches subscription floor range.
+
+    Args:
+        obj_floor_raw: Object's floor string (e.g., "3F/10F", "B1/5F")
+        floor_min: Minimum floor (inclusive), None = no limit
+        floor_max: Maximum floor (inclusive), None = no limit
+
+    Returns:
+        True if floor matches (or cannot be determined)
+    """
+    if floor_min is None and floor_max is None:
+        return True  # No floor filter
+
+    if not obj_floor_raw:
+        return True  # No floor info, don't filter
+
+    obj_floor = extract_floor_number(obj_floor_raw)
+    return match_floor(obj_floor, floor_min, floor_max)
+
+
 def match_quick(obj: dict, sub: dict) -> bool:
     """
-    Quick filter using basic criteria only (price, area).
+    Quick filter using basic criteria from list data.
 
     Used by pre_filter to decide if detail page should be fetched.
     Intentionally loose - we'd rather fetch extra than miss matches.
+
+    Checks (in order of speed):
+    1. Region - fastest, single int comparison
+    2. Section - fast, str in list
+    3. Kind - needs name to code conversion
+    4. Price - needs parsing
+    5. Area - needs parsing
+    6. Layout - only for 整層住家
+    7. Floor - needs string parsing
 
     Supports both raw data (ListRawData) and parsed data (DBReadyData).
 
@@ -286,15 +465,73 @@ def match_quick(obj: dict, sub: dict) -> bool:
     Returns:
         True if object might match subscription
     """
-    # Price check - support both raw and parsed formats
+    # 1. Region check - fastest
+    if not match_region(obj.get("region"), sub.get("region")):
+        return False
+
+    # 2. Section check - fast, str in list
+    if not match_section_quick(obj.get("section"), sub.get("section")):
+        return False
+
+    # 3. Kind check - needs conversion from kind_name
+    obj_kind = obj.get("kind")  # DBReadyData has "kind" as int
+    obj_kind_name = obj.get("kind_name")  # ListRawData has "kind_name" as str
+    if obj_kind is not None:
+        # Already have kind code (DBReadyData)
+        sub_kind = sub.get("kind")
+        if sub_kind and obj_kind not in sub_kind:
+            return False
+    elif obj_kind_name:
+        # Need to convert from kind_name (ListRawData)
+        if not match_kind_quick(obj_kind_name, sub.get("kind")):
+            return False
+
+    # 4. Price check - support both raw and parsed formats
     price_value = obj.get("price") or obj.get("price_raw")
     if not match_price(price_value, sub.get("price_min"), sub.get("price_max")):
         return False
 
-    # Area check - support both raw and parsed formats
+    # 5. Area check - support both raw and parsed formats
     area_value = obj.get("area") or obj.get("area_raw")
     if not match_area(area_value, sub.get("area_min"), sub.get("area_max")):
         return False
+
+    # 6. Layout check - only for 整層住家 (kind_name available)
+    obj_layout = obj.get("layout")  # DBReadyData has "layout" as int
+    obj_layout_raw = obj.get("layout_raw")  # ListRawData has "layout_raw" as str
+    sub_layout = sub.get("layout")
+    if sub_layout:
+        if obj_layout is not None:
+            # Already have layout (DBReadyData)
+            matched = False
+            for required in sub_layout:
+                if required == 4 and obj_layout >= 4:
+                    matched = True
+                    break
+                elif obj_layout == required:
+                    matched = True
+                    break
+            if not matched:
+                return False
+        elif obj_layout_raw:
+            # Need to parse from layout_raw (ListRawData)
+            if not match_layout_quick(obj_layout_raw, sub_layout):
+                return False
+
+    # 7. Floor check
+    floor_min = sub.get("floor_min")
+    floor_max = sub.get("floor_max")
+    if floor_min is not None or floor_max is not None:
+        obj_floor = obj.get("floor")  # DBReadyData has "floor" as int
+        obj_floor_raw = obj.get("floor_raw")  # ListRawData has "floor_raw" as str
+        if obj_floor is not None:
+            # Already have floor (DBReadyData)
+            if not match_floor(obj_floor, floor_min, floor_max):
+                return False
+        elif obj_floor_raw:
+            # Need to parse from floor_raw (ListRawData)
+            if not match_floor_quick(obj_floor_raw, floor_min, floor_max):
+                return False
 
     return True
 
@@ -312,44 +549,19 @@ def match_full(obj: dict, sub: dict) -> bool:
     Returns:
         True if object matches all criteria
     """
-    # Quick check first (price, area)
+    # Quick check (region, section, kind, price, area, layout, floor)
     if not match_quick(obj, sub):
         return False
 
-    # Kind (property type)
-    if sub.get("kind"):
-        obj_kind = obj.get("kind")
-        if obj_kind is not None and obj_kind not in sub["kind"]:
-            return False
+    # === Below: only checks NOT in match_quick ===
 
-    # Section (district)
-    if sub.get("section"):
-        obj_section = obj.get("section")
-        if obj_section is not None and obj_section not in sub["section"]:
-            return False
-
-    # Shape (建物型態)
+    # Shape (建物型態) - only from detail page
     if sub.get("shape"):
         obj_shape = obj.get("shape")
         if obj_shape is not None and obj_shape not in sub["shape"]:
             return False
 
-    # Layout (格局) - 4 means 4+
-    if sub.get("layout"):
-        obj_layout = obj.get("layout")
-        if obj_layout is not None:
-            matched = False
-            for required in sub["layout"]:
-                if required == 4 and obj_layout >= 4:
-                    matched = True
-                    break
-                elif obj_layout == required:
-                    matched = True
-                    break
-            if not matched:
-                return False
-
-    # Bathroom (衛浴) - 4 means 4+
+    # Bathroom (衛浴) - 4 means 4+, only from detail page
     if sub.get("bathroom"):
         obj_bathroom = obj.get("bathroom")
         if obj_bathroom is not None:
@@ -364,15 +576,7 @@ def match_full(obj: dict, sub: dict) -> bool:
             if not matched:
                 return False
 
-    # Floor (樓層)
-    floor_min = sub.get("floor_min")
-    floor_max = sub.get("floor_max")
-    if floor_min is not None or floor_max is not None:
-        obj_floor = obj.get("floor")
-        if not match_floor(obj_floor, floor_min, floor_max):
-            return False
-
-    # Fitment (裝潢)
+    # Fitment (裝潢) - only from detail page
     if sub.get("fitment"):
         obj_fitment = obj.get("fitment")
         if obj_fitment is not None and obj_fitment not in sub["fitment"]:
