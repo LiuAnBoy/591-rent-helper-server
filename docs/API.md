@@ -89,6 +89,7 @@ Authorization: Bearer <token>
     "id": 1,
     "name": "John Doe",
     "role": "user",
+    "max_subscriptions": 3,
     "providers": [
       {
         "provider": "telegram",
