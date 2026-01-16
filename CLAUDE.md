@@ -122,6 +122,10 @@ src/
 │   ├── broadcaster.py    # Telegram notification sender
 │   └── instant_notify.py # Immediate notification on subscription changes
 │
+├── matching/              # Subscription matching module
+│   ├── matcher.py        # Core matching logic (match_quick, match_full)
+│   └── pre_filter.py     # Pre-filter functions for detail fetching
+│
 ├── middleware/            # FastAPI middleware
 │   ├── cors.py           # CORS configuration
 │   └── logging.py        # Request logging
@@ -180,7 +184,7 @@ Key variables (see `.env.example` for full list):
 
 ## Test Coverage
 
-**Total: 181 unit tests**
+**Total: 225 unit tests**
 
 ⚠️ **IMPORTANT: If you modify any code in the areas below, run `uv run pytest` to verify tests pass.**
 
@@ -190,8 +194,8 @@ Key variables (see `.env.example` for full list):
 |--------|-----------|-------|----------|
 | `src/channels/telegram/formatter.py` | `test_formatter.py` | 22 | Message formatting, HTML escaping, command results |
 | `src/crawler/` (extractors) | `test_extractors.py` | 29 | Data extraction, NUXT parsing, HTML parsing, raw data combining |
-| `src/jobs/checker.py` | `test_checker.py` | 49 | Subscription matching logic, floor extraction |
-| `src/utils/` (transformers) | `test_transformers.py` | 81 | All data transformers (price, floor, layout, area, address, etc.) |
+| `src/matching/` | `test_matcher.py`, `test_pre_filter.py` | 100 | Subscription matching, parsing, floor extraction, pre-filtering |
+| `src/utils/` (transformers) | `test_transformers.py` | 74 | All data transformers (price, floor, layout, area, address, etc.) |
 
 ### Test Details
 
@@ -206,9 +210,12 @@ Key variables (see `.env.example` for full list):
 - `TestParseItemRaw` / `TestParseDetailRaw` - BS4 HTML parsing
 - `TestExtractSurrounding` - Surrounding info extraction
 
-**Jobs (`test_checker.py`)**
-- `TestMatchObjectToSubscription` - All subscription filter matching (price, kind, section, shape, area, layout, bathroom, floor, fitment, gender, pet, options)
-- `TestMatchFloor` / `TestExtractFloorNumber` - Floor number extraction and matching
+**Matching (`test_matcher.py`, `test_pre_filter.py`)**
+- `TestParsePriceValue` / `TestParseAreaValue` - Value parsing from raw strings
+- `TestMatchQuick` - Quick matching (price/area only)
+- `TestMatchObjectToSubscription` - Full subscription matching (all criteria)
+- `TestMatchFloor` / `TestExtractFloorNumber` - Floor extraction and matching
+- `TestShouldFetchDetail` / `TestFilterObjects` - Pre-filter logic
 
 **Utils (`test_transformers.py`)**
 - Transform functions: ID, price, floor, layout, area, address, shape, fitment, gender, pet, options, surrounding
@@ -235,5 +242,5 @@ The following areas do not have unit tests:
 - `src/api/` - API routes, dependencies
 - `src/connections/` - Database connections
 - `src/modules/` - Repository layer
-- `src/jobs/broadcaster.py`, `instant_notify.py` - Notification jobs
+- `src/jobs/broadcaster.py`, `instant_notify.py` - Notification jobs (orchestration only)
 - `src/crawler/*_fetcher.py` - Fetcher orchestrators (only extractors tested)
