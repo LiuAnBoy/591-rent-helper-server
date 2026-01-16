@@ -60,6 +60,11 @@ async def create_subscription(
     try:
         # Convert floor list to floor_min/floor_max for storage
         create_data = data.model_dump()
+
+        # Auto-convert: if "pet" in other, set pet_required to True
+        if "pet" in (create_data.get("other") or []):
+            create_data["pet_required"] = True
+
         if "floor" in create_data and create_data["floor"]:
             floor_list = create_data.pop("floor")
             floor_min, floor_max = parse_floor_ranges(floor_list)
@@ -175,6 +180,10 @@ async def update_subscription(
     update_data = data.model_dump(exclude_unset=True)
     if not update_data:
         return {"success": True}
+
+    # Auto-convert: if "pet" in other, set pet_required to True
+    if "other" in update_data and "pet" in (update_data.get("other") or []):
+        update_data["pet_required"] = True
 
     # Convert floor list to floor_min/floor_max for storage
     if "floor" in update_data:

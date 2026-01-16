@@ -143,7 +143,7 @@ class SubscriptionBase(BaseModel):
     gender: str | None = Field(
         None, description="性別限制 (boy=限男, girl=限女, None=不限)"
     )
-    pet_required: bool = Field(False, description="需要可養寵物")
+    # pet_required is auto-derived from "pet" in other, not accepted from API
 
     @field_validator("gender")
     @classmethod
@@ -181,7 +181,7 @@ class SubscriptionUpdate(BaseModel):
     fitment: list[int] | None = None
     exclude_rooftop: bool | None = None
     gender: str | None = None
-    pet_required: bool | None = None
+    # pet_required is auto-derived from "pet" in other, not accepted from API
     # Note: `enabled` is not allowed here. Use PATCH .../toggle instead.
 
 
@@ -191,6 +191,7 @@ class SubscriptionResponse(SubscriptionBase):
     id: int
     user_id: int
     enabled: bool = True
+    pet_required: bool = Field(False, description="需要可養寵物")
     created_at: datetime
     updated_at: datetime
 
