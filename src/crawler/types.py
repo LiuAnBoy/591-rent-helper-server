@@ -122,6 +122,7 @@ class CombinedRawData(TypedDict):
         shape_raw: Building shape from Detail
         fitment_raw: Fitment level from Detail
         options: Equipment list from Detail
+        has_detail: Whether detail page was fetched
     """
 
     id: str
@@ -143,6 +144,7 @@ class CombinedRawData(TypedDict):
     shape_raw: str | None
     fitment_raw: str | None
     options: list[str]
+    has_detail: bool
 
 
 # Worker calculation functions

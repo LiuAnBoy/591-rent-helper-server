@@ -251,7 +251,7 @@ class InstantNotifier:
                 details, _, _ = await detail_fetcher.fetch_details_batch_raw(ids_to_fetch)
 
                 # Update objects with fetched details
-                updated_objects = []
+                updated_objects: list[dict] = []
                 for obj in objects_need_detail:
                     obj_id = obj["id"]
                     detail_data = details.get(obj_id)
@@ -424,7 +424,7 @@ class InstantNotifier:
                 details, _, _ = await detail_fetcher.fetch_details_batch_raw(ids_to_fetch)
 
                 # Update objects with fetched details
-                updated_objects = []
+                updated_objects: list[dict] = []
                 for obj in objects_need_detail:
                     obj_id = obj["id"]
                     detail_data = details.get(obj_id)

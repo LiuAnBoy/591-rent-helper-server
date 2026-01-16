@@ -61,6 +61,7 @@ def combine_raw_data(
         "options": detail_data.get("options", []),
         "surrounding_type": detail_data.get("surrounding_type"),
         "surrounding_raw": detail_data.get("surrounding_raw"),
+        "has_detail": True,
     }
 
     return result
@@ -105,6 +106,7 @@ def combine_with_detail_only(
         "shape_raw": detail_data.get("shape_raw"),
         "fitment_raw": detail_data.get("fitment_raw"),
         "options": detail_data.get("options", []),
+        "has_detail": True,
     }
 
     return result
