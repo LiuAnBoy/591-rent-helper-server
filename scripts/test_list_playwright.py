@@ -52,6 +52,7 @@ async def main(region: int, limit: int, raw: bool = False):
                             "price_raw": obj.get("price_raw"),
                             "kind_name": obj.get("kind_name"),
                             "region": obj.get("region"),
+                            "section": obj.get("section"),
                             "area_raw": obj.get("area_raw"),
                             "floor_raw": obj.get("floor_raw"),
                             "layout_raw": obj.get("layout_raw"),
