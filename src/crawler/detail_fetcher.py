@@ -76,6 +76,97 @@ class DetailFetcher:
             await self._playwright_fetcher.start()
             self._playwright_started = True
 
+    async def _bs4_batch_with_retry(
+        self,
+        object_ids: list[int],
+    ) -> tuple[dict[int, DetailRawData], list[int], int]:
+        """
+        BS4 batch processing with retry logic.
+
+        Args:
+            object_ids: List of object IDs to process
+
+        Returns:
+            Tuple of:
+            - results: Successful results {id: DetailRawData}
+            - failed_ids: IDs that need Playwright fallback
+            - not_found_count: Count of 404 responses
+        """
+        results: dict[int, DetailRawData] = {}
+        not_found_ids: set[int] = set()
+        pending_ids = set(object_ids)
+
+        for attempt in range(self._max_retries):
+            if not pending_ids:
+                break
+
+            # Dynamic worker scaling
+            await self._bs4_fetcher._ensure_workers(len(pending_ids))
+
+            # Batch fetch
+            tasks = [self._bs4_fetcher.fetch_detail_raw(oid) for oid in pending_ids]
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Process results
+            still_pending: set[int] = set()
+            for oid, result in zip(pending_ids, batch_results, strict=False):
+                if isinstance(result, Exception):
+                    fetcher_log.warning(
+                        f"BS4 attempt {attempt + 1}/{self._max_retries} "
+                        f"exception for {oid}: {result}"
+                    )
+                    still_pending.add(oid)
+                    continue
+
+                data, status = result
+                if status == "not_found":
+                    not_found_ids.add(oid)
+                elif data and data.get("tags"):
+                    results[oid] = data
+                else:
+                    still_pending.add(oid)
+
+            pending_ids = still_pending
+
+            # Wait before retry
+            if pending_ids and attempt < self._max_retries - 1:
+                fetcher_log.debug(
+                    f"BS4 attempt {attempt + 1}/{self._max_retries}: "
+                    f"{len(pending_ids)} pending, retrying in 1.5s..."
+                )
+                await asyncio.sleep(1.5)
+
+        return results, list(pending_ids), len(not_found_ids)
+
+    async def _playwright_batch(
+        self,
+        object_ids: list[int],
+    ) -> tuple[dict[int, DetailRawData], int, int]:
+        """
+        Playwright batch processing for failed objects.
+
+        Dynamically adjusts worker count based on batch size.
+
+        Args:
+            object_ids: List of object IDs that failed BS4
+
+        Returns:
+            Tuple of (results, not_found_count, error_count)
+        """
+        if not object_ids:
+            return {}, 0, 0
+
+        fetcher_log.info(f"Playwright fallback for {len(object_ids)} failed objects")
+
+        # Lazy-load Playwright fetcher
+        if self._playwright_fetcher is None:
+            self._playwright_fetcher = DetailFetcherPlaywright(
+                max_workers=self._playwright_max_workers
+            )
+
+        # Use existing batch method (handles dynamic worker scaling internally)
+        return await self._playwright_fetcher.fetch_details_batch_raw(object_ids)
+
     async def fetch_detail_raw(
         self, object_id: int
     ) -> tuple[DetailRawData | None, DetailFetchStatus]:
@@ -130,10 +221,9 @@ class DetailFetcher:
         """
         Fetch multiple details with automatic fallback, returning raw data.
 
-        Dynamically adjusts worker count based on batch size.
-
-        1. Try bs4 for all objects
-        2. For failed objects, fallback to Playwright
+        Uses two-phase batch processing:
+        1. BS4 batch with retry for all objects
+        2. Playwright batch fallback for failed objects only
 
         Args:
             object_ids: List of object IDs to fetch
@@ -147,31 +237,22 @@ class DetailFetcher:
         if self._bs4_fetcher is None:
             await self.start()
 
-        # Dynamic worker scaling for BS4
-        await self._bs4_fetcher._ensure_workers(len(object_ids))
-
         fetcher_log.info(f"Fetching {len(object_ids)} detail pages (raw)...")
 
-        # Use unified fetch_detail_raw for each object (has retry + fallback)
-        tasks = [self.fetch_detail_raw(oid) for oid in object_ids]
-        results_list = await asyncio.gather(*tasks, return_exceptions=True)
+        # Phase 1: BS4 batch with retry
+        results, failed_ids, not_found_count = await self._bs4_batch_with_retry(
+            object_ids
+        )
 
-        # Process results
-        results: dict[int, DetailRawData] = {}
-        not_found_count = 0
+        # Phase 2: Playwright fallback for failures only
         error_count = 0
-        for oid, result in zip(object_ids, results_list, strict=False):
-            if isinstance(result, Exception):
-                fetcher_log.error(f"Fetch raw exception for {oid}: {result}")
-                error_count += 1
-            elif isinstance(result, tuple):
-                data, status = result
-                if data:
-                    results[oid] = data
-                elif status == "not_found":
-                    not_found_count += 1
-                else:
-                    error_count += 1
+        if failed_ids:
+            pw_results, pw_not_found, pw_errors = await self._playwright_batch(
+                failed_ids
+            )
+            results.update(pw_results)
+            not_found_count += pw_not_found
+            error_count = pw_errors
 
         fetcher_log.info(
             f"Fetched {len(results)}/{len(object_ids)} detail pages (raw) "
