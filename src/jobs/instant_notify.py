@@ -230,7 +230,7 @@ class InstantNotifier:
         filtered_objects, skipped = filter_redis_objects(objects, subscriptions)
         notify_log.info(
             f"Pre-filter: {len(objects)} → {len(filtered_objects)} "
-            f"(skipped {skipped} by price/area)"
+            f"(skipped {skipped} by pre-filter)"
         )
 
         if not filtered_objects:
@@ -405,11 +405,11 @@ class InstantNotifier:
         if not objects:
             return {"checked": 0, "matched": 0, "notified": 0}
 
-        # Step 2: Pre-filter by price/area
+        # Step 2: Pre-filter
         filtered_objects, skipped = filter_redis_objects(objects, [subscription])
         notify_log.info(
             f"Pre-filter: {len(objects)} → {len(filtered_objects)} "
-            f"(skipped {skipped} by price/area)"
+            f"(skipped {skipped} by pre-filter)"
         )
 
         if not filtered_objects:

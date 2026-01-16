@@ -368,7 +368,7 @@ class Checker:
 
                     checker_log.info(
                         f"Pre-filter: {pre_filter_input} → {pre_filter_output} "
-                        f"(skipped {pre_filter_skipped} by price/area)"
+                        f"(skipped {pre_filter_skipped} by pre-filter)"
                     )
 
                     # Step 3: Fetch detail raw data for filtered items only
