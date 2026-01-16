@@ -4,22 +4,21 @@ Unit tests for src/utils/transformers.py
 
 
 from src.utils.transformers import (
-    transform_id,
-    transform_price,
-    transform_floor,
-    transform_layout,
-    transform_area,
     transform_address,
-    transform_shape,
+    transform_area,
     transform_fitment,
+    transform_floor,
     transform_gender,
-    transform_pet_allowed,
+    transform_id,
+    transform_layout,
     transform_options,
     transform_other,
+    transform_pet_allowed,
+    transform_price,
+    transform_shape,
     transform_surrounding,
     transform_to_db_ready,
 )
-
 
 # ============================================================
 # transform_id tests

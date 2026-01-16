@@ -4,7 +4,6 @@ Mock data fixtures for extractor tests.
 
 import pytest
 
-
 # ============================================================
 # Raw Data Fixtures
 # ============================================================
@@ -15,15 +14,17 @@ def sample_list_raw():
     """Sample ListRawData."""
     return {
         "region": 1,
+        "section": "7",
         "id": "12345678",
         "url": "https://rent.591.com.tw/12345678",
         "title": "台北市信義區套房",
         "price_raw": "15,000元/月",
         "tags": ["近捷運", "有陽台"],
         "kind_name": "獨立套房",
+        "layout_raw": "",
         "area_raw": "10坪",
         "floor_raw": "3F/10F",
-        "address_raw": "信義區信義路",
+        "address_raw": "信義區-信義路",
     }
 
 
@@ -65,6 +66,7 @@ def sample_nuxt_list_data():
                 "items": [
                     {
                         "id": 12345678,
+                        "sectionid": 7,
                         "title": "NUXT套房",
                         "price": 15000,
                         "tags": [{"id": 1, "value": "近捷運"}],
@@ -145,7 +147,7 @@ def sample_list_html():
         </div>
         <div class="item-info-txt">
             <span class="house-place"></span>
-            信義區信義路
+            <span>信義區-信義路</span>
         </div>
     </div>
     """

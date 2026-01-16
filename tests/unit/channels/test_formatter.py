@@ -4,8 +4,8 @@ Unit tests for src/channels/telegram/formatter.py
 
 import pytest
 
-from src.channels.telegram.formatter import TelegramFormatter
 from src.channels.commands.base import CommandResult
+from src.channels.telegram.formatter import TelegramFormatter
 
 # Import fixtures
 pytest_plugins = ["tests.fixtures.formatter"]

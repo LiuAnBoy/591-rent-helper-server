@@ -10,7 +10,6 @@ from src.matching.pre_filter import (
     should_match_redis_object,
 )
 
-
 # ============================================================
 # should_fetch_detail tests
 # ============================================================

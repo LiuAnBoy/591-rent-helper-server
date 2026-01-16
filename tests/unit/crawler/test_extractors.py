@@ -5,19 +5,19 @@ Unit tests for src/crawler/extractors/
 from bs4 import BeautifulSoup
 
 from src.crawler.combiner import combine_raw_data, combine_with_detail_only
-from src.crawler.list_fetcher_bs4 import _parse_item_raw
 from src.crawler.detail_fetcher_bs4 import _parse_detail_raw
-from src.crawler.list_fetcher_playwright import (
-    extract_list_raw_from_nuxt,
-    _find_items,
-    _parse_item_raw_from_nuxt,
-    get_total_from_nuxt,
-)
 from src.crawler.detail_fetcher_playwright import (
-    extract_detail_raw_from_nuxt,
+    _extract_surrounding,
     _find_detail_data,
     _parse_detail_raw_from_nuxt,
-    _extract_surrounding,
+    extract_detail_raw_from_nuxt,
+)
+from src.crawler.list_fetcher_bs4 import _parse_item_raw
+from src.crawler.list_fetcher_playwright import (
+    _find_items,
+    _parse_item_raw_from_nuxt,
+    extract_list_raw_from_nuxt,
+    get_total_from_nuxt,
 )
 
 # Import fixtures from fixtures folder
@@ -69,12 +69,14 @@ class TestCombineRawData:
     def test_detail_fallback_when_list_empty(self, sample_detail_raw):
         list_data = {
             "region": 1,
+            "section": "",
             "id": "12345678",
             "url": "https://rent.591.com.tw/12345678",
             "title": "",
             "price_raw": "",
             "tags": [],
             "kind_name": "獨立套房",
+            "layout_raw": "",
             "area_raw": "",
             "floor_raw": "",
             "address_raw": "",
@@ -84,6 +86,23 @@ class TestCombineRawData:
         # Should fallback to Detail
         assert result["title"] == "台北市信義區精緻套房"
         assert result["price_raw"] == "16,000元/月"
+
+    def test_section_detail_priority(self, sample_list_raw, sample_detail_raw):
+        """Test that section from detail page takes priority over list."""
+        # List has section 7, detail has section 7
+        result = combine_raw_data(sample_list_raw, sample_detail_raw)
+        assert result["section"] == "7"
+
+        # Modify detail to have different section
+        detail_modified = {**sample_detail_raw, "section": "5"}
+        result = combine_raw_data(sample_list_raw, detail_modified)
+        assert result["section"] == "5"  # Detail priority
+
+    def test_section_fallback_to_list(self, sample_list_raw, sample_detail_raw):
+        """Test that section falls back to list when detail is empty."""
+        detail_empty_section = {**sample_detail_raw, "section": ""}
+        result = combine_raw_data(sample_list_raw, detail_empty_section)
+        assert result["section"] == "7"  # Fallback to list
 
 
 class TestCombineWithDetailOnly:
@@ -169,6 +188,20 @@ class TestParseItemRawFromNuxt:
         result = _parse_item_raw_from_nuxt(item, region=1)
 
         assert result["tags"] == ["近捷運", "有陽台"]
+
+    def test_parse_nuxt_item_with_sectionid(self):
+        """Test that section is extracted from sectionid field."""
+        item = {"id": 123, "sectionid": 7}
+        result = _parse_item_raw_from_nuxt(item, region=1)
+
+        assert result["section"] == "7"
+
+    def test_parse_nuxt_item_without_sectionid(self):
+        """Test that section is empty when sectionid is missing."""
+        item = {"id": 123}
+        result = _parse_item_raw_from_nuxt(item, region=1)
+
+        assert result["section"] == ""
 
 
 class TestExtractListRawFromNuxt:
@@ -319,6 +352,56 @@ class TestParseItemRaw:
         assert result["id"] == ""
         assert result["title"] == ""
         assert result["tags"] == []
+
+    def test_section_parsed_from_address_taipei(self):
+        """Test that section is parsed from address_raw for Taipei."""
+        html = """
+        <div class="item" data-id="123">
+            <div class="item-info-txt">
+                <span class="house-place"></span>
+                <span>大安區-忠孝東路</span>
+            </div>
+        </div>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        elem = soup.find("div", class_="item")
+        result = _parse_item_raw(elem, region=1)
+
+        assert result["section"] == "5"  # 大安區 = 5
+        assert result["address_raw"] == "大安區-忠孝東路"
+
+    def test_section_parsed_from_address_new_taipei(self):
+        """Test that section is parsed from address_raw for New Taipei."""
+        html = """
+        <div class="item" data-id="123">
+            <div class="item-info-txt">
+                <span class="house-place"></span>
+                <span>板橋區-中山路</span>
+            </div>
+        </div>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        elem = soup.find("div", class_="item")
+        result = _parse_item_raw(elem, region=3)
+
+        assert result["section"] == "26"  # 板橋區 = 26
+        assert result["address_raw"] == "板橋區-中山路"
+
+    def test_section_empty_when_district_not_found(self):
+        """Test that section is empty when district is not in mapping."""
+        html = """
+        <div class="item" data-id="123">
+            <div class="item-info-txt">
+                <span class="house-place"></span>
+                <span>未知區-某路</span>
+            </div>
+        </div>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        elem = soup.find("div", class_="item")
+        result = _parse_item_raw(elem, region=1)
+
+        assert result["section"] == ""
 
 
 # ============================================================
