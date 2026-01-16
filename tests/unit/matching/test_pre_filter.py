@@ -2,7 +2,6 @@
 Unit tests for src/matching/pre_filter.py
 """
 
-
 from src.matching.pre_filter import (
     filter_objects,
     filter_redis_objects,

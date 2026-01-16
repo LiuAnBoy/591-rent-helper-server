@@ -300,9 +300,7 @@ class ObjectRepository:
                 return True
             return False
 
-    async def update_batch_with_detail(
-        self, objects: list[DBReadyData]
-    ) -> int:
+    async def update_batch_with_detail(self, objects: list[DBReadyData]) -> int:
         """
         Batch update objects with detail data.
 

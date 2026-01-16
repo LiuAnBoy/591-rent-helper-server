@@ -132,7 +132,5 @@ def filter_redis_objects(
         else:
             skipped += 1
 
-    pre_filter_log.debug(
-        f"Redis filter: {len(filtered)} passed, {skipped} skipped"
-    )
+    pre_filter_log.debug(f"Redis filter: {len(filtered)} passed, {skipped} skipped")
     return filtered, skipped

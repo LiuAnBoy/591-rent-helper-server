@@ -105,7 +105,9 @@ async def init_redis_objects_cache():
             log.info("Startup: No active regions, skipping objects cache init")
             return
 
-        log.info(f"Startup: Initializing Redis objects cache for {len(active_regions)} regions")
+        log.info(
+            f"Startup: Initializing Redis objects cache for {len(active_regions)} regions"
+        )
 
         for region in active_regions:
             # Check if Redis already has objects for this region
@@ -117,7 +119,9 @@ async def init_redis_objects_cache():
             objects = await repo.get_latest_by_region(region, 30)
             if objects:
                 await redis.set_region_objects(region, objects)
-                log.info(f"Region {region}: loaded {len(objects)} objects from DB to Redis")
+                log.info(
+                    f"Region {region}: loaded {len(objects)} objects from DB to Redis"
+                )
             else:
                 log.debug(f"Region {region}: no objects in DB")
 

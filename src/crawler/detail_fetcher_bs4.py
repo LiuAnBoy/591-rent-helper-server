@@ -241,9 +241,9 @@ class DetailFetcherBs4:
         # Layout from page text - prioritize longer matches
         layout_patterns = [
             r"([1-9]房\d+廳\d+衛)",  # Full: 4房2廳2衛
-            r"([1-9]房\d+廳)",       # Partial: 2房1廳
-            r"([1-9]房\d+衛)",       # Partial: 2房1衛
-            r"([1-9]房|開放格局)",   # Fallback: 1房 or 開放格局
+            r"([1-9]房\d+廳)",  # Partial: 2房1廳
+            r"([1-9]房\d+衛)",  # Partial: 2房1衛
+            r"([1-9]房|開放格局)",  # Fallback: 1房 or 開放格局
         ]
         for pattern in layout_patterns:
             m = re.search(pattern, page_text)

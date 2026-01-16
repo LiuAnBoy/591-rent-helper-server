@@ -281,7 +281,9 @@ async def toggle_subscription(
         raise HTTPException(status_code=403, detail="無權限修改此訂閱")
 
     # Toggle
-    was_disabled = not existing["enabled"]  # True if currently disabled, will be enabled
+    was_disabled = not existing[
+        "enabled"
+    ]  # True if currently disabled, will be enabled
     new_status = not existing["enabled"]
     await repo.update(subscription_id, {"enabled": new_status})
 

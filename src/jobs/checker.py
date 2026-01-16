@@ -312,9 +312,7 @@ class Checker:
                 total_fetched += len(page_items)
 
                 # Check which items are new (skip items with empty ID)
-                page_ids = {
-                    int(item["id"]) for item in page_items if item.get("id")
-                }
+                page_ids = {int(item["id"]) for item in page_items if item.get("id")}
                 new_ids_in_page = await self._redis.get_new_ids(region, page_ids)
 
                 # Collect new items
@@ -369,9 +367,7 @@ class Checker:
             if new_ids:
                 # Build lookup dict for list raw data (skip empty IDs)
                 list_data_by_id = {
-                    int(item["id"]): item
-                    for item in list_raw_items
-                    if item.get("id")
+                    int(item["id"]): item for item in list_raw_items if item.get("id")
                 }
 
                 # Get only NEW items for pre-filtering
@@ -407,16 +403,20 @@ class Checker:
                             f"Fetching detail for {len(ids_need_detail)} objects (ETL)"
                         )
 
-                        details, detail_not_found, detail_failed = (
-                            await self._detail_fetcher.fetch_details_batch_raw(
-                                ids_need_detail
-                            )
+                        (
+                            details,
+                            detail_not_found,
+                            detail_failed,
+                        ) = await self._detail_fetcher.fetch_details_batch_raw(
+                            ids_need_detail
                         )
                         detail_fetched = len(details)
 
                         # Notify admin only for actual errors (not 404s)
                         if detail_failed > 0 and self._broadcaster:
-                            failed_ids = [oid for oid in ids_need_detail if oid not in details]
+                            failed_ids = [
+                                oid for oid in ids_need_detail if oid not in details
+                            ]
                             await self._broadcaster.notify_admin(
                                 error_type=ErrorType.DETAIL_FETCH_FAILED,
                                 region=region,
@@ -556,9 +556,7 @@ class Checker:
                 f"new={result['new_count']}",
             ]
             if pre_filter_input > 0:
-                log_parts.append(
-                    f"pre-filter={pre_filter_output}/{pre_filter_input}"
-                )
+                log_parts.append(f"pre-filter={pre_filter_output}/{pre_filter_input}")
             # Detail stats: fetched/not_found/failed
             detail_stats = f"detail={detail_fetched}"
             if detail_not_found > 0 or detail_failed > 0:
@@ -567,11 +565,13 @@ class Checker:
                     detail_stats += f", {detail_failed} failed"
                 detail_stats += ")"
             log_parts.append(detail_stats)
-            log_parts.extend([
-                f"matches={len(matches)}",
-                f"initialized={len(initialized_subs)}",
-                f"notified={broadcast_result['success']}/{broadcast_result['total']}",
-            ])
+            log_parts.extend(
+                [
+                    f"matches={len(matches)}",
+                    f"initialized={len(initialized_subs)}",
+                    f"notified={broadcast_result['success']}/{broadcast_result['total']}",
+                ]
+            )
             checker_log.info(" ".join(log_parts))
 
             return result

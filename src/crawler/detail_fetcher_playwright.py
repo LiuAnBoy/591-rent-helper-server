@@ -480,7 +480,9 @@ class DetailFetcherPlaywright:
                 f"{progress['completed']}/{progress['total']}: {object_id}"
             )
 
-            data, status = await self.fetch_detail_raw(object_id, self._pages[worker_id])
+            data, status = await self.fetch_detail_raw(
+                object_id, self._pages[worker_id]
+            )
             return object_id, data, status
 
     async def fetch_details_batch_raw(
@@ -550,9 +552,7 @@ class DetailFetcherPlaywright:
             else:
                 error_count += 1
 
-        fetcher_log.info(
-            f"Fetched {len(results)}/{len(object_ids)} detail pages (raw)"
-        )
+        fetcher_log.info(f"Fetched {len(results)}/{len(object_ids)} detail pages (raw)")
 
         return results, not_found_count, error_count
 

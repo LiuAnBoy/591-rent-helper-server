@@ -22,10 +22,10 @@ from src.crawler.detail_fetcher_playwright import DetailFetcherPlaywright
 
 async def main(object_ids: list[int]):
     """Run Playwright detail fetch test."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Playwright Detail Fetcher Test")
     print(f"Object IDs: {object_ids}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     fetcher = DetailFetcherPlaywright()
 
@@ -55,15 +55,18 @@ async def main(object_ids: list[int]):
     except Exception as e:
         print(f"Error: {e}")
         import traceback
+
         traceback.print_exc()
 
     finally:
         await fetcher.close()
 
     # Print summary
-    print(f"{'='*60}")
-    print(f"Summary: {stats['success']} success, {stats['not_found']} not_found, {stats['error']} error")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
+    print(
+        f"Summary: {stats['success']} success, {stats['not_found']} not_found, {stats['error']} error"
+    )
+    print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

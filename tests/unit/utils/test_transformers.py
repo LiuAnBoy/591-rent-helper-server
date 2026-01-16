@@ -2,7 +2,6 @@
 Unit tests for src/utils/transformers.py
 """
 
-
 from src.utils.transformers import (
     transform_address,
     transform_area,
@@ -463,12 +462,34 @@ class TestTransformToDbReady:
         result = transform_to_db_ready(sample_combined_data)
 
         required_fields = [
-            "id", "url", "title", "price", "price_unit",
-            "region", "section", "kind", "kind_name", "address",
-            "floor", "floor_str", "total_floor", "is_rooftop",
-            "layout", "layout_str", "bathroom", "area", "shape",
-            "fitment", "gender", "pet_allowed", "options", "other",
-            "tags", "surrounding_type", "surrounding_desc", "surrounding_distance",
+            "id",
+            "url",
+            "title",
+            "price",
+            "price_unit",
+            "region",
+            "section",
+            "kind",
+            "kind_name",
+            "address",
+            "floor",
+            "floor_str",
+            "total_floor",
+            "is_rooftop",
+            "layout",
+            "layout_str",
+            "bathroom",
+            "area",
+            "shape",
+            "fitment",
+            "gender",
+            "pet_allowed",
+            "options",
+            "other",
+            "tags",
+            "surrounding_type",
+            "surrounding_desc",
+            "surrounding_distance",
         ]
 
         for field in required_fields:

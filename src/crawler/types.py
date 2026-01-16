@@ -151,6 +151,7 @@ class CombinedRawData(TypedDict):
 
 # Worker calculation functions
 
+
 def calculate_detail_workers(items_count: int) -> int:
     """
     Calculate optimal worker count for detail fetching.

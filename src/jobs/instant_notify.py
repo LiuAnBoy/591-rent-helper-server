@@ -212,12 +212,16 @@ class InstantNotifier:
             if objects:
                 # Populate Redis cache
                 await self._redis.set_region_objects(region, objects)
-                notify_log.info(f"Loaded {len(objects)} objects from DB for region {region}")
+                notify_log.info(
+                    f"Loaded {len(objects)} objects from DB for region {region}"
+                )
             else:
                 notify_log.info(f"No objects in DB for region {region}")
                 return {"checked": 0, "matched": 0, "notified": 0}
         else:
-            notify_log.info(f"Found {len(objects)} objects in Redis for region {region}")
+            notify_log.info(
+                f"Found {len(objects)} objects in Redis for region {region}"
+            )
 
         if not objects:
             return {"checked": 0, "matched": 0, "notified": 0}
@@ -248,7 +252,9 @@ class InstantNotifier:
 
             try:
                 ids_to_fetch = [obj["id"] for obj in objects_need_detail]
-                details, _, _ = await detail_fetcher.fetch_details_batch_raw(ids_to_fetch)
+                details, _, _ = await detail_fetcher.fetch_details_batch_raw(
+                    ids_to_fetch
+                )
 
                 # Update objects with fetched details
                 updated_objects: list[dict] = []
@@ -290,7 +296,9 @@ class InstantNotifier:
                 # Update Redis cache with new data
                 if updated_objects:
                     await self._redis.update_region_objects(region, updated_objects)
-                    notify_log.info(f"Updated {len(updated_objects)} objects with detail")
+                    notify_log.info(
+                        f"Updated {len(updated_objects)} objects with detail"
+                    )
 
                     # Update filtered_objects with new data
                     updated_by_id = {obj["id"]: obj for obj in updated_objects}
@@ -390,7 +398,9 @@ class InstantNotifier:
                 notify_log.info(f"No objects in DB for region {region}")
                 return {"checked": 0, "matched": 0, "notified": 0}
         else:
-            notify_log.info(f"Found {len(objects)} objects in Redis for region {region}")
+            notify_log.info(
+                f"Found {len(objects)} objects in Redis for region {region}"
+            )
 
         if not objects:
             return {"checked": 0, "matched": 0, "notified": 0}
@@ -421,7 +431,9 @@ class InstantNotifier:
 
             try:
                 ids_to_fetch = [obj["id"] for obj in objects_need_detail]
-                details, _, _ = await detail_fetcher.fetch_details_batch_raw(ids_to_fetch)
+                details, _, _ = await detail_fetcher.fetch_details_batch_raw(
+                    ids_to_fetch
+                )
 
                 # Update objects with fetched details
                 updated_objects: list[dict] = []
@@ -463,7 +475,9 @@ class InstantNotifier:
                 # Update Redis cache with new data
                 if updated_objects:
                     await self._redis.update_region_objects(region, updated_objects)
-                    notify_log.info(f"Updated {len(updated_objects)} objects with detail")
+                    notify_log.info(
+                        f"Updated {len(updated_objects)} objects with detail"
+                    )
 
                     # Update filtered_objects with new data
                     updated_by_id = {obj["id"]: obj for obj in updated_objects}

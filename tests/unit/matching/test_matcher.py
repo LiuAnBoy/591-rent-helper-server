@@ -2,7 +2,6 @@
 Unit tests for src/matching/matcher.py
 """
 
-
 from src.matching.matcher import (
     extract_floor_number,
     match_floor,

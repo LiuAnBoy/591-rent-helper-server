@@ -34,7 +34,9 @@ async def sync_subscription_to_redis(
         sync_log.debug(f"Synced subscription {subscription['id']} to Redis")
         return True
     except Exception as e:
-        sync_log.error(f"Failed to sync subscription {subscription['id']} to Redis: {e}")
+        sync_log.error(
+            f"Failed to sync subscription {subscription['id']} to Redis: {e}"
+        )
         return False
 
 
