@@ -15,8 +15,7 @@ from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
 from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
 from src.crawler.types import CombinedRawData, DetailRawData, ListRawData
 from src.jobs.broadcaster import Broadcaster, ErrorType, get_broadcaster
-from src.jobs.pre_filter import filter_objects
-from src.matching.matcher import match_object_to_subscription
+from src.matching import filter_objects, match_object_to_subscription
 from src.modules.objects import ObjectRepository
 from src.utils import (
     DBReadyData,

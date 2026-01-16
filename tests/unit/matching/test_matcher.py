@@ -8,6 +8,9 @@ from src.matching.matcher import (
     extract_floor_number,
     match_floor,
     match_object_to_subscription,
+    match_quick,
+    parse_area_value,
+    parse_price_value,
 )
 
 # Import fixtures
@@ -314,7 +317,7 @@ class TestMatchObjectToSubscription:
         assert match_object_to_subscription(checker_sample_object, sub) is True
 
     def test_none_values_in_object(self):
-        """Object with None price raises TypeError (known limitation)."""
+        """Object with None price should match (conservative approach)."""
         obj = {
             "id": 123,
             "price": None,
@@ -325,7 +328,175 @@ class TestMatchObjectToSubscription:
             "pet_allowed": None,
         }
         sub = {"price_min": 10000}
-        # Note: Current implementation raises TypeError when price is None
-        # This is a known limitation - objects should always have valid price
-        with pytest.raises(TypeError):
-            match_object_to_subscription(obj, sub)
+        # None price cannot be compared, so we assume match (conservative)
+        assert match_object_to_subscription(obj, sub) is True
+
+
+# ============================================================
+# parse_price_value tests
+# ============================================================
+
+
+class TestParsePriceValue:
+    """Tests for parse_price_value function."""
+
+    def test_integer_input(self):
+        """Integer input should return as-is."""
+        assert parse_price_value(10000) == 10000
+
+    def test_simple_string(self):
+        """Simple number string should parse."""
+        assert parse_price_value("10000") == 10000
+
+    def test_string_with_commas(self):
+        """String with commas should parse."""
+        assert parse_price_value("10,000") == 10000
+
+    def test_string_with_unit(self):
+        """String with unit should parse."""
+        assert parse_price_value("8,500元/月") == 8500
+
+    def test_range_takes_lower(self):
+        """Range should return lower bound."""
+        assert parse_price_value("15000-20000元/月") == 15000
+        assert parse_price_value("15,000~20,000") == 15000
+
+    def test_negotiable_returns_none(self):
+        """Negotiable price returns None."""
+        assert parse_price_value("面議") is None
+
+    def test_none_input(self):
+        """None input returns None."""
+        assert parse_price_value(None) is None
+
+    def test_empty_string(self):
+        """Empty string returns None."""
+        assert parse_price_value("") is None
+
+
+# ============================================================
+# parse_area_value tests
+# ============================================================
+
+
+class TestParseAreaValue:
+    """Tests for parse_area_value function."""
+
+    def test_float_input(self):
+        """Float input should return as-is."""
+        assert parse_area_value(25.5) == 25.5
+
+    def test_int_input(self):
+        """Int input should return as float."""
+        assert parse_area_value(10) == 10.0
+
+    def test_simple_string(self):
+        """Simple number string should parse."""
+        assert parse_area_value("25.5") == 25.5
+
+    def test_string_with_unit(self):
+        """String with unit should parse."""
+        assert parse_area_value("25.5坪") == 25.5
+
+    def test_string_with_prefix(self):
+        """String with prefix should parse."""
+        assert parse_area_value("約10坪") == 10.0
+
+    def test_range_takes_lower(self):
+        """Range should return lower bound."""
+        assert parse_area_value("10~15坪") == 10.0
+        assert parse_area_value("10-15坪") == 10.0
+
+    def test_none_input(self):
+        """None input returns None."""
+        assert parse_area_value(None) is None
+
+    def test_empty_string(self):
+        """Empty string returns None."""
+        assert parse_area_value("") is None
+
+
+# ============================================================
+# match_quick tests
+# ============================================================
+
+
+class TestMatchQuick:
+    """Tests for match_quick function."""
+
+    def test_empty_subscription_matches(self):
+        """Empty subscription should match any object."""
+        obj = {"price": 15000, "area": 10.0}
+        assert match_quick(obj, {}) is True
+
+    def test_price_in_range(self):
+        """Object with price in range should match."""
+        obj = {"price": 15000}
+        sub = {"price_min": 10000, "price_max": 20000}
+        assert match_quick(obj, sub) is True
+
+    def test_price_below_min(self):
+        """Object with price below min should not match."""
+        obj = {"price": 8000}
+        sub = {"price_min": 10000}
+        assert match_quick(obj, sub) is False
+
+    def test_price_above_max(self):
+        """Object with price above max should not match."""
+        obj = {"price": 25000}
+        sub = {"price_max": 20000}
+        assert match_quick(obj, sub) is False
+
+    def test_area_in_range(self):
+        """Object with area in range should match."""
+        obj = {"area": 12.0}
+        sub = {"area_min": 10, "area_max": 15}
+        assert match_quick(obj, sub) is True
+
+    def test_area_below_min(self):
+        """Object with area below min should not match."""
+        obj = {"area": 8.0}
+        sub = {"area_min": 10}
+        assert match_quick(obj, sub) is False
+
+    def test_area_above_max(self):
+        """Object with area above max should not match."""
+        obj = {"area": 20.0}
+        sub = {"area_max": 15}
+        assert match_quick(obj, sub) is False
+
+    def test_raw_price_string(self):
+        """Should handle raw price string from list data."""
+        obj = {"price_raw": "15,000元/月"}
+        sub = {"price_min": 10000, "price_max": 20000}
+        assert match_quick(obj, sub) is True
+
+    def test_raw_area_string(self):
+        """Should handle raw area string from list data."""
+        obj = {"area_raw": "約12坪"}
+        sub = {"area_min": 10, "area_max": 15}
+        assert match_quick(obj, sub) is True
+
+    def test_combined_criteria(self):
+        """Should check both price and area."""
+        obj = {"price": 15000, "area": 12.0}
+        sub = {"price_min": 10000, "price_max": 20000, "area_min": 10, "area_max": 15}
+        assert match_quick(obj, sub) is True
+
+    def test_fails_if_either_fails(self):
+        """Should fail if either price or area fails."""
+        obj = {"price": 15000, "area": 20.0}  # area too large
+        sub = {"price_min": 10000, "price_max": 20000, "area_max": 15}
+        assert match_quick(obj, sub) is False
+
+    def test_none_price_matches(self):
+        """None price should match (conservative)."""
+        obj = {"price": None, "area": 12.0}
+        sub = {"price_min": 10000}
+        assert match_quick(obj, sub) is True
+
+    def test_none_area_matches(self):
+        """None area should match (conservative)."""
+        obj = {"price": 15000, "area": None}
+        sub = {"area_min": 10}
+        assert match_quick(obj, sub) is True

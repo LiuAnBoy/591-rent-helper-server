@@ -11,7 +11,7 @@ from src.connections.redis import get_redis
 from src.crawler.detail_fetcher import get_detail_fetcher
 from src.crawler.types import CombinedRawData
 from src.jobs.broadcaster import get_broadcaster
-from src.jobs.pre_filter import filter_redis_objects
+from src.matching import filter_redis_objects
 from src.modules.objects import ObjectRepository
 from src.utils import DBReadyData, transform_to_db_ready
 
