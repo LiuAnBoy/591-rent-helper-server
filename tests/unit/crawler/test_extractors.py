@@ -2,7 +2,6 @@
 Unit tests for src/crawler/extractors/
 """
 
-import pytest
 from bs4 import BeautifulSoup
 
 from src.crawler.combiner import combine_raw_data, combine_with_detail_only

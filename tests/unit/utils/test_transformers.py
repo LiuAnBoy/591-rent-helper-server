@@ -2,7 +2,6 @@
 Unit tests for src/utils/transformers.py
 """
 
-import pytest
 
 from src.utils.transformers import (
     transform_id,
