@@ -285,10 +285,6 @@ update_deployment() {
     # Pull latest code
     git_pull
 
-    # Ensure postgres and redis are running
-    log_info "Ensuring database services are running..."
-    $DOCKER_COMPOSE up -d postgres redis
-
     # Wait for postgres
     wait_for_postgres
 
