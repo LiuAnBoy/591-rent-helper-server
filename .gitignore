@@ -77,3 +77,4 @@ docs/*
 .playwright-mcp/
 .claude
 .ruff_cache/test_results/
+docker-compose.override.yml
