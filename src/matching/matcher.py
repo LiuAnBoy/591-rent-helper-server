@@ -449,7 +449,7 @@ def match_quick(obj: dict, sub: dict) -> bool:
 
     Checks (in order of speed):
     1. Region - fastest, single int comparison
-    2. Section - fast, str in list
+    2. Section - fast, int in list
     3. Kind - needs name to code conversion
     4. Price - needs parsing
     5. Area - needs parsing
