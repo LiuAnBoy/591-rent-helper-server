@@ -420,7 +420,7 @@ class TestParseItemRaw:
         elem = soup.find("div", class_="item")
         result = _parse_item_raw(elem, region=1)
 
-        assert result["section"] == "5"  # 大安區 = 5
+        assert result["section"] == 5  # 大安區 = 5
         assert result["address_raw"] == "大安區-忠孝東路"
 
     def test_section_parsed_from_address_new_taipei(self):
@@ -437,11 +437,11 @@ class TestParseItemRaw:
         elem = soup.find("div", class_="item")
         result = _parse_item_raw(elem, region=3)
 
-        assert result["section"] == "26"  # 板橋區 = 26
+        assert result["section"] == 26  # 板橋區 = 26
         assert result["address_raw"] == "板橋區-中山路"
 
-    def test_section_empty_when_district_not_found(self):
-        """Test that section is empty when district is not in mapping."""
+    def test_section_none_when_district_not_found(self):
+        """Test that section is None when district is not in mapping."""
         html = """
         <div class="item" data-id="123">
             <div class="item-info-txt">
@@ -454,7 +454,7 @@ class TestParseItemRaw:
         elem = soup.find("div", class_="item")
         result = _parse_item_raw(elem, region=1)
 
-        assert result["section"] == ""
+        assert result["section"] is None
 
 
 # ============================================================

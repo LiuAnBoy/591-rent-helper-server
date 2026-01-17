@@ -160,7 +160,7 @@ class ListFetcherBs4:
         """
         result: ListRawData = {
             "region": region,
-            "section": "",
+            "section": None,
             "id": "",
             "url": "",
             "title": "",
@@ -242,7 +242,7 @@ class ListFetcherBs4:
         if result["address_raw"]:
             section = get_section_from_address(region, result["address_raw"])
             if section:
-                result["section"] = str(section)
+                result["section"] = section
 
         return result
 

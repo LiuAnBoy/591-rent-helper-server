@@ -326,14 +326,14 @@ def match_region(obj_region: int | str | None, sub_region: int | None) -> bool:
 
 
 def match_section_quick(
-    obj_section: str | None,
-    sub_section: list[str] | None,
+    obj_section: int | None,
+    sub_section: list[int] | None,
 ) -> bool:
     """
     Quick check if object section matches subscription sections.
 
     Args:
-        obj_section: Object's section code (e.g., "5" for 大安區)
+        obj_section: Object's section code (e.g., 37 for 永和區)
         sub_section: List of allowed section codes, None = no filter
 
     Returns:
@@ -342,7 +342,7 @@ def match_section_quick(
     if not sub_section:
         return True  # No section filter
 
-    if not obj_section:
+    if obj_section is None:
         return True  # No section info, don't filter
 
     return obj_section in sub_section

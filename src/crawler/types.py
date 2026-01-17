@@ -34,7 +34,7 @@ class ListRawData(TypedDict):
     """
 
     region: int
-    section: str
+    section: int | None
     id: str
     url: str
     title: str

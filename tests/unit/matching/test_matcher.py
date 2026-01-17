@@ -534,24 +534,24 @@ class TestMatchSectionQuick:
 
     def test_no_filter_matches_all(self):
         """No section filter should match any object."""
-        assert match_section_quick("5", None) is True
-        assert match_section_quick("5", []) is True
+        assert match_section_quick(5, None) is True
+        assert match_section_quick(5, []) is True
         assert match_section_quick(None, None) is True
 
     def test_matching_section(self):
         """Object with matching section should match."""
-        assert match_section_quick("5", ["5"]) is True
-        assert match_section_quick("5", ["3", "5", "7"]) is True
+        assert match_section_quick(5, [5]) is True
+        assert match_section_quick(37, [3, 37, 7]) is True
 
     def test_non_matching_section(self):
         """Object with different section should not match."""
-        assert match_section_quick("5", ["3"]) is False
-        assert match_section_quick("5", ["3", "7"]) is False
+        assert match_section_quick(5, [3]) is False
+        assert match_section_quick(37, [3, 7]) is False
 
     def test_none_section_matches(self):
-        """None or empty section should match (conservative)."""
-        assert match_section_quick(None, ["5"]) is True
-        assert match_section_quick("", ["5"]) is True
+        """None section should match (conservative)."""
+        assert match_section_quick(None, [5]) is True
+        assert match_section_quick(None, [37]) is True
 
 
 class TestMatchKindQuick:
