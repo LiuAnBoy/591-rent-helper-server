@@ -247,14 +247,14 @@ class TestParseItemRawFromNuxt:
         item = {"id": 123, "sectionid": 7}
         result = _parse_item_raw_from_nuxt(item, region=1)
 
-        assert result["section"] == "7"
+        assert result["section"] == 7
 
     def test_parse_nuxt_item_without_sectionid(self):
-        """Test that section is empty when sectionid is missing."""
+        """Test that section is None when sectionid is missing."""
         item = {"id": 123}
         result = _parse_item_raw_from_nuxt(item, region=1)
 
-        assert result["section"] == ""
+        assert result["section"] is None
 
 
 class TestExtractListRawFromNuxt:
