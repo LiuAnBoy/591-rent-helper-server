@@ -83,14 +83,16 @@ is_first_run() {
 # Wait for PostgreSQL to be ready
 wait_for_postgres() {
     load_env
+    db_host="${PG_HOST:-localhost}"
+    db_port="${PG_PORT:-5432}"
     db_user=$(get_db_user)
 
-    log_info "Waiting for PostgreSQL to be ready..."
+    log_info "Waiting for PostgreSQL to be ready at ${db_host}:${db_port}..."
     max_attempts=30
     attempt=1
 
     while [ $attempt -le $max_attempts ]; do
-        if $DOCKER_COMPOSE exec -T postgres pg_isready -U "$db_user" > /dev/null 2>&1; then
+        if pg_isready -h "$db_host" -p "$db_port" -U "$db_user" > /dev/null 2>&1; then
             log_success "PostgreSQL is ready!"
             return 0
         fi
@@ -127,11 +129,13 @@ setup_env() {
 # Ensure schema_migrations table exists
 ensure_migration_table() {
     load_env
+    db_host="${PG_HOST:-localhost}"
+    db_port="${PG_PORT:-5432}"
     db_user=$(get_db_user)
     db_name=$(get_db_name)
 
     log_info "Ensuring migration tracking table exists..."
-    $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" << 'SQL'
+    PGPASSWORD="${PG_PASSWORD}" psql -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_name" << 'SQL'
 CREATE TABLE IF NOT EXISTS schema_migrations (
     id SERIAL PRIMARY KEY,
     filename VARCHAR(255) UNIQUE NOT NULL,
@@ -143,16 +147,20 @@ SQL
 # Get list of applied migrations
 get_applied_migrations() {
     load_env
+    db_host="${PG_HOST:-localhost}"
+    db_port="${PG_PORT:-5432}"
     db_user=$(get_db_user)
     db_name=$(get_db_name)
 
-    $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" -t -A -c \
+    PGPASSWORD="${PG_PASSWORD}" psql -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_name" -t -A -c \
         "SELECT filename FROM schema_migrations ORDER BY filename;" 2>/dev/null || echo ""
 }
 
 # Run a single migration file
 run_migration() {
     load_env
+    db_host="${PG_HOST:-localhost}"
+    db_port="${PG_PORT:-5432}"
     db_user=$(get_db_user)
     db_name=$(get_db_name)
     migration_file="$1"
@@ -161,9 +169,9 @@ run_migration() {
     log_info "Running migration: $filename"
 
     # Run the migration
-    if $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" < "$migration_file"; then
+    if PGPASSWORD="${PG_PASSWORD}" psql -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_name" < "$migration_file"; then
         # Record the migration
-        $DOCKER_COMPOSE exec -T postgres psql -U "$db_user" -d "$db_name" -c \
+        PGPASSWORD="${PG_PASSWORD}" psql -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_name" -c \
             "INSERT INTO schema_migrations (filename) VALUES ('$filename') ON CONFLICT DO NOTHING;"
         log_success "Migration $filename completed"
         return 0
