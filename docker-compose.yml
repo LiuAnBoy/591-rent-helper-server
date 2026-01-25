@@ -1,61 +1,15 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: rent591-postgres
-    env_file:
-      - .env
-    environment:
-      POSTGRES_USER: ${PG_USER}
-      POSTGRES_PASSWORD: ${PG_PASSWORD}
-      POSTGRES_DB: ${PG_DATABASE}
-    ports:
-      - "${PG_PORT}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      # Note: migrations are managed by deploy.sh, not docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: rent591-redis
-    env_file:
-      - .env
-    ports:
-      - "${REDIS_PORT}:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  app:
+  server:
     build: .
-    container_name: rent591-crawler
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    container_name: 591-rent-server
     ports:
       - "${APP_PORT:-8000}:8000"
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      # Override for Docker internal network
-      PG_HOST: postgres
-      PG_PORT: ${PG_INTERNAL_PORT:-5432}
-      REDIS_HOST: redis
-      REDIS_PORT: ${REDIS_INTERNAL_PORT:-6379}
+      # Use shared infrastructure on host
+      PG_HOST: host.docker.internal
+      REDIS_HOST: host.docker.internal
     restart: always
-
-volumes:
-  postgres_data:
-  redis_data:
