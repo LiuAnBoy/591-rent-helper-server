@@ -8,11 +8,11 @@ ALTER TABLE crawler_runs ADD COLUMN IF NOT EXISTS broadcast_success INTEGER DEFA
 ALTER TABLE crawler_runs ADD COLUMN IF NOT EXISTS broadcast_failed  INTEGER DEFAULT 0;
 ALTER TABLE crawler_runs ADD COLUMN IF NOT EXISTS broadcast_errors  TEXT;
 
--- Step 2: Drop notification_logs table (created in previous migration)
-DROP TABLE IF EXISTS notification_logs;
-
--- Step 3: Drop subscription_stats view (unused in codebase)
+-- Step 2: Drop subscription_stats view first (depends on notification_logs)
 DROP VIEW IF EXISTS subscription_stats;
+
+-- Step 3: Drop notification_logs table (created in previous migration)
+DROP TABLE IF EXISTS notification_logs CASCADE;
 
 -- Record migration
 INSERT INTO schema_migrations (filename) VALUES ('20260211002_broadcast_in_crawler_runs.sql');
