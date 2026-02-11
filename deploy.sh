@@ -291,12 +291,12 @@ update_deployment() {
     # Run pending migrations
     run_migrations
 
-    # Rebuild and restart app only
-    log_info "Rebuilding app container..."
-    $DOCKER_COMPOSE build app
+    # Rebuild and restart server only
+    log_info "Rebuilding server container..."
+    $DOCKER_COMPOSE build server
 
-    log_info "Restarting app container..."
-    $DOCKER_COMPOSE up -d --no-deps app
+    log_info "Restarting server container..."
+    $DOCKER_COMPOSE up -d --no-deps server
 
     log_success "=========================================="
     log_success "Update complete!"
