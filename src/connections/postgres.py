@@ -64,50 +64,6 @@ class PostgresConnection:
             result = await conn.fetchrow(query, object_id)
             return result is not None
 
-    # ========== Notification Logs ==========
-
-    async def save_notification_logs_batch(
-        self,
-        logs: list[dict],
-        crawler_run_id: int | None = None,
-    ) -> None:
-        """
-        Batch insert notification logs.
-
-        Args:
-            logs: List of dicts with keys:
-                - object_id, subscription_id, provider, status, error_message
-            crawler_run_id: Associated crawler run ID (optional)
-        """
-        if not logs:
-            return
-
-        query = """
-        INSERT INTO notification_logs
-            (crawler_run_id, object_id, subscription_id, provider, status, error_message)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (subscription_id, object_id, provider) DO UPDATE
-        SET status = EXCLUDED.status,
-            error_message = EXCLUDED.error_message,
-            created_at = NOW()
-        """
-        async with self.pool.acquire() as conn:
-            await conn.executemany(
-                query,
-                [
-                    (
-                        crawler_run_id,
-                        log["object_id"],
-                        log["subscription_id"],
-                        log["provider"],
-                        log["status"],
-                        log.get("error_message"),
-                    )
-                    for log in logs
-                ],
-            )
-            pg_log.info(f"Saved {len(logs)} notification logs")
-
     # ========== Crawler Runs ==========
 
     async def start_crawler_run(self, region: int) -> int:
@@ -128,20 +84,29 @@ class PostgresConnection:
         total_fetched: int,
         new_objects: int,
         error_message: str | None = None,
+        broadcast_total: int = 0,
+        broadcast_success: int = 0,
+        broadcast_failed: int = 0,
+        broadcast_errors: str | None = None,
     ) -> None:
-        """Record finish of a crawler run."""
+        """Record finish of a crawler run (including broadcast results)."""
         query = """
         UPDATE crawler_runs
         SET finished_at = NOW(),
             status = $2,
             total_fetched = $3,
             new_objects = $4,
-            error_message = $5
+            error_message = $5,
+            broadcast_total = $6,
+            broadcast_success = $7,
+            broadcast_failed = $8,
+            broadcast_errors = $9
         WHERE id = $1
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
-                query, run_id, status, total_fetched, new_objects, error_message
+                query, run_id, status, total_fetched, new_objects, error_message,
+                broadcast_total, broadcast_success, broadcast_failed, broadcast_errors,
             )
 
     # ========== Subscription CRUD ==========

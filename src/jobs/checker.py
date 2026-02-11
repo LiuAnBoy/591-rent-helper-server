@@ -328,7 +328,8 @@ class Checker:
             # Initialize result variables
             matches = []
             initialized_subs = []
-            broadcast_result = {"total": 0, "success": 0, "failed": 0, "details": [], "failures": []}
+            broadcast_result = {"total": 0, "success": 0, "failed": 0, "failures": []}
+            broadcast_errors_str = None
             detail_fetched = 0
             detail_not_found = 0
             detail_failed = 0
@@ -475,25 +476,6 @@ class Checker:
                         grouped_matches
                     )
 
-                    # Save notification logs to DB (success + failed)
-                    notification_details = broadcast_result.get("details", [])
-                    if notification_details:
-                        try:
-                            await self._postgres.save_notification_logs_batch(
-                                notification_details, crawler_run_id=run_id
-                            )
-                        except Exception as e:
-                            # Handle stale subscription (exists in Redis but not in PostgreSQL)
-                            if "foreign key constraint" in str(e).lower():
-                                checker_log.warning(
-                                    f"Stale subscription found in Redis "
-                                    f"(not in PostgreSQL). Skipping log save: {e}"
-                                )
-                            else:
-                                checker_log.error(
-                                    f"Failed to save notification logs: {e}"
-                                )
-
                     # Notify admin only if some broadcasts failed
                     failures = broadcast_result.get("failures", [])
                     if failures:
@@ -506,22 +488,27 @@ class Checker:
                             if len(failures) > 10
                             else ""
                         )
+                        broadcast_errors_str = (
+                            f"推播失敗: {broadcast_result['failed']}/{broadcast_result['total']}\n"
+                            + "\n".join(failure_lines)
+                            + truncated
+                        )
                         await self._broadcaster.notify_admin(
                             error_type=ErrorType.BROADCAST_ERROR,
                             region=region,
-                            details=(
-                                f"推播失敗: {broadcast_result['failed']}/{broadcast_result['total']}\n"
-                                + "\n".join(failure_lines)
-                                + truncated
-                            ),
+                            details=broadcast_errors_str,
                         )
 
-            # Finish crawler run
+            # Finish crawler run (including broadcast results)
             await self._postgres.finish_crawler_run(
                 run_id=run_id,
                 status="success",
                 total_fetched=total_fetched,
                 new_objects=len(new_ids),
+                broadcast_total=broadcast_result.get("total", 0),
+                broadcast_success=broadcast_result.get("success", 0),
+                broadcast_failed=broadcast_result.get("failed", 0),
+                broadcast_errors=broadcast_errors_str if broadcast_result.get("failed", 0) > 0 else None,
             )
 
             result = {
