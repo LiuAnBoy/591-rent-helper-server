@@ -168,7 +168,9 @@ Each module in `src/modules/` follows:
 
 ## Database
 
-PostgreSQL tables: `users`, `subscriptions`, `objects`, `recent_objects` (view)
+PostgreSQL tables: `users`, `subscriptions`, `objects`, `notification_logs`, `crawler_runs`, `recent_objects` (view)
+
+- `notification_logs` — Records every notification attempt (success/failed) with provider info and error details
 
 Migrations in `migrations/` folder, tracked via `schema_migrations` table.
 

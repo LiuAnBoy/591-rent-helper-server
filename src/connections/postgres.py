@@ -64,27 +64,49 @@ class PostgresConnection:
             result = await conn.fetchrow(query, object_id)
             return result is not None
 
-    # ========== Notified Objects ==========
+    # ========== Notification Logs ==========
 
-    async def is_notified(self, subscription_id: int, object_id: int) -> bool:
-        """Check if an object has been notified for a subscription."""
+    async def save_notification_logs_batch(
+        self,
+        logs: list[dict],
+        crawler_run_id: int | None = None,
+    ) -> None:
+        """
+        Batch insert notification logs.
+
+        Args:
+            logs: List of dicts with keys:
+                - object_id, subscription_id, provider, status, error_message
+            crawler_run_id: Associated crawler run ID (optional)
+        """
+        if not logs:
+            return
+
         query = """
-        SELECT 1 FROM notified_objects
-        WHERE subscription_id = $1 AND object_id = $2
+        INSERT INTO notification_logs
+            (crawler_run_id, object_id, subscription_id, provider, status, error_message)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (subscription_id, object_id, provider) DO UPDATE
+        SET status = EXCLUDED.status,
+            error_message = EXCLUDED.error_message,
+            created_at = NOW()
         """
         async with self.pool.acquire() as conn:
-            result = await conn.fetchrow(query, subscription_id, object_id)
-            return result is not None
-
-    async def mark_notified(self, subscription_id: int, object_id: int) -> None:
-        """Mark an object as notified for a subscription."""
-        query = """
-        INSERT INTO notified_objects (subscription_id, object_id)
-        VALUES ($1, $2)
-        ON CONFLICT (subscription_id, object_id) DO NOTHING
-        """
-        async with self.pool.acquire() as conn:
-            await conn.execute(query, subscription_id, object_id)
+            await conn.executemany(
+                query,
+                [
+                    (
+                        crawler_run_id,
+                        log["object_id"],
+                        log["subscription_id"],
+                        log["provider"],
+                        log["status"],
+                        log.get("error_message"),
+                    )
+                    for log in logs
+                ],
+            )
+            pg_log.info(f"Saved {len(logs)} notification logs")
 
     # ========== Crawler Runs ==========
 

@@ -262,22 +262,28 @@ CREATE TRIGGER update_objects_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================
--- 6. Notified Objects (已推播記錄)
---    記錄哪些物件已推播給哪些訂閱，避免重複
+-- 6. Notification Logs (推播紀錄)
+--    記錄每次推播結果（成功/失敗），失敗時記錄原因
 -- ============================================
-CREATE TABLE IF NOT EXISTS notified_objects (
+CREATE TABLE IF NOT EXISTS notification_logs (
     id              SERIAL PRIMARY KEY,
-    subscription_id INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+    crawler_run_id  INTEGER REFERENCES crawler_runs(id) ON DELETE SET NULL,
     object_id       INTEGER NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    notified_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    subscription_id INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+    provider        VARCHAR(20) NOT NULL,       -- 推播管道 (telegram, line, etc.)
+    status          VARCHAR(20) NOT NULL,       -- success / failed
+    error_message   TEXT,                       -- 失敗時記錄原因，成功為 NULL
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
-    -- 同一訂閱不會重複推播同一物件
-    UNIQUE(subscription_id, object_id)
+    -- 同一訂閱 + 同一物件 + 同一管道 不重複推播
+    UNIQUE(subscription_id, object_id, provider)
 );
 
-CREATE INDEX IF NOT EXISTS idx_notified_objects_subscription_id ON notified_objects(subscription_id);
-CREATE INDEX IF NOT EXISTS idx_notified_objects_object_id ON notified_objects(object_id);
-CREATE INDEX IF NOT EXISTS idx_notified_objects_notified_at ON notified_objects(notified_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_object_id ON notification_logs(object_id);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_subscription_id ON notification_logs(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_crawler_run_id ON notification_logs(crawler_run_id);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_status ON notification_logs(status);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_created_at ON notification_logs(created_at DESC);
 
 -- ============================================
 -- 7. Crawler Runs (爬蟲執行記錄)
@@ -310,11 +316,11 @@ SELECT
     s.section,
     u.id as user_id,
     u.name as user_name,
-    COUNT(no.id) as total_notified,
-    MAX(no.notified_at) as last_notified_at
+    COUNT(nl.id) as total_notified,
+    MAX(nl.created_at) as last_notified_at
 FROM subscriptions s
 JOIN users u ON s.user_id = u.id
-LEFT JOIN notified_objects no ON s.id = no.subscription_id
+LEFT JOIN notification_logs nl ON s.id = nl.subscription_id
 GROUP BY s.id, s.name, s.region, s.section, u.id, u.name;
 
 -- 活躍物件視圖 (最近 7 天)

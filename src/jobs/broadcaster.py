@@ -72,7 +72,7 @@ class Broadcaster:
         chat_id: str,
         obj: RentalObject | dict,
         subscription_name: str | None = None,
-    ) -> bool:
+    ) -> dict:
         """
         Send notification to a Telegram chat.
 
@@ -82,13 +82,13 @@ class Broadcaster:
             subscription_name: Optional subscription name for context
 
         Returns:
-            True if sent successfully, False otherwise
+            Dict with result: {"success": bool, "error": str | None}
         """
         if not self.bot.is_configured:
             broadcast_log.warning(
                 "Telegram bot not configured, cannot send notification"
             )
-            return False
+            return {"success": False, "error": "Bot not configured"}
 
         try:
             # Use formatter to create message (supports both RentalObject and dict)
@@ -111,45 +111,45 @@ class Broadcaster:
             broadcast_log.info(
                 f"Sent Telegram notification to {chat_id} for object {obj_id}"
             )
-            return True
+            return {"success": True, "error": None}
 
         except Exception as e:
             broadcast_log.error(
                 f"Failed to send Telegram notification to {chat_id}: {e}"
             )
-            return False
+            return {"success": False, "error": str(e)}
 
     async def send_notification(
         self,
-        service: str,
-        service_id: str,
+        provider: str,
+        provider_id: str,
         obj: RentalObject | dict,
         subscription_name: str | None = None,
-    ) -> bool:
+    ) -> dict:
         """
         Send notification via the appropriate channel.
 
         Args:
-            service: Service name (telegram, line, etc.)
-            service_id: Service-specific user ID
+            provider: Provider name (telegram, line, etc.)
+            provider_id: Provider-specific user ID
             obj: RentalObject or dict (DBReadyData) to send
             subscription_name: Optional subscription name for context
 
         Returns:
-            True if sent successfully, False otherwise
+            Dict with result: {"success": bool, "error": str | None}
         """
-        if service == "telegram":
+        if provider == "telegram":
             return await self.send_telegram_notification(
-                chat_id=service_id,
+                chat_id=provider_id,
                 obj=obj,
                 subscription_name=subscription_name,
             )
         # Future: Add LINE, Discord, etc.
-        # elif service == "line":
+        # elif provider == "line":
         #     return await self.send_line_notification(...)
         else:
-            broadcast_log.warning(f"Unknown service: {service}")
-            return False
+            broadcast_log.warning(f"Unknown provider: {provider}")
+            return {"success": False, "error": f"Unknown provider: {provider}"}
 
     async def notify_admin(
         self,
@@ -221,35 +221,49 @@ class Broadcaster:
             - total: Total notifications attempted
             - success: Number of successful sends
             - failed: Number of failed sends
-            - by_service: Breakdown by service
+            - details: List of per-notification results for DB logging
+            - failures: List of failure details for admin notification
         """
         # Build list of notification tasks
         tasks = []
-        task_info = []  # Track service for each task
+        task_meta = []  # Track metadata for each task
 
         for obj, subscriptions in matches:
+            obj_id = obj["id"] if isinstance(obj, dict) else obj.id
             for sub in subscriptions:
-                service = sub.get("service")
-                service_id = sub.get("service_id")
+                provider = sub.get("service")
+                provider_id = sub.get("service_id")
                 sub_name = sub.get("name", "")
+                sub_id = sub.get("id")
 
-                if not service or not service_id:
+                if not provider or not provider_id:
                     broadcast_log.debug(
-                        f"Skipping subscription {sub.get('id')} - no binding"
+                        f"Skipping subscription {sub_id} - no binding"
                     )
                     continue
 
                 task = self.send_notification(
-                    service=service,
-                    service_id=service_id,
+                    provider=provider,
+                    provider_id=provider_id,
                     obj=obj,
                     subscription_name=sub_name,
                 )
                 tasks.append(task)
-                task_info.append(service)
+                task_meta.append({
+                    "object_id": obj_id,
+                    "subscription_id": sub_id,
+                    "provider": provider,
+                    "provider_id": provider_id,
+                })
 
         if not tasks:
-            return {"total": 0, "success": 0, "failed": 0, "by_service": {}}
+            return {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "details": [],
+                "failures": [],
+            }
 
         # Limit concurrent notifications (Telegram rate limit ~30/sec, use 10 to be safe)
         MAX_CONCURRENT = 10
@@ -267,24 +281,32 @@ class Broadcaster:
         # Process results
         success = 0
         failed = 0
-        by_service: dict[str, dict] = {}
+        details = []
+        failures = []
 
-        for service, result in zip(task_info, results, strict=True):
-            if service not in by_service:
-                by_service[service] = {"total": 0, "success": 0, "failed": 0}
-
-            by_service[service]["total"] += 1
-
+        for meta, result in zip(task_meta, results, strict=True):
             if isinstance(result, Exception):
-                broadcast_log.error(f"Notification failed: {result}")
+                error_msg = str(result)
+                broadcast_log.error(
+                    f"Notification failed for {meta['provider_id']}: {error_msg}"
+                )
                 failed += 1
-                by_service[service]["failed"] += 1
-            elif result:
+                details.append({**meta, "status": "failed", "error_message": error_msg})
+                failures.append({
+                    "provider_id": meta["provider_id"],
+                    "error": error_msg,
+                })
+            elif result.get("success"):
                 success += 1
-                by_service[service]["success"] += 1
+                details.append({**meta, "status": "success", "error_message": None})
             else:
+                error_msg = result.get("error", "Unknown error")
                 failed += 1
-                by_service[service]["failed"] += 1
+                details.append({**meta, "status": "failed", "error_message": error_msg})
+                failures.append({
+                    "provider_id": meta["provider_id"],
+                    "error": error_msg,
+                })
 
         total = len(tasks)
         broadcast_log.info(
@@ -295,7 +317,8 @@ class Broadcaster:
             "total": total,
             "success": success,
             "failed": failed,
-            "by_service": by_service,
+            "details": details,
+            "failures": failures,
         }
 
 

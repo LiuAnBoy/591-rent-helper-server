@@ -328,7 +328,7 @@ class Checker:
             # Initialize result variables
             matches = []
             initialized_subs = []
-            broadcast_result = {"total": 0, "success": 0, "failed": 0}
+            broadcast_result = {"total": 0, "success": 0, "failed": 0, "details": [], "failures": []}
             detail_fetched = 0
             detail_not_found = 0
             detail_failed = 0
@@ -475,31 +475,46 @@ class Checker:
                         grouped_matches
                     )
 
-                    # Notify admin if some broadcasts failed
-                    if broadcast_result.get("failed", 0) > 0:
+                    # Save notification logs to DB (success + failed)
+                    notification_details = broadcast_result.get("details", [])
+                    if notification_details:
+                        try:
+                            await self._postgres.save_notification_logs_batch(
+                                notification_details, crawler_run_id=run_id
+                            )
+                        except Exception as e:
+                            # Handle stale subscription (exists in Redis but not in PostgreSQL)
+                            if "foreign key constraint" in str(e).lower():
+                                checker_log.warning(
+                                    f"Stale subscription found in Redis "
+                                    f"(not in PostgreSQL). Skipping log save: {e}"
+                                )
+                            else:
+                                checker_log.error(
+                                    f"Failed to save notification logs: {e}"
+                                )
+
+                    # Notify admin only if some broadcasts failed
+                    failures = broadcast_result.get("failures", [])
+                    if failures:
+                        failure_lines = [
+                            f"- {f['provider_id']}: {f['error']}"
+                            for f in failures[:10]
+                        ]
+                        truncated = (
+                            f"\n... 及其他 {len(failures) - 10} 筆"
+                            if len(failures) > 10
+                            else ""
+                        )
                         await self._broadcaster.notify_admin(
                             error_type=ErrorType.BROADCAST_ERROR,
                             region=region,
-                            details=f"推播失敗: {broadcast_result['failed']}/{broadcast_result['total']}",
+                            details=(
+                                f"推播失敗: {broadcast_result['failed']}/{broadcast_result['total']}\n"
+                                + "\n".join(failure_lines)
+                                + truncated
+                            ),
                         )
-
-                    # Mark as notified in PostgreSQL
-                    for obj, subs in grouped_matches:
-                        for sub in subs:
-                            try:
-                                await self._postgres.mark_notified(sub["id"], obj["id"])
-                            except Exception as e:
-                                # Handle stale subscription (exists in Redis but not in PostgreSQL)
-                                if "foreign key constraint" in str(e).lower():
-                                    checker_log.warning(
-                                        f"Stale subscription {sub['id']} found in Redis "
-                                        f"(not in PostgreSQL). Removing from cache..."
-                                    )
-                                    await self._redis.remove_subscription(
-                                        sub.get("region", region), sub["id"]
-                                    )
-                                else:
-                                    raise
 
             # Finish crawler run
             await self._postgres.finish_crawler_run(
