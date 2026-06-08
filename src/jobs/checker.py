@@ -491,7 +491,8 @@ class Checker:
 
                         sub_id = sub["id"]
                         if sub_id in uninitialized_ids:
-                            # Uninitialized subscription - mark as initialized, don't notify
+                            # First baseline scan for this sub: don't notify
+                            # (avoids flooding when the seen set is empty).
                             if sub_id not in initialized_subs:
                                 initialized_subs.append(sub_id)
                         else:
@@ -501,11 +502,18 @@ class Checker:
                                 f"Object {obj['id']} matches subscription {sub_id}"
                             )
 
-                # Mark uninitialized subscriptions as initialized
-                for sub_id in initialized_subs:
-                    await self._redis.mark_subscription_initialized(sub_id)
+                # Refresh the initialized flag for EVERY current sub each run
+                # (mirrors how seen_ids is refreshed). Active subs never wrongly
+                # expire -> no periodic swallowed notification; subs with no match
+                # this run are still marked after their first scan; deleted subs
+                # (absent here) are not refreshed and expire via TTL -> no buildup.
+                for sub in all_subs:
+                    await self._redis.mark_subscription_initialized(sub["id"])
+
+                if initialized_subs:
                     checker_log.info(
-                        f"Subscription {sub_id} initialized (first run, no notifications)"
+                        f"Initialized {len(initialized_subs)} subscriptions "
+                        f"(first scan, no notify): {initialized_subs}"
                     )
 
                 # Step 6: Broadcast notifications
