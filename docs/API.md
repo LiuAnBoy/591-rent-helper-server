@@ -64,6 +64,7 @@ Authorization: Bearer <token>
 |      | `/subscriptions/{id}` | DELETE | ✓ | 刪除訂閱 |
 |      | `/subscriptions/{id}/toggle` | PATCH | ✓ | 啟用/停用訂閱 |
 | 綁定 | `/bindings/telegram/toggle` | PATCH | ✓ | 啟用/停用通知 |
+| 爬蟲 | `/checker/run` | POST | | 手動觸發爬蟲 |
 | 健康檢查 | `/health` | GET | | 健康檢查 |
 
 ---
@@ -113,9 +114,11 @@ Authorization: Bearer <token>
 {
   "id": 1,
   "email": "user@example.com",
+  "name": "John Doe",
   "role": "user",
   "enabled": true,
   "created_at": "2025-01-10T12:00:00+08:00",
+  "updated_at": "2025-01-10T12:00:00+08:00",
   "bindings": [
     {
       "service": "telegram",      // 通訊頻道：Telegram
@@ -290,6 +293,31 @@ Authorization: Bearer <token>
 | `enabled` | bool | ✓ | 是否啟用 |
 
 **Response:** `{"success": true}`
+
+---
+
+## 爬蟲 `/checker`
+
+### POST `/checker/run` - 手動觸發爬蟲
+
+立即對所有有訂閱的活躍區域執行一次爬取流程（列表 → 過濾 → 詳情 → 儲存 → 推播）。
+
+**Response:**
+
+```json
+{
+  "status": true,
+  "results": [
+    {
+      "region": 1,
+      "fetched": 30,
+      "new_count": 5,
+      "matches": 2,
+      "broadcast": { "total": 2, "success": 2, "failed": 0 }
+    }
+  ]
+}
+```
 
 ---
 
