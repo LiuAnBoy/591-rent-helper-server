@@ -173,15 +173,15 @@ class Checker:
         inserted = await self._object_repo.save_batch(objects)
         checker_log.info(f"Batch saved {len(objects)} objects ({inserted} new)")
 
-        # Add to Redis seen set (batch)
-        all_ids = {obj["id"] for obj in objects}
+        # Add to Redis seen set (batch) — tracked by source_id (591 listing id)
+        all_ids = {obj["source_id"] for obj in objects}
         await self._redis.add_seen_ids(region, all_ids)
 
         # Update Redis region objects cache (incremental, no delete)
         await self._redis.update_region_objects(region, objects)
 
         # Log summary
-        id_list = ", ".join(str(obj["id"]) for obj in objects)
+        id_list = ", ".join(str(obj["source_id"]) for obj in objects)
         checker_log.info(f"Saved {len(objects)} new objects: {id_list}")
 
     async def _report_field_anomalies(
@@ -204,7 +204,7 @@ class Checker:
 
         anomalies: list[str] = []
         for label, is_bad in checks:
-            ids = [obj["id"] for obj in objects if is_bad(obj)]
+            ids = [obj["source_id"] for obj in objects if is_bad(obj)]
             if ids:
                 shown = ", ".join(str(i) for i in ids[:10])
                 more = "..." if len(ids) > 10 else ""
@@ -499,7 +499,7 @@ class Checker:
                             # Initialized subscription - match and notify
                             matches.append((obj, [sub]))
                             checker_log.info(
-                                f"Object {obj['id']} matches subscription {sub_id}"
+                                f"Object {obj['source_id']} matches subscription {sub_id}"
                             )
 
                 # Refresh the initialized flag for EVERY current sub each run
@@ -518,12 +518,12 @@ class Checker:
 
                 # Step 6: Broadcast notifications
                 if matches and self._enable_broadcast and self._broadcaster:
-                    # Group matches by object
-                    object_subs_map: dict[int, tuple[DBReadyData, list[dict]]] = {}
+                    # Group matches by object (keyed by source_id)
+                    object_subs_map: dict[str, tuple[DBReadyData, list[dict]]] = {}
                     for obj, subs in matches:
-                        if obj["id"] not in object_subs_map:
-                            object_subs_map[obj["id"]] = (obj, [])
-                        object_subs_map[obj["id"]][1].extend(subs)
+                        if obj["source_id"] not in object_subs_map:
+                            object_subs_map[obj["source_id"]] = (obj, [])
+                        object_subs_map[obj["source_id"]][1].extend(subs)
 
                     grouped_matches = list(object_subs_map.values())
                     checker_log.info(f"Broadcasting {len(grouped_matches)} matches...")

@@ -168,8 +168,9 @@ run_migration() {
 
     log_info "Running migration: $filename"
 
-    # Run the migration
-    if PGPASSWORD="${PG_PASSWORD}" psql -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_name" < "$migration_file"; then
+    # Run the migration (ON_ERROR_STOP=1: abort on first SQL error so a failed
+    # migration is never recorded as applied in schema_migrations)
+    if PGPASSWORD="${PG_PASSWORD}" psql -v ON_ERROR_STOP=1 -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_name" < "$migration_file"; then
         # Record the migration
         PGPASSWORD="${PG_PASSWORD}" psql -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_name" -c \
             "INSERT INTO schema_migrations (filename) VALUES ('$filename') ON CONFLICT DO NOTHING;"

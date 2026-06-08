@@ -20,8 +20,11 @@ class Surrounding(BaseModel):
 class RentalObject(BaseModel):
     """591 rental object data model."""
 
-    # Primary key
+    # Source identity. `id` is the source's native listing id (591 id), kept for
+    # backward compatibility; source/source_id mirror the multi-source DB contract.
     id: int
+    source: str = "591"
+    source_id: str | None = None
 
     # Basic info
     kind: int | None = None

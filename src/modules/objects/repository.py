@@ -36,7 +36,7 @@ class ObjectRepository:
         """
         query = """
         INSERT INTO objects (
-            id, title, url, region, section, address,
+            source, source_id, title, url, region, section, address,
             kind, kind_name, price, price_unit,
             layout, layout_str, shape, area,
             floor, floor_str, total_floor, bathroom, other, options,
@@ -46,9 +46,9 @@ class ObjectRepository:
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
             $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-            $21, $22, $23, $24, $25, $26, $27, $28
+            $21, $22, $23, $24, $25, $26, $27, $28, $29
         )
-        ON CONFLICT (id) DO UPDATE SET
+        ON CONFLICT (source, source_id) DO UPDATE SET
             last_seen_at = NOW(),
             updated_at = NOW()
         RETURNING (xmax = 0) AS inserted
@@ -57,34 +57,35 @@ class ObjectRepository:
         async with self._pool.acquire() as conn:
             result = await conn.fetchrow(
                 query,
-                data["id"],  # $1
-                data["title"],  # $2
-                data["url"],  # $3
-                data["region"],  # $4
-                data["section"],  # $5
-                data["address"],  # $6
-                data["kind"],  # $7
-                data["kind_name"],  # $8
-                data["price"],  # $9
-                data["price_unit"],  # $10
-                data["layout"],  # $11
-                data["layout_str"],  # $12
-                data["shape"],  # $13
-                data["area"],  # $14
-                data["floor"],  # $15
-                data["floor_str"],  # $16
-                data["total_floor"],  # $17
-                data["bathroom"],  # $18
-                data["other"],  # $19
-                data["options"],  # $20
-                data["fitment"],  # $21
-                data["tags"],  # $22
-                data["surrounding_type"],  # $23
-                data["surrounding_desc"],  # $24
-                data["surrounding_distance"],  # $25
-                data["is_rooftop"],  # $26
-                data["gender"],  # $27
-                data["pet_allowed"],  # $28
+                data["source"],  # $1
+                data["source_id"],  # $2
+                data["title"],  # $3
+                data["url"],  # $4
+                data["region"],  # $5
+                data["section"],  # $6
+                data["address"],  # $7
+                data["kind"],  # $8
+                data["kind_name"],  # $9
+                data["price"],  # $10
+                data["price_unit"],  # $11
+                data["layout"],  # $12
+                data["layout_str"],  # $13
+                data["shape"],  # $14
+                data["area"],  # $15
+                data["floor"],  # $16
+                data["floor_str"],  # $17
+                data["total_floor"],  # $18
+                data["bathroom"],  # $19
+                data["other"],  # $20
+                data["options"],  # $21
+                data["fitment"],  # $22
+                data["tags"],  # $23
+                data["surrounding_type"],  # $24
+                data["surrounding_desc"],  # $25
+                data["surrounding_distance"],  # $26
+                data["is_rooftop"],  # $27
+                data["gender"],  # $28
+                data["pet_allowed"],  # $29
             )
             return result["inserted"]
 
@@ -157,7 +158,7 @@ class ObjectRepository:
 
         query = """
         INSERT INTO objects (
-            id, title, url, region, section, address,
+            source, source_id, title, url, region, section, address,
             kind, kind_name, price, price_unit,
             layout, layout_str, shape, area,
             floor, floor_str, total_floor, bathroom, other, options,
@@ -167,9 +168,9 @@ class ObjectRepository:
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
             $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-            $21, $22, $23, $24, $25, $26, $27, $28, $29
+            $21, $22, $23, $24, $25, $26, $27, $28, $29, $30
         )
-        ON CONFLICT (id) DO UPDATE SET
+        ON CONFLICT (source, source_id) DO UPDATE SET
             last_seen_at = NOW(),
             updated_at = NOW(),
             -- Only update detail fields if new data has_detail=true and existing has_detail=false
@@ -202,35 +203,36 @@ class ObjectRepository:
             for data in objects:
                 result = await conn.fetchrow(
                     query,
-                    data["id"],  # $1
-                    data["title"],  # $2
-                    data["url"],  # $3
-                    data["region"],  # $4
-                    data["section"],  # $5
-                    data["address"],  # $6
-                    data["kind"],  # $7
-                    data["kind_name"],  # $8
-                    data["price"],  # $9
-                    data["price_unit"],  # $10
-                    data["layout"],  # $11
-                    data["layout_str"],  # $12
-                    data["shape"],  # $13
-                    data["area"],  # $14
-                    data["floor"],  # $15
-                    data["floor_str"],  # $16
-                    data["total_floor"],  # $17
-                    data["bathroom"],  # $18
-                    data["other"],  # $19
-                    data["options"],  # $20
-                    data["fitment"],  # $21
-                    data["tags"],  # $22
-                    data["surrounding_type"],  # $23
-                    data["surrounding_desc"],  # $24
-                    data["surrounding_distance"],  # $25
-                    data["is_rooftop"],  # $26
-                    data["gender"],  # $27
-                    data["pet_allowed"],  # $28
-                    data["has_detail"],  # $29
+                    data["source"],  # $1
+                    data["source_id"],  # $2
+                    data["title"],  # $3
+                    data["url"],  # $4
+                    data["region"],  # $5
+                    data["section"],  # $6
+                    data["address"],  # $7
+                    data["kind"],  # $8
+                    data["kind_name"],  # $9
+                    data["price"],  # $10
+                    data["price_unit"],  # $11
+                    data["layout"],  # $12
+                    data["layout_str"],  # $13
+                    data["shape"],  # $14
+                    data["area"],  # $15
+                    data["floor"],  # $16
+                    data["floor_str"],  # $17
+                    data["total_floor"],  # $18
+                    data["bathroom"],  # $19
+                    data["other"],  # $20
+                    data["options"],  # $21
+                    data["fitment"],  # $22
+                    data["tags"],  # $23
+                    data["surrounding_type"],  # $24
+                    data["surrounding_desc"],  # $25
+                    data["surrounding_distance"],  # $26
+                    data["is_rooftop"],  # $27
+                    data["gender"],  # $28
+                    data["pet_allowed"],  # $29
+                    data["has_detail"],  # $30
                 )
                 if result["inserted"]:
                     inserted_count += 1
@@ -241,62 +243,60 @@ class ObjectRepository:
     # Shared UPDATE for detail backfill (used by single + batch variants)
     _UPDATE_DETAIL_QUERY = """
         UPDATE objects SET
-            floor = $2,
-            floor_str = $3,
-            total_floor = $4,
-            is_rooftop = $5,
-            layout = $6,
-            layout_str = $7,
-            bathroom = $8,
-            area = $9,
-            shape = $10,
-            fitment = $11,
-            gender = $12,
-            pet_allowed = $13,
-            options = $14,
-            other = $15,
-            surrounding_type = $16,
-            surrounding_desc = $17,
-            surrounding_distance = $18,
+            floor = $3,
+            floor_str = $4,
+            total_floor = $5,
+            is_rooftop = $6,
+            layout = $7,
+            layout_str = $8,
+            bathroom = $9,
+            area = $10,
+            shape = $11,
+            fitment = $12,
+            gender = $13,
+            pet_allowed = $14,
+            options = $15,
+            other = $16,
+            surrounding_type = $17,
+            surrounding_desc = $18,
+            surrounding_distance = $19,
             has_detail = true,
             updated_at = NOW()
-        WHERE id = $1
-        RETURNING id
+        WHERE source = $1 AND source_id = $2
+        RETURNING source_id
     """
 
     @staticmethod
-    def _detail_update_args(object_id: int, d: DBReadyData) -> tuple:
-        """Positional args ($1..$18) for _UPDATE_DETAIL_QUERY."""
+    def _detail_update_args(source: str, source_id: str, d: DBReadyData) -> tuple:
+        """Positional args ($1..$19) for _UPDATE_DETAIL_QUERY."""
         return (
-            object_id,  # $1
-            d["floor"],  # $2
-            d["floor_str"],  # $3
-            d["total_floor"],  # $4
-            d["is_rooftop"],  # $5
-            d["layout"],  # $6
-            d["layout_str"],  # $7
-            d["bathroom"],  # $8
-            d["area"],  # $9
-            d["shape"],  # $10
-            d["fitment"],  # $11
-            d["gender"],  # $12
-            d["pet_allowed"],  # $13
-            d["options"],  # $14
-            d["other"],  # $15
-            d["surrounding_type"],  # $16
-            d["surrounding_desc"],  # $17
-            d["surrounding_distance"],  # $18
+            source,  # $1
+            source_id,  # $2
+            d["floor"],  # $3
+            d["floor_str"],  # $4
+            d["total_floor"],  # $5
+            d["is_rooftop"],  # $6
+            d["layout"],  # $7
+            d["layout_str"],  # $8
+            d["bathroom"],  # $9
+            d["area"],  # $10
+            d["shape"],  # $11
+            d["fitment"],  # $12
+            d["gender"],  # $13
+            d["pet_allowed"],  # $14
+            d["options"],  # $15
+            d["other"],  # $16
+            d["surrounding_type"],  # $17
+            d["surrounding_desc"],  # $18
+            d["surrounding_distance"],  # $19
         )
 
-    async def update_with_detail(
-        self, object_id: int, detail_data: DBReadyData
-    ) -> bool:
+    async def update_with_detail(self, detail_data: DBReadyData) -> bool:
         """
         Update object with detail data and set has_detail=true.
 
         Args:
-            object_id: Object ID to update
-            detail_data: DBReadyData containing detail fields
+            detail_data: DBReadyData containing source/source_id + detail fields
 
         Returns:
             True if updated, False if object not found
@@ -304,10 +304,14 @@ class ObjectRepository:
         async with self._pool.acquire() as conn:
             result = await conn.fetchrow(
                 self._UPDATE_DETAIL_QUERY,
-                *self._detail_update_args(object_id, detail_data),
+                *self._detail_update_args(
+                    detail_data["source"], detail_data["source_id"], detail_data
+                ),
             )
             if result:
-                objects_log.debug(f"Updated object {object_id} with detail")
+                objects_log.debug(
+                    f"Updated object {detail_data['source']}:{detail_data['source_id']} with detail"
+                )
                 return True
             return False
 
@@ -333,7 +337,7 @@ class ObjectRepository:
             for obj in objects:
                 result = await conn.fetchrow(
                     self._UPDATE_DETAIL_QUERY,
-                    *self._detail_update_args(obj["id"], obj),
+                    *self._detail_update_args(obj["source"], obj["source_id"], obj),
                 )
                 if result:
                     updated += 1
