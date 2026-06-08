@@ -109,51 +109,6 @@ class PostgresConnection:
                 broadcast_total, broadcast_success, broadcast_failed, broadcast_errors,
             )
 
-    # ========== Notification Logs ==========
-
-    async def record_notification_logs(
-        self, run_id: int | None, details: list[dict]
-    ) -> None:
-        """
-        Persist per-notification results (success + failed) to notification_logs.
-
-        Upserts on (subscription_id, object_id, provider) so a later retry that
-        succeeds overwrites the earlier failure. Rows that violate FKs (e.g. a
-        subscription deleted mid-run) are skipped, not fatal.
-
-        Args:
-            run_id: Owning crawler_runs id (nullable)
-            details: Broadcast detail dicts with object_id / subscription_id /
-                provider / status / error_message
-        """
-        if not details:
-            return
-
-        query = """
-        INSERT INTO notification_logs (
-            crawler_run_id, object_id, subscription_id, provider, status, error_message
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (subscription_id, object_id, provider) DO UPDATE SET
-            status = EXCLUDED.status,
-            error_message = EXCLUDED.error_message,
-            crawler_run_id = EXCLUDED.crawler_run_id,
-            created_at = NOW()
-        """
-        async with self.pool.acquire() as conn:
-            for d in details:
-                try:
-                    await conn.execute(
-                        query,
-                        run_id,
-                        d["object_id"],
-                        d["subscription_id"],
-                        d["provider"],
-                        d["status"],
-                        d.get("error_message"),
-                    )
-                except Exception as e:
-                    pg_log.warning(f"Failed to record notification log: {e}")
-
     # ========== Subscription CRUD ==========
 
     async def create_subscription(self, user_id: int, data: dict) -> dict:
