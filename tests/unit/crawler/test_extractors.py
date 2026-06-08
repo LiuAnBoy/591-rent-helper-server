@@ -9,6 +9,7 @@ from src.crawler.combiner import (
     combine_with_detail_only,
     combine_with_list_only,
 )
+from src.crawler.detail_fetcher import _is_valid_detail
 from src.crawler.detail_fetcher_bs4 import _parse_detail_raw
 from src.crawler.detail_fetcher_playwright import (
     _extract_surrounding,
@@ -107,6 +108,22 @@ class TestCombineRawData:
         detail_empty_section = {**sample_detail_raw, "section": ""}
         result = combine_raw_data(sample_list_raw, detail_empty_section)
         assert result["section"] == "7"  # Fallback to list
+
+    def test_rooftop_preserved_from_list(self, sample_list_raw, sample_detail_raw):
+        """List rooftop marker is kept when detail floor drops it (e.g. '5F/5F')."""
+        list_rooftop = {**sample_list_raw, "floor_raw": "頂樓加蓋/4F"}
+        detail_normal = {**sample_detail_raw, "floor_raw": "5F/5F"}
+        result = combine_raw_data(list_rooftop, detail_normal)
+        assert result["floor_raw"] == "頂樓加蓋/4F"
+
+    def test_detail_floor_wins_when_no_rooftop(
+        self, sample_list_raw, sample_detail_raw
+    ):
+        """Normal listings still take the detail floor (detail priority)."""
+        list_data = {**sample_list_raw, "floor_raw": "3F/5F"}
+        detail_data = {**sample_detail_raw, "floor_raw": "8F/12F"}
+        result = combine_raw_data(list_data, detail_data)
+        assert result["floor_raw"] == "8F/12F"
 
 
 class TestCombineWithDetailOnly:
@@ -283,6 +300,26 @@ class TestGetTotalFromNuxt:
 # ============================================================
 # detail_extractor_playwright.py tests
 # ============================================================
+
+
+class TestIsValidDetail:
+    """Tests for the shared detail success criterion."""
+
+    def test_valid_with_title_and_price(self):
+        assert _is_valid_detail({"title": "套房", "price_raw": "8,000元/月"}) is True
+
+    def test_invalid_when_no_tags_but_still_valid(self):
+        # Tags are optional; a listing without tags is still valid.
+        assert _is_valid_detail({"title": "套房", "price_raw": "8,000元/月", "tags": []}) is True
+
+    def test_invalid_missing_price(self):
+        assert _is_valid_detail({"title": "套房", "price_raw": ""}) is False
+
+    def test_invalid_missing_title(self):
+        assert _is_valid_detail({"title": "", "price_raw": "8,000元/月"}) is False
+
+    def test_invalid_none(self):
+        assert _is_valid_detail(None) is False
 
 
 class TestFindDetailData:

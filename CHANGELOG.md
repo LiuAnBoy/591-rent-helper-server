@@ -18,8 +18,19 @@
 
 - **比對 / 缺價格**：租屋物件一定有租金，`price=0` 代表解析失敗。先前 `0 or price_raw`
   的 falsy 陷阱使缺價物件被當「價格未知 → 視為符合」，無視訂閱價格條件推給所有人。
-  改為：有設價格條件的訂閱不通過未知/0 價格（不誤推使用者）；爬到 `price=0` 仍存入，
-  並發 admin 異常推播（`PRICE_MISSING`）方便追查。
+  改為：有設價格條件的訂閱不通過未知/0 價格（不誤推使用者）；爬到 `price=0` 仍存入。
+- **資料 / kind 補齊**：list 頁本來就有房型名稱，但數字 `kind` 過去只在 detail 取得，
+  list-only 物件 `kind=0`。改為缺數字碼時用 `kind_name` 換算（`雅房→4` 等），所有物件都有 kind。
+- **觀測 / 欄位解析異常**：物件存檔後若 `price`/`section`/`kind` 為 0（理應永遠有），
+  仍照存，並發 admin 異常推播（`FIELD_MISSING`）附上 IDs，方便察覺 591 改版。
+- **爬蟲 / detail 成功標準不一致**：BS4 要 `tags` 非空才算成功，Playwright 找到結構就算，
+  導致沒 tags 的有效物件被 BS4 誤判失敗、白白 fallback，且兩路徑接受品質不一。
+  統一成 `_is_valid_detail`（`title` + `price_raw`），兩條路徑共用同門檻。
+- **爬蟲 / 頂加物件遺失**：591 detail 把頂樓加蓋表示成一般樓層（如 `5F/5F`），覆蓋掉
+  list 的 `頂樓加蓋/4F`，使 `is_rooftop` 翻成 False、「排除頂加」訂閱失效。combiner 改為
+  當 list 標頂加而 detail 沒標時保留 list 的 floor，維持 `is_rooftop=True` 與總樓層。
+- **爬蟲 / 漏抓觀測**：list 單筆解析失敗或缺 id 時只默默 `continue`，難察覺漏抓。
+  兩條 list fetcher 改為統計被丟棄數量，有丟才記一筆 summary warning（`Dropped X/Y`）。
 - **即時通知 / API 不符**：`InstantNotifier` 以 `service`/`service_id` 呼叫
   broadcaster，但實際參數為 `provider`/`provider_id`，導致每次即時通知都 `TypeError`
   被吞掉、完全沒送出。已修正參數名，並改為檢查回傳 `success` 才計入已通知數。

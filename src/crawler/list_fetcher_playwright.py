@@ -355,14 +355,25 @@ class ListFetcherPlaywright:
         fetcher_log.debug(f"Found {len(items)} items (total: {total})")
 
         results: list[ListRawData] = []
+        dropped = 0
         for item in items:
             try:
                 raw_data = self._parse_item_raw(item, region)
-                if raw_data.get("id"):
-                    results.append(raw_data)
             except Exception as e:
+                dropped += 1
                 fetcher_log.warning(f"Failed to parse NUXT item: {e}")
                 continue
+            if raw_data.get("id"):
+                results.append(raw_data)
+            else:
+                dropped += 1
+
+        # Surface silent data loss (parse errors / missing id) as a summary
+        if dropped:
+            fetcher_log.warning(
+                f"Dropped {dropped}/{len(items)} list items "
+                f"(parse error or missing id)"
+            )
 
         if max_items and len(results) > max_items:
             results = results[:max_items]

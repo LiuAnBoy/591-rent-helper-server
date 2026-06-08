@@ -8,6 +8,11 @@ specific priority rules. Part of the ETL Extract/Combine phase.
 from src.crawler.types import CombinedRawData, DetailRawData, ListRawData
 
 
+def _is_rooftop_floor(floor_raw: str | None) -> bool:
+    """True if a floor string marks a rooftop addition (頂樓/頂層加蓋)."""
+    return bool(floor_raw) and "頂" in floor_raw and "加" in floor_raw
+
+
 def combine_raw_data(
     list_data: ListRawData,
     detail_data: DetailRawData,
@@ -35,6 +40,17 @@ def combine_raw_data(
     detail_tags = detail_data.get("tags", [])
     merged_tags = list(set(list_tags + detail_tags))
 
+    # 591 detail pages show a rooftop addition as a normal floor (e.g. "5F/5F"),
+    # dropping the "頂樓加蓋" marker the list page carries. Keep the list floor
+    # when it flags rooftop but the detail floor does not, so is_rooftop (and the
+    # exclude_rooftop filter) keep working after detail is fetched.
+    list_floor = list_data.get("floor_raw", "")
+    detail_floor = detail_data.get("floor_raw", "")
+    if _is_rooftop_floor(list_floor) and not _is_rooftop_floor(detail_floor):
+        floor_raw = list_floor
+    else:
+        floor_raw = detail_floor or list_floor
+
     # Build combined result
     result: CombinedRawData = {
         # From List only
@@ -46,7 +62,7 @@ def combine_raw_data(
         "price_raw": detail_data.get("price_raw") or list_data.get("price_raw", ""),
         "address_raw": detail_data.get("address_raw")
         or list_data.get("address_raw", ""),
-        "floor_raw": detail_data.get("floor_raw") or list_data.get("floor_raw", ""),
+        "floor_raw": floor_raw,
         "area_raw": detail_data.get("area_raw") or list_data.get("area_raw", ""),
         "layout_raw": detail_data.get("layout_raw") or list_data.get("layout_raw", ""),
         # Merged
