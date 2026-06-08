@@ -9,8 +9,29 @@
 
 ## [Unreleased]
 
+### Added
+
+- **推播 / 性別**：Telegram 物件通知在最底下顯示「性別：限男／限女」，
+  不限性別（`all`）則不顯示。
+
 ### Fixed
 
+- **即時通知 / API 不符**：`InstantNotifier` 以 `service`/`service_id` 呼叫
+  broadcaster，但實際參數為 `provider`/`provider_id`，導致每次即時通知都 `TypeError`
+  被吞掉、完全沒送出。已修正參數名，並改為檢查回傳 `success` 才計入已通知數。
+- **即時通知 / 比對不一致**：即時通知自帶的簡化比對忽略 `gender`、`shape`、
+  `bathroom`、`fitment`、`pet_required`、`other`、`options`，與正式 matcher 結果不同。
+  改為統一呼叫 `match_object_to_subscription`，移除分歧的重複實作。
+- **排程 / 重複推播**：daytime/night/startup 三個 job 共用 checker 但無鎖，重疊執行
+  會把同一批新物件各自推播。加入 `job_defaults`（max_instances=1، coalesce）與全域鎖序列化。
+- **Redis / 訂閱同步**：全量同步未清除「已無啟用訂閱」的 region key，導致
+  `get_active_regions()` 仍把空區域當活躍。同步時一併刪除殘留的 region key。
+- **推播 / 重複訊息**：同一使用者多個重疊訂閱綁同一聊天室時，同一物件會重複發送。
+  廣播改以 `(provider, provider_id, object_id)` 去重。
+- **資料庫 / 執行紀錄**：`crawler_runs` 例外路徑固定寫入 `total_fetched=0`、
+  `new_objects=0`，掩蓋實際進度。改為保留例外發生前的實際計數。
+- **Redis / 原子性**：`add_seen_ids` 與 `mark_subscription_initialized` 的寫入與
+  TTL 設定改為單一操作（pipeline / `SET ex=`），避免中途失敗造成 key 永久無 TTL。
 - **爬蟲 / 價格**：591 在列表頁價格區塊新增 `.extra-text`（額外費用）導致
   `price_unit` 寫入超過 `varchar(20)` 而整批爬取失敗。BS4 列表解析改為先移除
   `.extra-text`，`transform_price` 單位改為只比對 `元/[月週日天年期]` 樣式並預設
