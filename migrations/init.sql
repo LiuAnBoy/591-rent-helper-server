@@ -164,8 +164,11 @@ COMMENT ON COLUMN subscriptions.floor_max IS 'Maximum floor filter (inclusive, N
 -- 5. Objects (物件表)
 -- ============================================
 CREATE TABLE IF NOT EXISTS objects (
-    -- Primary key (591 物件 ID)
-    id              INTEGER PRIMARY KEY,
+    -- Surrogate primary key (DB-generated). Objects are identified by
+    -- (source, source_id); the UUID is never used by application logic.
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source          VARCHAR(20) NOT NULL,       -- 來源代碼 (591, ...)
+    source_id       VARCHAR(50) NOT NULL,       -- 來源原始物件 ID (591 listing id)
 
     -- ========== 基本資訊 ==========
     title           VARCHAR(500) NOT NULL,
@@ -234,10 +237,14 @@ CREATE TABLE IF NOT EXISTS objects (
 
     -- ========== 狀態 ==========
     is_active       BOOLEAN DEFAULT TRUE,       -- 物件是否還在線上
-    has_detail      BOOLEAN NOT NULL DEFAULT false  -- 是否已有完整 detail 資料
+    has_detail      BOOLEAN NOT NULL DEFAULT false,  -- 是否已有完整 detail 資料
+
+    -- Dedup: a source's listing id is unique within that source
+    UNIQUE (source, source_id)
 );
 
 -- 索引
+CREATE INDEX IF NOT EXISTS idx_objects_source ON objects(source);
 CREATE INDEX IF NOT EXISTS idx_objects_region_section ON objects(region, section);
 CREATE INDEX IF NOT EXISTS idx_objects_kind ON objects(kind);
 CREATE INDEX IF NOT EXISTS idx_objects_price ON objects(price);
@@ -296,6 +303,8 @@ CREATE INDEX IF NOT EXISTS idx_crawler_runs_region ON crawler_runs(region);
 CREATE OR REPLACE VIEW recent_objects AS
 SELECT
     id,
+    source,
+    source_id,
     title,
     url,
     region,
