@@ -168,7 +168,9 @@ Each module in `src/modules/` follows:
 
 ## Database
 
-PostgreSQL tables: `users`, `subscriptions`, `objects`, `recent_objects` (view)
+PostgreSQL tables: `users`, `subscriptions`, `objects`, `crawler_runs`, `recent_objects` (view)
+
+- `crawler_runs` — Tracks crawler execution status + broadcast results (total/success/failed/errors)
 
 Migrations in `migrations/` folder, tracked via `schema_migrations` table.
 

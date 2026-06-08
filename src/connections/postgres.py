@@ -64,28 +64,6 @@ class PostgresConnection:
             result = await conn.fetchrow(query, object_id)
             return result is not None
 
-    # ========== Notified Objects ==========
-
-    async def is_notified(self, subscription_id: int, object_id: int) -> bool:
-        """Check if an object has been notified for a subscription."""
-        query = """
-        SELECT 1 FROM notified_objects
-        WHERE subscription_id = $1 AND object_id = $2
-        """
-        async with self.pool.acquire() as conn:
-            result = await conn.fetchrow(query, subscription_id, object_id)
-            return result is not None
-
-    async def mark_notified(self, subscription_id: int, object_id: int) -> None:
-        """Mark an object as notified for a subscription."""
-        query = """
-        INSERT INTO notified_objects (subscription_id, object_id)
-        VALUES ($1, $2)
-        ON CONFLICT (subscription_id, object_id) DO NOTHING
-        """
-        async with self.pool.acquire() as conn:
-            await conn.execute(query, subscription_id, object_id)
-
     # ========== Crawler Runs ==========
 
     async def start_crawler_run(self, region: int) -> int:
@@ -106,20 +84,29 @@ class PostgresConnection:
         total_fetched: int,
         new_objects: int,
         error_message: str | None = None,
+        broadcast_total: int = 0,
+        broadcast_success: int = 0,
+        broadcast_failed: int = 0,
+        broadcast_errors: str | None = None,
     ) -> None:
-        """Record finish of a crawler run."""
+        """Record finish of a crawler run (including broadcast results)."""
         query = """
         UPDATE crawler_runs
         SET finished_at = NOW(),
             status = $2,
             total_fetched = $3,
             new_objects = $4,
-            error_message = $5
+            error_message = $5,
+            broadcast_total = $6,
+            broadcast_success = $7,
+            broadcast_failed = $8,
+            broadcast_errors = $9
         WHERE id = $1
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
-                query, run_id, status, total_fetched, new_objects, error_message
+                query, run_id, status, total_fetched, new_objects, error_message,
+                broadcast_total, broadcast_success, broadcast_failed, broadcast_errors,
             )
 
     # ========== Subscription CRUD ==========

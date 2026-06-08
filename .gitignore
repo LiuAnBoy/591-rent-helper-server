@@ -63,6 +63,7 @@ Thumbs.db
 # Project specific
 data/
 tmp/
+todos/
 
 # Local development docs (not tracked)
 .local-docs/

@@ -262,36 +262,22 @@ CREATE TRIGGER update_objects_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================
--- 6. Notified Objects (已推播記錄)
---    記錄哪些物件已推播給哪些訂閱，避免重複
--- ============================================
-CREATE TABLE IF NOT EXISTS notified_objects (
-    id              SERIAL PRIMARY KEY,
-    subscription_id INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
-    object_id       INTEGER NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-    notified_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    -- 同一訂閱不會重複推播同一物件
-    UNIQUE(subscription_id, object_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_notified_objects_subscription_id ON notified_objects(subscription_id);
-CREATE INDEX IF NOT EXISTS idx_notified_objects_object_id ON notified_objects(object_id);
-CREATE INDEX IF NOT EXISTS idx_notified_objects_notified_at ON notified_objects(notified_at DESC);
-
--- ============================================
--- 7. Crawler Runs (爬蟲執行記錄)
---    追蹤爬蟲執行狀態
+-- 6. Crawler Runs (爬蟲執行記錄)
+--    追蹤爬蟲執行狀態 + 推播結果
 -- ============================================
 CREATE TABLE IF NOT EXISTS crawler_runs (
-    id              SERIAL PRIMARY KEY,
-    region          INTEGER NOT NULL,
-    started_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    finished_at     TIMESTAMP WITH TIME ZONE,
-    status          VARCHAR(20) DEFAULT 'running',  -- running, success, failed
-    total_fetched   INTEGER DEFAULT 0,
-    new_objects     INTEGER DEFAULT 0,
-    error_message   TEXT
+    id                SERIAL PRIMARY KEY,
+    region            INTEGER NOT NULL,
+    started_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    finished_at       TIMESTAMP WITH TIME ZONE,
+    status            VARCHAR(20) DEFAULT 'running',  -- running, success, failed
+    total_fetched     INTEGER DEFAULT 0,
+    new_objects       INTEGER DEFAULT 0,
+    error_message     TEXT,
+    broadcast_total   INTEGER DEFAULT 0,      -- 推播總數
+    broadcast_success INTEGER DEFAULT 0,      -- 推播成功數
+    broadcast_failed  INTEGER DEFAULT 0,      -- 推播失敗數
+    broadcast_errors  TEXT                    -- 推播失敗詳情（成功為 NULL）
 );
 
 CREATE INDEX IF NOT EXISTS idx_crawler_runs_started_at ON crawler_runs(started_at DESC);
@@ -300,22 +286,6 @@ CREATE INDEX IF NOT EXISTS idx_crawler_runs_region ON crawler_runs(region);
 -- ============================================
 -- Views (視圖)
 -- ============================================
-
--- 訂閱統計視圖
-CREATE OR REPLACE VIEW subscription_stats AS
-SELECT
-    s.id,
-    s.name,
-    s.region,
-    s.section,
-    u.id as user_id,
-    u.name as user_name,
-    COUNT(no.id) as total_notified,
-    MAX(no.notified_at) as last_notified_at
-FROM subscriptions s
-JOIN users u ON s.user_id = u.id
-LEFT JOIN notified_objects no ON s.id = no.subscription_id
-GROUP BY s.id, s.name, s.region, s.section, u.id, u.name;
 
 -- 活躍物件視圖 (最近 7 天)
 CREATE OR REPLACE VIEW recent_objects AS
