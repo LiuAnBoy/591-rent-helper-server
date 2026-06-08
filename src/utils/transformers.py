@@ -107,9 +107,10 @@ def transform_price(price_raw: str) -> tuple[int, str]:
 
     price = int(match.group(1))
 
-    # Extract unit (everything after the number)
-    unit_match = re.search(r"\d+(.+)", cleaned)
-    unit = unit_match.group(1) if unit_match else "元/月"
+    # Extract unit, restricted to a known pattern so trailing text (e.g. an
+    # appended "(額外費用…)" block) can never overflow the price_unit column.
+    unit_match = re.search(r"元/[月週日天年期]", cleaned)
+    unit = unit_match.group(0) if unit_match else "元/月"
 
     return price, unit
 
