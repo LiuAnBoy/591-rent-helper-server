@@ -26,6 +26,9 @@
   不像 seen set 會刷新，導致 ① 無匹配的訂閱永遠不初始化、之後第一筆符合的新物件被吞掉、
   ② 活躍訂閱每約 7 天過期一次、週期性漏一筆通知。改為每輪對本區所有訂閱刷新 initialized
   旗標（保留 TTL，活躍不過期、已刪訂閱自動過期不累積），維持 seen set 空時的防洗版抑制。
+- **即時通知 / backfill 原子性**：即時通知補 detail 時逐筆更新 PostgreSQL、最後才更新
+  Redis，中途失敗會造成兩邊 `has_detail`/detail 不一致。改為用單一交易的
+  `update_batch_with_detail`（全有或全無），成功後才刷新 Redis 快取。
 
 ### Fixed
 

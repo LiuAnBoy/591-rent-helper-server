@@ -293,11 +293,10 @@ class InstantNotifier:
                         db_ready = transform_to_db_ready(combined)
                         updated_objects.append(db_ready)
 
-                        # Update DB
-                        await repo.update_with_detail(obj_id, db_ready)
-
-                # Update Redis cache with new data
+                # Persist all backfilled detail in one transaction (atomic), then
+                # refresh the Redis cache so DB and cache do not drift apart.
                 if updated_objects:
+                    await repo.update_batch_with_detail(updated_objects)
                     await self._redis.update_region_objects(region, updated_objects)
                     notify_log.info(
                         f"Updated {len(updated_objects)} objects with detail"
@@ -476,11 +475,10 @@ class InstantNotifier:
                         db_ready = transform_to_db_ready(combined)
                         updated_objects.append(db_ready)
 
-                        # Update DB
-                        await repo.update_with_detail(obj_id, db_ready)
-
-                # Update Redis cache with new data
+                # Persist all backfilled detail in one transaction (atomic), then
+                # refresh the Redis cache so DB and cache do not drift apart.
                 if updated_objects:
+                    await repo.update_batch_with_detail(updated_objects)
                     await self._redis.update_region_objects(region, updated_objects)
                     notify_log.info(
                         f"Updated {len(updated_objects)} objects with detail"
