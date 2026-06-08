@@ -531,6 +531,35 @@ class TestParseDetailRaw:
         assert "冷氣" in result["options"]
         assert result["surrounding_type"] == "metro"
 
+    def test_fitment_ignored_in_description(self):
+        # "新裝潢" only in free-text description, no structured 裝潢程度 field.
+        html = """
+        <html><body>
+            <h1>Title</h1>
+            <div class="remark">本物件為全新裝潢，採光佳</div>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        result = _parse_detail_raw(soup, soup.get_text(), object_id=123)
+        assert result["fitment_raw"] is None
+
+    def test_pattern_block_classifies_fields(self):
+        # Headline fields are read from the ".pattern" block, not whole page.
+        html = """
+        <html><body><h1>T</h1>
+            <div class="pattern">
+                <span>3房2廳2衛</span><span>25坪</span>
+                <span>5F/12F</span><span>電梯大樓</span>
+            </div>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        result = _parse_detail_raw(soup, soup.get_text(), object_id=1)
+        assert result["layout_raw"] == "3房2廳2衛"
+        assert result["area_raw"] == "25坪"
+        assert result["floor_raw"] == "5F/12F"
+        assert result["shape_raw"] == "電梯大樓"
+
     def test_gender_restriction_male(self):
         html = "<html><body><h1>Title</h1><div>限男生租住</div></body></html>"
         soup = BeautifulSoup(html, "html.parser")

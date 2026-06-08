@@ -31,6 +31,10 @@
   當 list 標頂加而 detail 沒標時保留 list 的 floor，維持 `is_rooftop=True` 與總樓層。
 - **爬蟲 / 漏抓觀測**：list 單筆解析失敗或缺 id 時只默默 `continue`，難察覺漏抓。
   兩條 list fetcher 改為統計被丟棄數量，有丟才記一筆 summary warning（`Dropped X/Y`）。
+- **爬蟲 / detail 全頁比對誤抓**：BS4 詳情頁的格局/坪數/樓層/型態原本用全頁 regex，
+  易抓到推薦物件或描述文字；裝潢程度更會把描述中的「新裝潢」誤判成分級。改為鎖定
+  主物件 `.pattern` 區塊（依樣式分類 span）、裝潢程度讀結構化「裝潢程度」鍵值；
+  找不到時 fallback 回原本全頁邏輯（不破壞）。Playwright 路徑不受影響。
 - **即時通知 / API 不符**：`InstantNotifier` 以 `service`/`service_id` 呼叫
   broadcaster，但實際參數為 `provider`/`provider_id`，導致每次即時通知都 `TypeError`
   被吞掉、完全沒送出。已修正參數名，並改為檢查回傳 `success` 才計入已通知數。

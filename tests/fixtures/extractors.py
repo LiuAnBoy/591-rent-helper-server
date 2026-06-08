@@ -167,11 +167,15 @@ def sample_detail_html():
             <span class="load-map">台北市信義區信義路五段</span>
         </div>
         <a href="/list?region=1&section=7&kind=2">麵包屑</a>
-        <span>3F/10F</span>
-        <div>2房1廳1衛</div>
-        <div>12坪</div>
-        <div>電梯大樓</div>
-        <div>新裝潢</div>
+        <div class="pattern">
+            <span>2房1廳1衛</span><span class="line"></span>
+            <span>12坪</span><span class="line"></span>
+            <span>3F/10F</span><span class="line"></span>
+            <span>電梯大樓</span>
+        </div>
+        <div class="house-detail">
+            <span class="label">裝潢程度</span><span class="value">新裝潢</span>
+        </div>
         <dl>
             <dd class="text">冷氣</dd>
         </dl>
