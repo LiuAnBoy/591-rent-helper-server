@@ -29,6 +29,8 @@
 - **爬蟲 / 頂加物件遺失**：591 detail 把頂樓加蓋表示成一般樓層（如 `5F/5F`），覆蓋掉
   list 的 `頂樓加蓋/4F`，使 `is_rooftop` 翻成 False、「排除頂加」訂閱失效。combiner 改為
   當 list 標頂加而 detail 沒標時保留 list 的 floor，維持 `is_rooftop=True` 與總樓層。
+- **爬蟲 / 漏抓觀測**：list 單筆解析失敗或缺 id 時只默默 `continue`，難察覺漏抓。
+  兩條 list fetcher 改為統計被丟棄數量，有丟才記一筆 summary warning（`Dropped X/Y`）。
 - **即時通知 / API 不符**：`InstantNotifier` 以 `service`/`service_id` 呼叫
   broadcaster，但實際參數為 `provider`/`provider_id`，導致每次即時通知都 `TypeError`
   被吞掉、完全沒送出。已修正參數名，並改為檢查回傳 `success` 才計入已通知數。

@@ -132,14 +132,25 @@ class ListFetcherBs4:
         fetcher_log.debug(f"Found {len(items)} items")
 
         results: list[ListRawData] = []
+        dropped = 0
         for elem in items:
             try:
                 raw_data = self._parse_item_raw(elem, region)
-                if raw_data.get("id"):
-                    results.append(raw_data)
             except Exception as e:
+                dropped += 1
                 fetcher_log.warning(f"Failed to parse item: {e}")
                 continue
+            if raw_data.get("id"):
+                results.append(raw_data)
+            else:
+                dropped += 1
+
+        # Surface silent data loss (parse errors / missing id) as a summary
+        if dropped:
+            fetcher_log.warning(
+                f"Dropped {dropped}/{len(items)} list items "
+                f"(parse error or missing id)"
+            )
 
         # Apply max_items limit
         if max_items and len(results) > max_items:
