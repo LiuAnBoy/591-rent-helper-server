@@ -254,7 +254,7 @@ class InstantNotifier:
             await detail_fetcher.start()
 
             try:
-                ids_to_fetch = [obj["id"] for obj in objects_need_detail]
+                ids_to_fetch = [obj["source_id"] for obj in objects_need_detail]
                 details, _, _ = await detail_fetcher.fetch_details_batch_raw(
                     ids_to_fetch
                 )
@@ -262,7 +262,7 @@ class InstantNotifier:
                 # Update objects with fetched details
                 updated_objects: list[dict] = []
                 for obj in objects_need_detail:
-                    obj_id = obj["id"]
+                    obj_id = obj["source_id"]
                     detail_data = details.get(obj_id)
 
                     if detail_data:
@@ -303,9 +303,12 @@ class InstantNotifier:
                     )
 
                     # Update filtered_objects with new data
-                    updated_by_id = {obj["id"]: obj for obj in updated_objects}
+                    updated_by_id = {
+                        obj["source_id"]: obj for obj in updated_objects
+                    }
                     filtered_objects = [
-                        updated_by_id.get(obj["id"], obj) for obj in filtered_objects
+                        updated_by_id.get(obj["source_id"], obj)
+                        for obj in filtered_objects
                     ]
 
             finally:
@@ -436,7 +439,7 @@ class InstantNotifier:
             await detail_fetcher.start()
 
             try:
-                ids_to_fetch = [obj["id"] for obj in objects_need_detail]
+                ids_to_fetch = [obj["source_id"] for obj in objects_need_detail]
                 details, _, _ = await detail_fetcher.fetch_details_batch_raw(
                     ids_to_fetch
                 )
@@ -444,7 +447,7 @@ class InstantNotifier:
                 # Update objects with fetched details
                 updated_objects: list[dict] = []
                 for obj in objects_need_detail:
-                    obj_id = obj["id"]
+                    obj_id = obj["source_id"]
                     detail_data = details.get(obj_id)
 
                     if detail_data:
@@ -485,9 +488,12 @@ class InstantNotifier:
                     )
 
                     # Update filtered_objects with new data
-                    updated_by_id = {obj["id"]: obj for obj in updated_objects}
+                    updated_by_id = {
+                        obj["source_id"]: obj for obj in updated_objects
+                    }
                     filtered_objects = [
-                        updated_by_id.get(obj["id"], obj) for obj in filtered_objects
+                        updated_by_id.get(obj["source_id"], obj)
+                        for obj in filtered_objects
                     ]
 
             finally:

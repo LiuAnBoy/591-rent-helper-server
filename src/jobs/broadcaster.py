@@ -113,7 +113,11 @@ class Broadcaster:
             )
 
             # Get object ID for logging
-            obj_id = obj["id"] if isinstance(obj, dict) else obj.id
+            obj_id = (
+                obj["source_id"]
+                if isinstance(obj, dict)
+                else (getattr(obj, "source_id", None) or getattr(obj, "id", None))
+            )
             broadcast_log.info(
                 f"Sent Telegram notification to {chat_id} for object {obj_id}"
             )
@@ -277,7 +281,11 @@ class Broadcaster:
         sent_targets: set[tuple] = set()
 
         for obj, subscriptions in matches:
-            obj_id = obj["id"] if isinstance(obj, dict) else obj.id
+            obj_id = (
+                obj["source_id"]
+                if isinstance(obj, dict)
+                else (getattr(obj, "source_id", None) or getattr(obj, "id", None))
+            )
             for sub in subscriptions:
                 provider = sub.get("service")
                 provider_id = sub.get("service_id")

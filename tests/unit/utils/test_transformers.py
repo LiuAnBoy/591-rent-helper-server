@@ -455,7 +455,8 @@ class TestTransformToDbReady:
     def test_full_transform(self, sample_combined_data):
         result = transform_to_db_ready(sample_combined_data)
 
-        assert result["id"] == 12345678
+        assert result["source"] == "591"
+        assert result["source_id"] == "12345678"
         assert result["title"] == "台北市信義區獨立套房"
         assert result["region"] == 1
         assert isinstance(result["price"], int)
@@ -472,7 +473,7 @@ class TestTransformToDbReady:
         }
         result = transform_to_db_ready(minimal)
 
-        assert result["id"] == 123
+        assert result["source_id"] == "123"
         assert result["price"] == 0
         assert result["pet_allowed"] is False
 
@@ -490,7 +491,8 @@ class TestTransformToDbReady:
         result = transform_to_db_ready(sample_combined_data)
 
         required_fields = [
-            "id",
+            "source",
+            "source_id",
             "url",
             "title",
             "price",

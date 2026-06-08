@@ -158,7 +158,7 @@ class RedisConnection:
         Args:
             obj: Object data dictionary (must have 'id' field)
         """
-        object_id = obj["id"]
+        object_id = obj["source_id"]
         key = self._object_key(object_id)
         await self.client.set(key, json.dumps(obj, ensure_ascii=False, default=str))
         await self.client.expire(key, self.TTL_OBJECT)
@@ -173,7 +173,7 @@ class RedisConnection:
         """
         pipe = self.client.pipeline()
         for obj in objects:
-            key = self._object_key(obj["id"])
+            key = self._object_key(obj["source_id"])
             pipe.set(key, json.dumps(obj, ensure_ascii=False, default=str))
             pipe.expire(key, self.TTL_OBJECT)
         await pipe.execute()
@@ -263,7 +263,7 @@ class RedisConnection:
 
         if objects:
             mapping = {
-                str(obj["id"]): json.dumps(obj, ensure_ascii=False, default=str)
+                str(obj["source_id"]): json.dumps(obj, ensure_ascii=False, default=str)
                 for obj in objects
             }
             pipe.hset(key, mapping=mapping)
@@ -286,7 +286,7 @@ class RedisConnection:
 
         key = self._region_objects_key(region)
         mapping = {
-            str(obj["id"]): json.dumps(obj, ensure_ascii=False, default=str)
+            str(obj["source_id"]): json.dumps(obj, ensure_ascii=False, default=str)
             for obj in objects
         }
 
