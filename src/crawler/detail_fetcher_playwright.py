@@ -191,13 +191,14 @@ def _parse_detail_raw_from_nuxt(data: dict, object_id: int) -> DetailRawData:
     # Service - extract gender, options
     service = data.get("service", {})
     if service:
-        # Gender from rule
-        rule = service.get("rule", "")
-        if rule:
-            if "限男" in rule:
-                result["gender_raw"] = "限男"
-            elif "限女" in rule:
-                result["gender_raw"] = "限女"
+        # Gender from descData (591 moved it into a {label, value} list,
+        # e.g. {"label": "性別", "value": "此房屋限男生租住"})
+        desc_data = service.get("descData", [])
+        if isinstance(desc_data, list):
+            for item in desc_data:
+                if isinstance(item, dict) and item.get("label") == "性別":
+                    result["gender_raw"] = item.get("value")
+                    break
 
         # Options from facility
         facility = service.get("facility", [])

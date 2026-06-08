@@ -320,6 +320,16 @@ class TestTransformGender:
         # Any unrecognized string defaults to "all"
         assert transform_gender("不限") == "all"
 
+    def test_full_sentence_male(self):
+        # 591 detail "性別" field full sentence
+        assert transform_gender("此房屋限男生租住") == "boy"
+
+    def test_full_sentence_female(self):
+        assert transform_gender("此房屋限女生租住") == "girl"
+
+    def test_full_sentence_all(self):
+        assert transform_gender("此房屋男女皆可租住") == "all"
+
 
 # ============================================================
 # transform_pet_allowed tests

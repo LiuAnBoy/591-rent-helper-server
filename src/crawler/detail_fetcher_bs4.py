@@ -256,11 +256,10 @@ class DetailFetcherBs4:
         if m:
             result["area_raw"] = m.group(0)
 
-        # Gender restriction
-        if "限男" in page_text:
-            result["gender_raw"] = "限男"
-        elif "限女" in page_text:
-            result["gender_raw"] = "限女"
+        # Gender restriction (591 field text, e.g. "此房屋限男生租住")
+        gender_match = re.search(r"限([男女])生租住", page_text)
+        if gender_match:
+            result["gender_raw"] = "限" + gender_match.group(1)
 
         # Shape (building type)
         for name in SHAPE_NAMES:
