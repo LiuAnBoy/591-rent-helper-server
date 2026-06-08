@@ -523,6 +523,12 @@ class Checker:
                         grouped_matches
                     )
 
+                    # Persist every notification result (success + final failure
+                    # after retries) to notification_logs.
+                    await self._postgres.record_notification_logs(
+                        run_id, broadcast_result.get("details", [])
+                    )
+
                     # Notify admin only if some broadcasts failed
                     failures = broadcast_result.get("failures", [])
                     if failures:

@@ -44,6 +44,11 @@ class ErrorType(Enum):
 class Broadcaster:
     """Broadcasts notifications to users via their bound channels."""
 
+    # Retry policy: try a notification up to 3 times, 60s apart, before giving
+    # up (and reporting it as a failure for the admin alert + notification log).
+    MAX_SEND_ATTEMPTS = 3
+    RETRY_INTERVAL_SECONDS = 60
+
     def __init__(self, bot: TelegramBot | None = None):
         """
         Initialize Broadcaster.
@@ -207,6 +212,45 @@ class Broadcaster:
             broadcast_log.error(f"Failed to send admin notification: {e}")
             return False
 
+    async def _send_with_retry(
+        self,
+        semaphore: "asyncio.Semaphore",
+        provider: str,
+        provider_id: str,
+        obj: RentalObject | dict,
+        subscription_name: str | None,
+    ) -> dict:
+        """
+        Send one notification, retrying up to MAX_SEND_ATTEMPTS times.
+
+        Sleeps RETRY_INTERVAL_SECONDS between attempts and releases the
+        concurrency slot during the wait so other notifications are not blocked.
+
+        Returns:
+            The last send result ({"success": bool, "error": str | None}).
+        """
+        result = {"success": False, "error": "not attempted"}
+        for attempt in range(self.MAX_SEND_ATTEMPTS):
+            async with semaphore:
+                result = await self.send_notification(
+                    provider=provider,
+                    provider_id=provider_id,
+                    obj=obj,
+                    subscription_name=subscription_name,
+                )
+            if result.get("success"):
+                return result
+
+            if attempt < self.MAX_SEND_ATTEMPTS - 1:
+                broadcast_log.warning(
+                    f"Notify {provider_id} failed "
+                    f"(attempt {attempt + 1}/{self.MAX_SEND_ATTEMPTS}), "
+                    f"retrying in {self.RETRY_INTERVAL_SECONDS}s: {result.get('error')}"
+                )
+                await asyncio.sleep(self.RETRY_INTERVAL_SECONDS)
+
+        return result
+
     async def broadcast(
         self,
         matches: list[tuple[RentalObject, list[dict]]],
@@ -255,13 +299,14 @@ class Broadcaster:
                     continue
                 sent_targets.add(target)
 
-                task = self.send_notification(
-                    provider=provider,
-                    provider_id=provider_id,
-                    obj=obj,
-                    subscription_name=sub_name,
+                tasks.append(
+                    {
+                        "provider": provider,
+                        "provider_id": provider_id,
+                        "obj": obj,
+                        "subscription_name": sub_name,
+                    }
                 )
-                tasks.append(task)
                 task_meta.append({
                     "object_id": obj_id,
                     "subscription_id": sub_id,
@@ -282,13 +327,10 @@ class Broadcaster:
         MAX_CONCURRENT = 10
         semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
-        async def limited_task(task):
-            async with semaphore:
-                return await task
-
-        # Run notifications with concurrency limit
+        # Run notifications (each with bounded retry) under the concurrency limit
         results = await asyncio.gather(
-            *[limited_task(t) for t in tasks], return_exceptions=True
+            *[self._send_with_retry(semaphore, **plan) for plan in tasks],
+            return_exceptions=True,
         )
 
         # Process results
