@@ -267,9 +267,10 @@ class Checker:
                             )
                         await self._postgres.finish_crawler_run(
                             run_id=run_id,
-                            status="success",
+                            status="failed",
                             total_fetched=0,
                             new_objects=0,
+                            error_message="No objects fetched from page 1",
                         )
                         return {
                             "region": region,

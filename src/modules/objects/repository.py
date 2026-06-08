@@ -195,7 +195,10 @@ class ObjectRepository:
         """
 
         inserted_count = 0
-        async with self._pool.acquire() as conn:
+        async with self._pool.acquire() as conn, conn.transaction():
+            # Wrap the whole batch in one transaction: a single bad row (e.g. a
+            # value overflow) rolls back the entire batch instead of leaving the
+            # DB half-written and out of sync with the Redis seen set.
             for data in objects:
                 result = await conn.fetchrow(
                     query,

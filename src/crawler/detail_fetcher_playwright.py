@@ -29,12 +29,25 @@ def _find_detail_data(nuxt_data: dict) -> dict | None:
     if not isinstance(nuxt_data, dict):
         return None
 
-    for _key, val in nuxt_data.items():
-        if isinstance(val, dict) and "data" in val:
-            data = val["data"]
-            if isinstance(data, dict) and "service" in data:
-                return data
-    return None
+    # The detail payload is a dict that carries the "service" block (and the
+    # sibling "info" list). Search recursively so a 591-side restructuring that
+    # nests the payload one level deeper does not break extraction entirely.
+    def _search(node: object) -> dict | None:
+        if isinstance(node, dict):
+            if "service" in node and "info" in node:
+                return node
+            for val in node.values():
+                found = _search(val)
+                if found is not None:
+                    return found
+        elif isinstance(node, list):
+            for item in node:
+                found = _search(item)
+                if found is not None:
+                    return found
+        return None
+
+    return _search(nuxt_data)
 
 
 def _extract_surrounding(traffic: dict | list, result: DetailRawData) -> DetailRawData:
