@@ -8,7 +8,7 @@ from loguru import logger
 
 from src.connections.postgres import get_postgres
 from src.connections.redis import get_redis
-from src.crawler.detail_fetcher import get_detail_fetcher
+from src.crawler.detail_fetcher import DetailFetcher
 from src.crawler.types import CombinedRawData
 from src.jobs.broadcaster import get_broadcaster
 from src.matching import filter_redis_objects, match_object_to_subscription
@@ -247,7 +247,10 @@ class InstantNotifier:
                 f"Fetching detail for {len(objects_need_detail)} objects without detail"
             )
 
-            detail_fetcher = get_detail_fetcher()
+            # Own instance (not the shared singleton): instant notify can run
+            # concurrently with the scheduled checker, and closing a shared
+            # fetcher would tear down the browser the other one is still using.
+            detail_fetcher = DetailFetcher()
             await detail_fetcher.start()
 
             try:
@@ -290,11 +293,10 @@ class InstantNotifier:
                         db_ready = transform_to_db_ready(combined)
                         updated_objects.append(db_ready)
 
-                        # Update DB
-                        await repo.update_with_detail(obj_id, db_ready)
-
-                # Update Redis cache with new data
+                # Persist all backfilled detail in one transaction (atomic), then
+                # refresh the Redis cache so DB and cache do not drift apart.
                 if updated_objects:
+                    await repo.update_batch_with_detail(updated_objects)
                     await self._redis.update_region_objects(region, updated_objects)
                     notify_log.info(
                         f"Updated {len(updated_objects)} objects with detail"
@@ -427,7 +429,10 @@ class InstantNotifier:
                 f"Fetching detail for {len(objects_need_detail)} objects without detail"
             )
 
-            detail_fetcher = get_detail_fetcher()
+            # Own instance (not the shared singleton): instant notify can run
+            # concurrently with the scheduled checker, and closing a shared
+            # fetcher would tear down the browser the other one is still using.
+            detail_fetcher = DetailFetcher()
             await detail_fetcher.start()
 
             try:
@@ -470,11 +475,10 @@ class InstantNotifier:
                         db_ready = transform_to_db_ready(combined)
                         updated_objects.append(db_ready)
 
-                        # Update DB
-                        await repo.update_with_detail(obj_id, db_ready)
-
-                # Update Redis cache with new data
+                # Persist all backfilled detail in one transaction (atomic), then
+                # refresh the Redis cache so DB and cache do not drift apart.
                 if updated_objects:
+                    await repo.update_batch_with_detail(updated_objects)
                     await self._redis.update_region_objects(region, updated_objects)
                     notify_log.info(
                         f"Updated {len(updated_objects)} objects with detail"

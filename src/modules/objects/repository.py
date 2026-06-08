@@ -238,20 +238,8 @@ class ObjectRepository:
         objects_log.info(f"Batch saved {len(objects)} objects, {inserted_count} new")
         return inserted_count
 
-    async def update_with_detail(
-        self, object_id: int, detail_data: DBReadyData
-    ) -> bool:
-        """
-        Update object with detail data and set has_detail=true.
-
-        Args:
-            object_id: Object ID to update
-            detail_data: DBReadyData containing detail fields
-
-        Returns:
-            True if updated, False if object not found
-        """
-        query = """
+    # Shared UPDATE for detail backfill (used by single + batch variants)
+    _UPDATE_DETAIL_QUERY = """
         UPDATE objects SET
             floor = $2,
             floor_str = $3,
@@ -274,29 +262,49 @@ class ObjectRepository:
             updated_at = NOW()
         WHERE id = $1
         RETURNING id
-        """
+    """
 
+    @staticmethod
+    def _detail_update_args(object_id: int, d: DBReadyData) -> tuple:
+        """Positional args ($1..$18) for _UPDATE_DETAIL_QUERY."""
+        return (
+            object_id,  # $1
+            d["floor"],  # $2
+            d["floor_str"],  # $3
+            d["total_floor"],  # $4
+            d["is_rooftop"],  # $5
+            d["layout"],  # $6
+            d["layout_str"],  # $7
+            d["bathroom"],  # $8
+            d["area"],  # $9
+            d["shape"],  # $10
+            d["fitment"],  # $11
+            d["gender"],  # $12
+            d["pet_allowed"],  # $13
+            d["options"],  # $14
+            d["other"],  # $15
+            d["surrounding_type"],  # $16
+            d["surrounding_desc"],  # $17
+            d["surrounding_distance"],  # $18
+        )
+
+    async def update_with_detail(
+        self, object_id: int, detail_data: DBReadyData
+    ) -> bool:
+        """
+        Update object with detail data and set has_detail=true.
+
+        Args:
+            object_id: Object ID to update
+            detail_data: DBReadyData containing detail fields
+
+        Returns:
+            True if updated, False if object not found
+        """
         async with self._pool.acquire() as conn:
             result = await conn.fetchrow(
-                query,
-                object_id,  # $1
-                detail_data["floor"],  # $2
-                detail_data["floor_str"],  # $3
-                detail_data["total_floor"],  # $4
-                detail_data["is_rooftop"],  # $5
-                detail_data["layout"],  # $6
-                detail_data["layout_str"],  # $7
-                detail_data["bathroom"],  # $8
-                detail_data["area"],  # $9
-                detail_data["shape"],  # $10
-                detail_data["fitment"],  # $11
-                detail_data["gender"],  # $12
-                detail_data["pet_allowed"],  # $13
-                detail_data["options"],  # $14
-                detail_data["other"],  # $15
-                detail_data["surrounding_type"],  # $16
-                detail_data["surrounding_desc"],  # $17
-                detail_data["surrounding_distance"],  # $18
+                self._UPDATE_DETAIL_QUERY,
+                *self._detail_update_args(object_id, detail_data),
             )
             if result:
                 objects_log.debug(f"Updated object {object_id} with detail")
@@ -305,7 +313,11 @@ class ObjectRepository:
 
     async def update_batch_with_detail(self, objects: list[DBReadyData]) -> int:
         """
-        Batch update objects with detail data.
+        Batch update objects with detail data in a single transaction.
+
+        All-or-nothing: a mid-batch failure rolls back every row so the DB does
+        not end up partially backfilled (and out of sync with the Redis cache,
+        which the caller refreshes only after this returns).
 
         Args:
             objects: List of DBReadyData dictionaries with detail
@@ -317,9 +329,14 @@ class ObjectRepository:
             return 0
 
         updated = 0
-        for obj in objects:
-            if await self.update_with_detail(obj["id"], obj):
-                updated += 1
+        async with self._pool.acquire() as conn, conn.transaction():
+            for obj in objects:
+                result = await conn.fetchrow(
+                    self._UPDATE_DETAIL_QUERY,
+                    *self._detail_update_args(obj["id"], obj),
+                )
+                if result:
+                    updated += 1
 
         objects_log.info(f"Batch updated {updated} objects with detail")
         return updated
