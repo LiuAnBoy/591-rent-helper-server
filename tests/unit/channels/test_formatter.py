@@ -90,6 +90,27 @@ class TestFormatObject:
 
         assert "#" not in result
 
+    def test_format_gender_boy(self, formatter):
+        """Male-only object should show 性別：限男."""
+        obj = {"title": "Test", "price": 10000, "url": "http://test", "gender": "boy"}
+        result = formatter.format_object(obj)
+
+        assert "性別：限男" in result
+
+    def test_format_gender_girl(self, formatter):
+        """Female-only object should show 性別：限女."""
+        obj = {"title": "Test", "price": 10000, "url": "http://test", "gender": "girl"}
+        result = formatter.format_object(obj)
+
+        assert "性別：限女" in result
+
+    def test_format_gender_all_hidden(self, formatter):
+        """Unrestricted gender should not show the 性別 line."""
+        obj = {"title": "Test", "price": 10000, "url": "http://test", "gender": "all"}
+        result = formatter.format_object(obj)
+
+        assert "性別" not in result
+
     def test_format_contains_link(self, formatter, sample_db_ready_object):
         """Result should contain clickable link."""
         result = formatter.format_object(sample_db_ready_object)

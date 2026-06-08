@@ -227,6 +227,9 @@ class Broadcaster:
         # Build list of notification tasks
         tasks = []
         task_meta = []  # Track metadata for each task
+        # Dedupe so the same object is not sent twice to the same recipient
+        # when a user has multiple overlapping subscriptions on one binding.
+        sent_targets: set[tuple] = set()
 
         for obj, subscriptions in matches:
             obj_id = obj["id"] if isinstance(obj, dict) else obj.id
@@ -241,6 +244,15 @@ class Broadcaster:
                         f"Skipping subscription {sub_id} - no binding"
                     )
                     continue
+
+                target = (provider, provider_id, obj_id)
+                if target in sent_targets:
+                    broadcast_log.debug(
+                        f"Skipping duplicate notification to {provider_id} "
+                        f"for object {obj_id}"
+                    )
+                    continue
+                sent_targets.add(target)
 
                 task = self.send_notification(
                     provider=provider,

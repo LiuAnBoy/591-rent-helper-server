@@ -11,7 +11,7 @@ from src.connections.redis import get_redis
 from src.crawler.detail_fetcher import get_detail_fetcher
 from src.crawler.types import CombinedRawData
 from src.jobs.broadcaster import get_broadcaster
-from src.matching import filter_redis_objects
+from src.matching import filter_redis_objects, match_object_to_subscription
 from src.modules.objects import ObjectRepository
 from src.utils import DBReadyData, transform_to_db_ready
 
@@ -328,7 +328,7 @@ class InstantNotifier:
             matched_objects = []
 
             for obj in objects_with_detail:
-                if self._matches_subscription(obj, sub):
+                if match_object_to_subscription(obj, sub):
                     matched_objects.append(obj)
 
             total_matched += len(matched_objects)
@@ -337,13 +337,14 @@ class InstantNotifier:
             if matched_objects and service_id:
                 for obj in matched_objects:
                     try:
-                        await self._broadcaster.send_notification(
-                            service=service,
-                            service_id=service_id,
+                        result = await self._broadcaster.send_notification(
+                            provider=service,
+                            provider_id=service_id,
                             obj=obj,
                             subscription_name=sub_name,
                         )
-                        total_notified += 1
+                        if result.get("success"):
+                            total_notified += 1
                     except Exception as e:
                         notify_log.error(
                             f"Failed to notify for object {obj.get('id')}: {e}"
@@ -527,7 +528,7 @@ class InstantNotifier:
         matched = []
 
         for obj in objects:
-            if self._matches_subscription(obj, subscription):
+            if match_object_to_subscription(obj, subscription):
                 matched.append(obj)
 
         notify_log.info(
@@ -540,13 +541,14 @@ class InstantNotifier:
             for obj in matched:
                 try:
                     # Send DBReadyData directly (broadcaster now supports dict)
-                    await self._broadcaster.send_notification(
-                        service=service,
-                        service_id=service_id,
+                    result = await self._broadcaster.send_notification(
+                        provider=service,
+                        provider_id=service_id,
                         obj=obj,
                         subscription_name=sub_name,
                     )
-                    notified += 1
+                    if result.get("success"):
+                        notified += 1
                 except Exception as e:
                     notify_log.error(
                         f"Failed to notify for object {obj.get('id')}: {e}"
@@ -557,82 +559,6 @@ class InstantNotifier:
             "matched": len(matched),
             "notified": notified,
         }
-
-    def _matches_subscription(self, obj: dict, sub: dict) -> bool:
-        """
-        Check if object matches subscription filters.
-        Based on Checker._basic_match_object_to_subscription logic.
-
-        Args:
-            obj: Object dict
-            sub: Subscription dict with filters
-
-        Returns:
-            True if matches all filters
-        """
-        # Price range
-        if sub.get("price_min") is not None or sub.get("price_max") is not None:
-            obj_price = obj.get("price", 0)
-            if isinstance(obj_price, str):
-                obj_price = int(obj_price.replace(",", "")) if obj_price else 0
-
-            if sub.get("price_min") is not None and obj_price < sub["price_min"]:
-                return False
-            if sub.get("price_max") is not None and obj_price > sub["price_max"]:
-                return False
-
-        # Kind (property type)
-        if sub.get("kind"):
-            obj_kind = obj.get("kind")
-            if obj_kind is not None and obj_kind not in sub["kind"]:
-                return False
-
-        # Section (district)
-        if sub.get("section"):
-            obj_section = obj.get("section")
-            if obj_section is not None and obj_section not in sub["section"]:
-                return False
-
-        # Area range
-        if sub.get("area_min") is not None or sub.get("area_max") is not None:
-            obj_area = obj.get("area", 0) or 0
-            if sub.get("area_min") is not None and obj_area < float(sub["area_min"]):
-                return False
-            if sub.get("area_max") is not None and obj_area > float(sub["area_max"]):
-                return False
-
-        # Layout - obj.layout in sub.layout list (4 means 4+)
-        if sub.get("layout"):
-            obj_layout = obj.get("layout")
-            if obj_layout is not None:
-                matched = False
-                for required in sub["layout"]:
-                    if required == 4 and obj_layout >= 4:
-                        matched = True
-                        break
-                    elif obj_layout == required:
-                        matched = True
-                        break
-                if not matched:
-                    return False
-
-        # Floor range
-        floor_min = sub.get("floor_min")
-        floor_max = sub.get("floor_max")
-        if floor_min is not None or floor_max is not None:
-            obj_floor = obj.get("floor")
-            if obj_floor is not None:
-                if floor_min is not None and obj_floor < floor_min:
-                    return False
-                if floor_max is not None and obj_floor > floor_max:
-                    return False
-
-        # Exclude rooftop addition
-        if sub.get("exclude_rooftop"):
-            if obj.get("is_rooftop"):
-                return False
-
-        return True
 
 
 # Singleton instance

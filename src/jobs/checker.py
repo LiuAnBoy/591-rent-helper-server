@@ -237,12 +237,15 @@ class Checker:
         # Start crawler run tracking
         run_id = await self._postgres.start_crawler_run(region)
 
+        # Progress counters kept outside try so the except path can record
+        # actual progress instead of overwriting it with zeros.
+        all_new_ids: set[int] = set()
+        total_fetched = 0
+
         try:
             # Step 1: Fetch list with auto-pagination
             # If page 1 is all new items, automatically fetch page 2
             all_list_items: list[ListRawData] = []
-            all_new_ids: set[int] = set()
-            total_fetched = 0
             pages_fetched = 0
 
             for page in range(self.MAX_PAGES):
@@ -581,8 +584,8 @@ class Checker:
             await self._postgres.finish_crawler_run(
                 run_id=run_id,
                 status="failed",
-                total_fetched=0,
-                new_objects=0,
+                total_fetched=total_fetched,
+                new_objects=len(all_new_ids),
                 error_message=str(e),
             )
             raise

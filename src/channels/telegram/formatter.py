@@ -253,6 +253,7 @@ class TelegramFormatter(BaseFormatter):
             surrounding_distance = obj.get("surrounding_distance")
             tags = obj.get("tags", [])
             url = obj.get("url", "")
+            gender = obj.get("gender")
         elif isinstance(obj, RentalObject):
             # Attribute access for RentalObject
             title = obj.title
@@ -266,6 +267,7 @@ class TelegramFormatter(BaseFormatter):
             surrounding_distance = obj.surrounding.distance if obj.surrounding else None
             tags = obj.tags
             url = obj.url
+            gender = obj.gender
         else:
             return str(obj)
 
@@ -308,6 +310,11 @@ class TelegramFormatter(BaseFormatter):
 
         if url:
             lines.append(f'\n🔗 <a href="{url}">查看詳情</a>')
+
+        # Gender restriction (only when limited to a single gender)
+        gender_label = {"boy": "限男", "girl": "限女"}.get(gender)
+        if gender_label:
+            lines.append(f"👤 性別：{gender_label}")
 
         return "\n".join(lines)
 

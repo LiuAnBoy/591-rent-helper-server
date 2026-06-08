@@ -4,6 +4,7 @@ Job Scheduler Module.
 Manages scheduled tasks for crawling and checking.
 """
 
+import asyncio
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -19,8 +20,16 @@ scheduler_log = logger.bind(module="Scheduler")
 # Timezone for scheduler
 TZ = ZoneInfo("Asia/Taipei")
 
-# Scheduler instance
-_scheduler = AsyncIOScheduler(timezone="Asia/Taipei")
+# Scheduler instance. job_defaults prevent the daytime/night/startup jobs from
+# stacking up overlapping runs that share the singleton checker/fetchers.
+_scheduler = AsyncIOScheduler(
+    timezone="Asia/Taipei",
+    job_defaults={"max_instances": 1, "coalesce": True, "misfire_grace_time": 30},
+)
+
+# Serializes run_checker_job across the (separate) daytime/night/startup jobs,
+# which APScheduler's per-job max_instances cannot do on its own.
+_job_lock = asyncio.Lock()
 
 # Checker instance (lazy initialized)
 _checker: Checker | None = None
@@ -61,37 +70,44 @@ async def run_checker_job(skip_night: bool = False) -> None:
             )
             return
 
-    try:
-        scheduler_log.info("Running scheduled checker job...")
-        checker = get_checker()
+    # Skip if another checker run is already in progress (avoids overlapping
+    # runs double-notifying the same new objects and closing shared fetchers).
+    if _job_lock.locked():
+        scheduler_log.info("Checker job already running, skipping this trigger")
+        return
 
-        # Only check regions with active subscriptions
-        results = await checker.check_active_regions()
+    async with _job_lock:
+        try:
+            scheduler_log.info("Running scheduled checker job...")
+            checker = get_checker()
 
-        if not results:
-            scheduler_log.info("No active regions to check")
-            return
+            # Only check regions with active subscriptions
+            results = await checker.check_active_regions()
 
-        for result in results:
-            region = result.get("region", "?")
-            broadcast = result.get("broadcast", {})
-            initialized_subs = result.get("initialized_subs", [])
+            if not results:
+                scheduler_log.info("No active regions to check")
+                return
 
-            scheduler_log.info(
-                f"Region {region}: {result.get('new_count', 0)} new, "
-                f"{len(result.get('matches', []))} matches, "
-                f"{broadcast.get('success', 0)} notified"
-            )
-            if initialized_subs:
+            for result in results:
+                region = result.get("region", "?")
+                broadcast = result.get("broadcast", {})
+                initialized_subs = result.get("initialized_subs", [])
+
                 scheduler_log.info(
-                    f"  Initialized {len(initialized_subs)} subscriptions: "
-                    f"{initialized_subs}"
+                    f"Region {region}: {result.get('new_count', 0)} new, "
+                    f"{len(result.get('matches', []))} matches, "
+                    f"{broadcast.get('success', 0)} notified"
                 )
-    except Exception as e:
-        scheduler_log.error(f"Checker job failed: {e}")
-    finally:
-        # Close fetchers to release resources
-        await close_checker()
+                if initialized_subs:
+                    scheduler_log.info(
+                        f"  Initialized {len(initialized_subs)} subscriptions: "
+                        f"{initialized_subs}"
+                    )
+        except Exception as e:
+            scheduler_log.error(f"Checker job failed: {e}")
+        finally:
+            # Close fetchers to release resources
+            await close_checker()
 
 
 def setup_jobs() -> None:

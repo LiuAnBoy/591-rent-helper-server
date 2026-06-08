@@ -111,8 +111,10 @@ class RedisConnection:
         if not ids:
             return
         key = self._seen_key(region)
-        await self.client.sadd(key, *[str(id_) for id_ in ids])
-        await self.client.expire(key, self.TTL_SEEN_IDS)
+        pipe = self.client.pipeline()
+        pipe.sadd(key, *[str(id_) for id_ in ids])
+        pipe.expire(key, self.TTL_SEEN_IDS)
+        await pipe.execute()
         redis_log.debug(f"Added {len(ids)} IDs to {key}")
 
     async def get_new_ids(self, region: int, ids: set[int]) -> set[int]:
@@ -334,8 +336,7 @@ class RedisConnection:
             subscription_id: Subscription ID
         """
         key = self._subscription_initialized_key(subscription_id)
-        await self.client.set(key, "1")
-        await self.client.expire(key, self.TTL_INITIALIZED)
+        await self.client.set(key, "1", ex=self.TTL_INITIALIZED)
         redis_log.debug(f"Marked subscription {subscription_id} as initialized")
 
     async def clear_subscription_initialized(self, subscription_id: int) -> None:
@@ -428,8 +429,22 @@ class RedisConnection:
                 sub, ensure_ascii=False, default=str
             )
 
+        # Full sync: also drop region keys that no longer have any enabled
+        # subscription, otherwise get_active_regions() keeps crawling them.
+        existing_regions: set[int] = set()
+        async for key in self.client.scan_iter(match="region:*:subscriptions"):
+            parts = key.split(":")
+            if len(parts) >= 2:
+                try:
+                    existing_regions.add(int(parts[1]))
+                except ValueError:
+                    pass
+        stale_regions = existing_regions - set(by_region.keys())
+
         # Clear and set for each region
         pipe = self.client.pipeline()
+        for region in stale_regions:
+            pipe.delete(self._subscriptions_key(region))
         for region, subs in by_region.items():
             key = self._subscriptions_key(region)
             pipe.delete(key)
@@ -439,6 +454,7 @@ class RedisConnection:
 
         redis_log.info(
             f"Synced {len(subscriptions)} subscriptions across {len(by_region)} regions"
+            + (f", cleared {len(stale_regions)} empty regions" if stale_regions else "")
         )
 
     async def remove_subscription(self, region: int, subscription_id: int) -> None:
