@@ -43,10 +43,16 @@ class TestShouldFetchDetail:
         ]
         assert should_fetch_detail(list_data, subs) is True
 
-    def test_negotiable_price_matches(self):
-        """Negotiable price (面議) should match (conservative)."""
+    def test_negotiable_price_excluded_when_filter(self):
+        """Unknown price (面議) is excluded when every sub has a price filter."""
         list_data = {"price_raw": "面議", "area_raw": "10坪"}
         subs = [{"price_min": 10000}]
+        assert should_fetch_detail(list_data, subs) is False
+
+    def test_negotiable_price_matches_without_filter(self):
+        """Unknown price still passes a sub with no price filter."""
+        list_data = {"price_raw": "面議", "area_raw": "10坪"}
+        subs = [{"area_min": 5}]
         assert should_fetch_detail(list_data, subs) is True
 
 

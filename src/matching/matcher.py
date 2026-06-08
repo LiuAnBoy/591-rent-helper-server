@@ -256,8 +256,13 @@ def match_price(
         True if price matches (or cannot be determined)
     """
     price = parse_price_value(obj_price)
-    if price is None:
-        return True  # Cannot parse, assume match (conservative)
+    has_filter = price_min is not None or price_max is not None
+
+    # Unknown or non-positive price (parse failure / missing). Only let it
+    # through when the subscription has no price filter, so a price-less object
+    # is never pushed to users who specified a budget.
+    if not price:
+        return not has_filter
 
     if price_min is not None and price < price_min:
         return False
@@ -486,8 +491,12 @@ def match_quick(obj: dict, sub: dict) -> bool:
         if not match_kind_quick(obj_kind_name, sub.get("kind")):
             return False
 
-    # 4. Price check - support both raw and parsed formats
-    price_value = obj.get("price") or obj.get("price_raw")
+    # 4. Price check - support both raw and parsed formats.
+    # Use price_raw only when there is no parsed price key (list-only data);
+    # keep an explicit 0 so a price-less object is not treated as "unknown raw".
+    price_value = (
+        obj.get("price") if obj.get("price") is not None else obj.get("price_raw")
+    )
     if not match_price(price_value, sub.get("price_min"), sub.get("price_max")):
         return False
 

@@ -427,6 +427,29 @@ class Checker:
                 if processed_objects:
                     await self._save_objects_batch(processed_objects, region)
 
+                # Step 5.5: Flag objects whose price could not be parsed.
+                # Rentals always have a concrete price, so price=0 means a
+                # parse failure (591 markup change / NUXT null). Still saved,
+                # but alert admin so it can be investigated.
+                missing_price_ids = [
+                    obj["id"] for obj in processed_objects if not obj.get("price")
+                ]
+                if missing_price_ids:
+                    checker_log.warning(
+                        f"{len(missing_price_ids)} objects with missing price: "
+                        f"{missing_price_ids}"
+                    )
+                    if self._broadcaster:
+                        await self._broadcaster.notify_admin(
+                            error_type=ErrorType.PRICE_MISSING,
+                            region=region,
+                            details=(
+                                f"{len(missing_price_ids)} 筆物件價格解析失敗 (price=0)\n"
+                                f"IDs: {missing_price_ids[:10]}"
+                                f"{'...' if len(missing_price_ids) > 10 else ''}"
+                            ),
+                        )
+
                 # Step 6: Subscription matching (only for objects with detail)
                 # Reuse all_subs from pre-filter step (already fetched above)
                 uninitialized_subs = await self._redis.get_uninitialized_subscriptions(
