@@ -499,7 +499,7 @@ class Checker:
                             # Initialized subscription - match and notify
                             matches.append((obj, [sub]))
                             checker_log.info(
-                                f"Object {obj['id']} matches subscription {sub_id}"
+                                f"Object {obj['source_id']} matches subscription {sub_id}"
                             )
 
                 # Refresh the initialized flag for EVERY current sub each run
