@@ -79,6 +79,14 @@ class TestTransformPrice:
         assert price == 0
         assert unit == ""
 
+    def test_price_with_extra_fee_text(self):
+        # 591 may append an extra-fee block inside the price element;
+        # the unit must stay clean and never overflow price_unit (varchar(20)).
+        price, unit = transform_price("22,000元/月(額外費用 1,554元/月)")
+        assert price == 22000
+        assert unit == "元/月"
+        assert len(unit) <= 20
+
 
 # ============================================================
 # transform_floor tests

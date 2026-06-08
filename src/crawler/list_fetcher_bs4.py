@@ -189,8 +189,13 @@ class ListFetcherBs4:
             result["title"] = title_elem.get_text(strip=True)
 
         # Price (raw, including unit)
+        # 591 may append an ".extra-text" paragraph (e.g. "(額外費用 1,554元/月)")
+        # inside the price block; drop it so only the rent + unit remain.
         price_elem = elem.select_one(".item-info-price")
         if price_elem:
+            extra = price_elem.select_one(".extra-text")
+            if extra:
+                extra.extract()
             result["price_raw"] = price_elem.get_text(strip=True)
 
         # Tags from multiple possible selectors
