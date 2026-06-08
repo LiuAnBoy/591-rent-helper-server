@@ -29,6 +29,7 @@ class ErrorType(Enum):
 
     LIST_FETCH_FAILED = ("LIST_FETCH_FAILED", "列表頁抓取失敗", "🔴")
     DETAIL_FETCH_FAILED = ("DETAIL_FETCH_FAILED", "詳情頁抓取失敗", "🟡")
+    PRICE_MISSING = ("PRICE_MISSING", "物件價格解析失敗", "🟡")
     DB_ERROR = ("DB_ERROR", "資料庫錯誤", "🔴")
     REDIS_ERROR = ("REDIS_ERROR", "Redis 錯誤", "🔴")
     BROADCAST_ERROR = ("BROADCAST_ERROR", "推播發送失敗", "🟡")

@@ -320,7 +320,7 @@ class TestMatchObjectToSubscription:
         assert match_object_to_subscription(checker_sample_object, sub) is True
 
     def test_none_values_in_object(self):
-        """Object with None price should match (conservative approach)."""
+        """None values must not crash; price filter excludes unknown price."""
         obj = {
             "id": 123,
             "price": None,
@@ -330,9 +330,10 @@ class TestMatchObjectToSubscription:
             "gender": None,
             "pet_allowed": None,
         }
-        sub = {"price_min": 10000}
-        # None price cannot be compared, so we assume match (conservative)
-        assert match_object_to_subscription(obj, sub) is True
+        # No price filter -> None values handled gracefully, matches.
+        assert match_object_to_subscription(obj, {}) is True
+        # With a price filter, an unknown price is excluded (not notified).
+        assert match_object_to_subscription(obj, {"price_min": 10000}) is False
 
 
 # ============================================================
@@ -492,11 +493,23 @@ class TestMatchQuick:
         sub = {"price_min": 10000, "price_max": 20000, "area_max": 15}
         assert match_quick(obj, sub) is False
 
-    def test_none_price_matches(self):
-        """None price should match (conservative)."""
+    def test_none_price_excluded_when_filter(self):
+        """Unknown price must NOT match when a price filter is set."""
         obj = {"price": None, "area": 12.0}
-        sub = {"price_min": 10000}
-        assert match_quick(obj, sub) is True
+        assert match_quick(obj, {"price_min": 10000}) is False
+
+    def test_none_price_matches_without_filter(self):
+        """Unknown price still matches when no price filter is set."""
+        obj = {"price": None, "area": 12.0}
+        assert match_quick(obj, {}) is True
+
+    def test_zero_price_excluded_when_filter(self):
+        """price=0 (parse failure) must NOT match when a price filter is set."""
+        obj = {"price": 0, "area": 12.0}
+        assert match_quick(obj, {"price_min": 10000}) is False
+        assert match_quick(obj, {"price_max": 30000}) is False
+        # No price filter -> still matches.
+        assert match_quick(obj, {}) is True
 
     def test_none_area_matches(self):
         """None area should match (conservative)."""
