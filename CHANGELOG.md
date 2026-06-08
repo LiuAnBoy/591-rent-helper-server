@@ -26,6 +26,9 @@
 - **爬蟲 / detail 成功標準不一致**：BS4 要 `tags` 非空才算成功，Playwright 找到結構就算，
   導致沒 tags 的有效物件被 BS4 誤判失敗、白白 fallback，且兩路徑接受品質不一。
   統一成 `_is_valid_detail`（`title` + `price_raw`），兩條路徑共用同門檻。
+- **爬蟲 / 頂加物件遺失**：591 detail 把頂樓加蓋表示成一般樓層（如 `5F/5F`），覆蓋掉
+  list 的 `頂樓加蓋/4F`，使 `is_rooftop` 翻成 False、「排除頂加」訂閱失效。combiner 改為
+  當 list 標頂加而 detail 沒標時保留 list 的 floor，維持 `is_rooftop=True` 與總樓層。
 - **即時通知 / API 不符**：`InstantNotifier` 以 `service`/`service_id` 呼叫
   broadcaster，但實際參數為 `provider`/`provider_id`，導致每次即時通知都 `TypeError`
   被吞掉、完全沒送出。已修正參數名，並改為檢查回傳 `success` 才計入已通知數。

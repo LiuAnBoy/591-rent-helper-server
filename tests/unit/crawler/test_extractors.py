@@ -109,6 +109,22 @@ class TestCombineRawData:
         result = combine_raw_data(sample_list_raw, detail_empty_section)
         assert result["section"] == "7"  # Fallback to list
 
+    def test_rooftop_preserved_from_list(self, sample_list_raw, sample_detail_raw):
+        """List rooftop marker is kept when detail floor drops it (e.g. '5F/5F')."""
+        list_rooftop = {**sample_list_raw, "floor_raw": "頂樓加蓋/4F"}
+        detail_normal = {**sample_detail_raw, "floor_raw": "5F/5F"}
+        result = combine_raw_data(list_rooftop, detail_normal)
+        assert result["floor_raw"] == "頂樓加蓋/4F"
+
+    def test_detail_floor_wins_when_no_rooftop(
+        self, sample_list_raw, sample_detail_raw
+    ):
+        """Normal listings still take the detail floor (detail priority)."""
+        list_data = {**sample_list_raw, "floor_raw": "3F/5F"}
+        detail_data = {**sample_detail_raw, "floor_raw": "8F/12F"}
+        result = combine_raw_data(list_data, detail_data)
+        assert result["floor_raw"] == "8F/12F"
+
 
 class TestCombineWithDetailOnly:
     """Tests for combine_with_detail_only function."""
