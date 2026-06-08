@@ -186,7 +186,7 @@ Key variables (see `.env.example` for full list):
 
 ## Test Coverage
 
-**Total: 225 unit tests**
+**Total: 295 unit tests**
 
 ⚠️ **IMPORTANT: If you modify any code in the areas below, run `uv run pytest` to verify tests pass.**
 
@@ -194,10 +194,10 @@ Key variables (see `.env.example` for full list):
 
 | Module | Test File | Tests | Coverage |
 |--------|-----------|-------|----------|
-| `src/channels/telegram/formatter.py` | `test_formatter.py` | 22 | Message formatting, HTML escaping, command results |
-| `src/crawler/` (extractors) | `test_extractors.py` | 29 | Data extraction, NUXT parsing, HTML parsing, raw data combining |
-| `src/matching/` | `test_matcher.py`, `test_pre_filter.py` | 100 | Subscription matching, parsing, floor extraction, pre-filtering |
-| `src/utils/` (transformers) | `test_transformers.py` | 74 | All data transformers (price, floor, layout, area, address, etc.) |
+| `src/channels/telegram/formatter.py` | `test_formatter.py` | 25 | Message formatting, HTML escaping, gender line, command results |
+| `src/crawler/` (extractors + combiner + detail success) | `test_extractors.py` | 51 | Data extraction, NUXT parsing, HTML parsing, raw data combining, rooftop preservation, `_is_valid_detail` |
+| `src/matching/` | `test_matcher.py`, `test_pre_filter.py` | 139 | Subscription matching, parsing, floor extraction, pre-filtering, unknown/zero-price exclusion |
+| `src/utils/` (transformers) | `test_transformers.py` | 80 | All data transformers (price + extra-fee, kind-from-name, floor, layout, area, gender, etc.) |
 
 ### Test Details
 
@@ -207,21 +207,22 @@ Key variables (see `.env.example` for full list):
 - `TestFormatCommandResult` - Bot command response formatting
 
 **Crawler (`test_extractors.py`)**
-- `TestCombineRawData` - Merging list + detail raw data
+- `TestCombineRawData` - Merging list + detail raw data (incl. rooftop marker preserved from list when detail reports a plain floor)
 - `TestParseItemRawFromNuxt` - Playwright NUXT data parsing
-- `TestParseItemRaw` / `TestParseDetailRaw` - BS4 HTML parsing
+- `TestParseItemRaw` / `TestParseDetailRaw` - BS4 HTML parsing (incl. `.pattern`-scoped fields, gender, fitment from structured value not free text)
 - `TestExtractSurrounding` - Surrounding info extraction
+- `TestIsValidDetail` - Shared BS4/Playwright detail success criterion (title + price)
 
 **Matching (`test_matcher.py`, `test_pre_filter.py`)**
 - `TestParsePriceValue` / `TestParseAreaValue` - Value parsing from raw strings
-- `TestMatchQuick` - Quick matching (price/area only)
+- `TestMatchQuick` - Quick matching (price/area; unknown/zero price excluded when a price filter is set)
 - `TestMatchObjectToSubscription` - Full subscription matching (all criteria)
 - `TestMatchFloor` / `TestExtractFloorNumber` - Floor extraction and matching
 - `TestShouldFetchDetail` / `TestFilterObjects` - Pre-filter logic
 
 **Utils (`test_transformers.py`)**
-- Transform functions: ID, price, floor, layout, area, address, shape, fitment, gender, pet, options, surrounding
-- `TestTransformToDbReady` - Full transformation pipeline
+- Transform functions: ID, price (incl. extra-fee stripping), floor, layout, area, address, shape, fitment, gender (full-sentence forms), pet, options, surrounding
+- `TestTransformToDbReady` - Full transformation pipeline (incl. kind derived from kind_name)
 
 ### Manual Test Scripts (`scripts/`)
 
@@ -244,5 +245,5 @@ The following areas do not have unit tests:
 - `src/api/` - API routes, dependencies
 - `src/connections/` - Database connections
 - `src/modules/` - Repository layer
-- `src/jobs/broadcaster.py`, `instant_notify.py` - Notification jobs (orchestration only)
-- `src/crawler/*_fetcher.py` - Fetcher orchestrators (only extractors tested)
+- `src/jobs/` - `broadcaster.py` (incl. retry), `instant_notify.py`, `checker.py`, `scheduler.py` (orchestration only)
+- `src/crawler/*_fetcher.py` - Fetcher orchestrators (only extractors + `_is_valid_detail` tested)
