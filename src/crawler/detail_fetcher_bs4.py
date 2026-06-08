@@ -230,47 +230,72 @@ class DetailFetcherBs4:
             if m:
                 result["kind"] = m.group(1)
 
-        # Floor from span matching pattern
         floor_pattern = re.compile(r"\d+F/\d+F|B\d+/\d+F|頂[層樓]加蓋")
-        for elem in soup.find_all("span"):
-            text = elem.get_text(strip=True)
-            if floor_pattern.match(text):
-                result["floor_raw"] = text
-                break
 
-        # Layout from page text - prioritize longer matches
-        layout_patterns = [
-            r"([1-9]房\d+廳\d+衛)",  # Full: 4房2廳2衛
-            r"([1-9]房\d+廳)",  # Partial: 2房1廳
-            r"([1-9]房\d+衛)",  # Partial: 2房1衛
-            r"([1-9]房|開放格局)",  # Fallback: 1房 or 開放格局
-        ]
-        for pattern in layout_patterns:
-            m = re.search(pattern, page_text)
+        # Primary source: the ".pattern" block holds the main object's headline
+        # info (layout / area / floor / shape) as discrete spans, isolated from
+        # recommended listings and free-text sections that pollute a whole-page
+        # scan. Classify each span by pattern so field order does not matter.
+        pattern_block = soup.select_one(".pattern")
+        if pattern_block:
+            for span in pattern_block.find_all("span"):
+                text = span.get_text(strip=True)
+                if not text:
+                    continue
+                if not result["layout_raw"] and (
+                    re.match(r"[1-9]房", text) or text == "開放格局"
+                ):
+                    result["layout_raw"] = text
+                elif not result["area_raw"] and re.fullmatch(r"[\d.]+\s*坪", text):
+                    result["area_raw"] = text
+                elif not result["floor_raw"] and floor_pattern.match(text):
+                    result["floor_raw"] = text
+                elif not result["shape_raw"] and text in SHAPE_NAMES:
+                    result["shape_raw"] = text
+
+        # Fallback to whole-page heuristics for any field the ".pattern" block
+        # did not yield (e.g. a markup change), so extraction degrades, not breaks.
+        if not result["floor_raw"]:
+            for elem in soup.find_all("span"):
+                text = elem.get_text(strip=True)
+                if floor_pattern.match(text):
+                    result["floor_raw"] = text
+                    break
+        if not result["layout_raw"]:
+            for layout_pattern in (
+                r"([1-9]房\d+廳\d+衛)",  # Full: 4房2廳2衛
+                r"([1-9]房\d+廳)",  # Partial: 2房1廳
+                r"([1-9]房\d+衛)",  # Partial: 2房1衛
+                r"([1-9]房|開放格局)",  # Fallback: 1房 or 開放格局
+            ):
+                m = re.search(layout_pattern, page_text)
+                if m:
+                    result["layout_raw"] = m.group(1)
+                    break
+        if not result["area_raw"]:
+            m = re.search(r"[\d.]+\s*坪", page_text)
             if m:
-                result["layout_raw"] = m.group(1)
-                break
-
-        # Area from page text
-        m = re.search(r"[\d.]+\s*坪", page_text)
-        if m:
-            result["area_raw"] = m.group(0)
+                result["area_raw"] = m.group(0)
+        if not result["shape_raw"]:
+            for name in SHAPE_NAMES:
+                if name in page_text:
+                    result["shape_raw"] = name
+                    break
 
         # Gender restriction (591 field text, e.g. "此房屋限男生租住")
         gender_match = re.search(r"限([男女])生租住", page_text)
         if gender_match:
             result["gender_raw"] = "限" + gender_match.group(1)
 
-        # Shape (building type)
-        for name in SHAPE_NAMES:
-            if name in page_text:
-                result["shape_raw"] = name
-                break
-
-        # Fitment (decoration level)
-        for name in FITMENT_NAMES:
-            if name in page_text:
-                result["fitment_raw"] = name
+        # Fitment: read the structured "裝潢程度" key-value (not the whole page),
+        # so a description that merely mentions "新裝潢" is not mistaken for the
+        # actual decoration grade.
+        for value_span in soup.select("span.value"):
+            parent = value_span.find_parent()
+            if parent and parent.get_text(strip=True).startswith("裝潢程度"):
+                fitment = value_span.get_text(strip=True)
+                if fitment in FITMENT_NAMES:
+                    result["fitment_raw"] = fitment
                 break
 
         # Options (equipment) - only items without 'del' class
