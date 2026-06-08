@@ -124,46 +124,62 @@ def setup_jobs() -> None:
     settings = get_settings()
     crawler = settings.crawler
 
-    scheduler_log.info(
-        f"Scheduler started: "
-        f"{crawler.night_end_hour:02d}:00-{crawler.night_start_hour:02d}:00 every {crawler.interval_minutes}min, "
-        f"{crawler.night_start_hour:02d}:00-{crawler.night_end_hour:02d}:00 every {crawler.night_interval_minutes}min"
-    )
+    if settings.is_development:
+        # Development: single interval job, runs 24h with no day/night split.
+        scheduler_log.info(
+            f"Scheduler started (development): every {crawler.interval_minutes}min, 24h"
+        )
+        _scheduler.add_job(
+            run_checker_job,  # skip_night=False: never skip
+            IntervalTrigger(
+                minutes=crawler.interval_minutes,
+                timezone="Asia/Taipei",
+            ),
+            id="checker_job_dev",
+            name=f"Dev checker (every {crawler.interval_minutes} min, 24h)",
+            replace_existing=True,
+        )
+    else:
+        scheduler_log.info(
+            f"Scheduler started: "
+            f"{crawler.night_end_hour:02d}:00-{crawler.night_start_hour:02d}:00 every {crawler.interval_minutes}min, "
+            f"{crawler.night_start_hour:02d}:00-{crawler.night_end_hour:02d}:00 every {crawler.night_interval_minutes}min"
+        )
 
-    # Daytime job: interval-based scheduling (skips during night hours)
-    _scheduler.add_job(
-        partial(run_checker_job, skip_night=True),
-        IntervalTrigger(
-            minutes=crawler.interval_minutes,
-            timezone="Asia/Taipei",
-        ),
-        id="checker_job_daytime",
-        name=f"Daytime checker (every {crawler.interval_minutes} min)",
-        replace_existing=True,
-    )
+        # Daytime job: interval-based scheduling (skips during night hours)
+        _scheduler.add_job(
+            partial(run_checker_job, skip_night=True),
+            IntervalTrigger(
+                minutes=crawler.interval_minutes,
+                timezone="Asia/Taipei",
+            ),
+            id="checker_job_daytime",
+            name=f"Daytime checker (every {crawler.interval_minutes} min)",
+            replace_existing=True,
+        )
 
-    # Nighttime job: fixed times (cron-based)
-    def get_minute_expr(interval: int) -> str:
-        if interval >= 60:
-            return "0"
-        minutes = list(range(0, 60, interval))
-        return ",".join(str(m) for m in minutes)
+        # Nighttime job: fixed times (cron-based)
+        def get_minute_expr(interval: int) -> str:
+            if interval >= 60:
+                return "0"
+            minutes = list(range(0, 60, interval))
+            return ",".join(str(m) for m in minutes)
 
-    night_minutes = get_minute_expr(crawler.night_interval_minutes)
-    night_hours = list(range(crawler.night_start_hour, crawler.night_end_hour))
-    night_hours_expr = ",".join(str(h) for h in night_hours)
+        night_minutes = get_minute_expr(crawler.night_interval_minutes)
+        night_hours = list(range(crawler.night_start_hour, crawler.night_end_hour))
+        night_hours_expr = ",".join(str(h) for h in night_hours)
 
-    _scheduler.add_job(
-        run_checker_job,
-        CronTrigger(
-            minute=night_minutes,
-            hour=night_hours_expr,
-            timezone="Asia/Taipei",
-        ),
-        id="checker_job_night",
-        name=f"Night checker (every {crawler.night_interval_minutes} min)",
-        replace_existing=True,
-    )
+        _scheduler.add_job(
+            run_checker_job,
+            CronTrigger(
+                minute=night_minutes,
+                hour=night_hours_expr,
+                timezone="Asia/Taipei",
+            ),
+            id="checker_job_night",
+            name=f"Night checker (every {crawler.night_interval_minutes} min)",
+            replace_existing=True,
+        )
 
     # Run immediately on startup
     _scheduler.add_job(

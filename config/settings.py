@@ -87,8 +87,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Deployment environment. "development" runs the crawler on a single
+    # 24h interval (no day/night split); "production" keeps day/night scheduling.
+    environment: str = "production"
+
     log_level: str = "INFO"
     jwt_secret: str = "change_me_in_production_591_crawler_jwt_secret"
+
+    @property
+    def is_development(self) -> bool:
+        """True when running in the development environment."""
+        return self.environment.lower() in ("development", "dev", "local")
 
     postgres: PostgresSettings = PostgresSettings()
     redis: RedisSettings = RedisSettings()
