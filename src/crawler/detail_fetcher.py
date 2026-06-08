@@ -16,6 +16,23 @@ from src.crawler.types import DetailFetchStatus, DetailRawData
 fetcher_log = logger.bind(module="DetailFetcher")
 
 
+def _is_valid_detail(data: DetailRawData | None) -> bool:
+    """
+    Shared success criterion for both BS4 and Playwright detail results.
+
+    A detail page is considered successfully fetched when its core fields
+    (title + price) parsed. Tags are optional, so they must not gate success
+    (a valid listing without tags previously failed BS4 and fell back wastefully).
+
+    Args:
+        data: Parsed detail raw data (or None)
+
+    Returns:
+        True if the result has the core fields
+    """
+    return bool(data and data.get("title") and data.get("price_raw"))
+
+
 class DetailFetcher:
     """
     Unified detail fetcher with automatic fallback.
@@ -121,7 +138,7 @@ class DetailFetcher:
                 data, status = result
                 if status == "not_found":
                     not_found_ids.add(oid)
-                elif data and data.get("tags"):
+                elif _is_valid_detail(data):
                     results[oid] = data
                 else:
                     still_pending.add(oid)
@@ -193,12 +210,12 @@ class DetailFetcher:
             if status == "not_found":
                 return None, "not_found"
 
+            if _is_valid_detail(result):
+                return result, "success"
+
             if result:
-                # Check if we got meaningful data (tags should not be empty)
-                if result.get("tags"):
-                    return result, "success"
                 fetcher_log.warning(
-                    f"bs4 raw attempt {attempt + 1}/{self._max_retries} returned empty tags for {object_id}"
+                    f"bs4 raw attempt {attempt + 1}/{self._max_retries} returned incomplete data for {object_id}"
                 )
             else:
                 fetcher_log.warning(
@@ -209,10 +226,16 @@ class DetailFetcher:
             if attempt < self._max_retries - 1:
                 await asyncio.sleep(1.5)
 
-        # Fallback to Playwright
+        # Fallback to Playwright (apply the same validity bar as BS4)
         fetcher_log.debug(f"BS4 raw failed, falling back to Playwright for {object_id}")
         await self._ensure_playwright()
-        return await self._playwright_fetcher.fetch_detail_raw(object_id)
+        result, status = await self._playwright_fetcher.fetch_detail_raw(object_id)
+        if status == "success" and not _is_valid_detail(result):
+            fetcher_log.warning(
+                f"Playwright returned incomplete data for {object_id}"
+            )
+            return None, "error"
+        return result, status
 
     async def fetch_details_batch_raw(
         self,
@@ -250,9 +273,20 @@ class DetailFetcher:
             pw_results, pw_not_found, pw_errors = await self._playwright_batch(
                 failed_ids
             )
-            results.update(pw_results)
+            # Apply the same validity bar so both paths accept the same quality
+            valid_pw = {
+                oid: data
+                for oid, data in pw_results.items()
+                if _is_valid_detail(data)
+            }
+            dropped = len(pw_results) - len(valid_pw)
+            if dropped:
+                fetcher_log.warning(
+                    f"Dropped {dropped} incomplete Playwright detail results"
+                )
+            results.update(valid_pw)
             not_found_count += pw_not_found
-            error_count = pw_errors
+            error_count = pw_errors + dropped
 
         fetcher_log.info(
             f"Fetched {len(results)}/{len(object_ids)} detail pages (raw) "

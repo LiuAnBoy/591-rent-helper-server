@@ -23,6 +23,9 @@
   list-only 物件 `kind=0`。改為缺數字碼時用 `kind_name` 換算（`雅房→4` 等），所有物件都有 kind。
 - **觀測 / 欄位解析異常**：物件存檔後若 `price`/`section`/`kind` 為 0（理應永遠有），
   仍照存，並發 admin 異常推播（`FIELD_MISSING`）附上 IDs，方便察覺 591 改版。
+- **爬蟲 / detail 成功標準不一致**：BS4 要 `tags` 非空才算成功，Playwright 找到結構就算，
+  導致沒 tags 的有效物件被 BS4 誤判失敗、白白 fallback，且兩路徑接受品質不一。
+  統一成 `_is_valid_detail`（`title` + `price_raw`），兩條路徑共用同門檻。
 - **即時通知 / API 不符**：`InstantNotifier` 以 `service`/`service_id` 呼叫
   broadcaster，但實際參數為 `provider`/`provider_id`，導致每次即時通知都 `TypeError`
   被吞掉、完全沒送出。已修正參數名，並改為檢查回傳 `success` 才計入已通知數。

@@ -9,6 +9,7 @@ from src.crawler.combiner import (
     combine_with_detail_only,
     combine_with_list_only,
 )
+from src.crawler.detail_fetcher import _is_valid_detail
 from src.crawler.detail_fetcher_bs4 import _parse_detail_raw
 from src.crawler.detail_fetcher_playwright import (
     _extract_surrounding,
@@ -283,6 +284,26 @@ class TestGetTotalFromNuxt:
 # ============================================================
 # detail_extractor_playwright.py tests
 # ============================================================
+
+
+class TestIsValidDetail:
+    """Tests for the shared detail success criterion."""
+
+    def test_valid_with_title_and_price(self):
+        assert _is_valid_detail({"title": "套房", "price_raw": "8,000元/月"}) is True
+
+    def test_invalid_when_no_tags_but_still_valid(self):
+        # Tags are optional; a listing without tags is still valid.
+        assert _is_valid_detail({"title": "套房", "price_raw": "8,000元/月", "tags": []}) is True
+
+    def test_invalid_missing_price(self):
+        assert _is_valid_detail({"title": "套房", "price_raw": ""}) is False
+
+    def test_invalid_missing_title(self):
+        assert _is_valid_detail({"title": "", "price_raw": "8,000元/月"}) is False
+
+    def test_invalid_none(self):
+        assert _is_valid_detail(None) is False
 
 
 class TestFindDetailData:
