@@ -109,6 +109,8 @@ src/
 │   └── redis.py          # Redis connection
 │
 ├── crawler/               # Web scraping modules
+│   ├── types.py                  # Raw data type definitions
+│   ├── combiner.py               # Merge list + detail raw data
 │   ├── list_fetcher.py           # List fetcher orchestrator
 │   ├── list_fetcher_bs4.py       # BS4 list parser
 │   ├── list_fetcher_playwright.py # Playwright list fetcher
@@ -137,14 +139,14 @@ src/
 │   └── objects/          # Rental object storage
 │
 └── utils/
-    ├── mappings.py       # Constants and code mappings
-    └── parsers/          # Data parsing utilities
-        ├── detail.py     # Detail page data parser
-        ├── layout.py     # Layout string parser (e.g., "3房2廳" → 3)
-        ├── floor.py      # Floor string parser (e.g., "3/12" → floor info)
-        ├── shape.py      # Building shape parser
-        ├── fitment.py    # Fitment level parser
-        └── rule.py       # Rule/restriction parser
+    ├── mappings/         # Constants and code mappings (package)
+    │   ├── kind.py       # Rental kind codes
+    │   ├── shape.py      # Building shape codes
+    │   ├── fitment.py    # Fitment level codes
+    │   ├── options.py    # Equipment option codes
+    │   ├── other.py      # Feature ("other") codes
+    │   └── sections/     # Region/section code tables (taipei, new_taipei)
+    └── transformers.py   # ETL transform layer (raw → DB-ready)
 ```
 
 ## Testing Crawlers

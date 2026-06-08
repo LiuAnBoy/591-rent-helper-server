@@ -9,6 +9,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Migration / 合併單一檔**：將 12 支增量 migration（`002`~`20260211002`）合併回單一
+  `migrations/init.sql`，內容對齊正式機現況（以 prod schema dump 逐欄/索引/view/seed 驗證等價）。
+  正式機 `schema_migrations` 已記錄各檔名故不重跑；全新部署只套用 `init.sql`，
+  順帶修掉先前 `init.sql` 因檔名排序落在 migration 之後、導致全新 DB 部署失敗的隱患。
+  日後 schema 變更直接更新 `init.sql`（既有 DB 仍需手動 ALTER 或另開 migration）。
+
 ### Added
 
 - **推播 / 性別**：Telegram 物件通知在最底下顯示「性別：限男／限女」，

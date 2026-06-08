@@ -319,16 +319,14 @@ python scripts/test_detail_playwright.py <object_id>
 ├── config/
 │   └── settings.py              # 應用程式設定
 ├── migrations/
-│   ├── init.sql                 # 資料庫初始化
-│   ├── 002_user_providers.sql   # 用戶 Provider 關聯
-│   ├── 003_instant_notify_index.sql  # 即時通知索引
-│   └── 20260116001_add_has_detail_column.sql  # has_detail 欄位
+│   └── init.sql                 # 完整資料庫 schema（單一檔，與正式機同步）
 ├── src/
 │   ├── api/
 │   │   ├── main.py              # FastAPI 應用程式
 │   │   ├── dependencies.py      # 依賴注入
 │   │   └── routes/              # API 路由
 │   ├── channels/
+│   │   ├── base.py              # 頻道抽象介面
 │   │   ├── commands/            # 平台無關的指令
 │   │   │   ├── base.py          # 指令基礎類別
 │   │   │   ├── registry.py      # 指令註冊表
@@ -358,18 +356,20 @@ python scripts/test_detail_playwright.py <object_id>
 │   │   ├── scheduler.py         # 排程器
 │   │   ├── checker.py           # 定時爬取 & 物件比對
 │   │   ├── broadcaster.py       # 推播通知
-│   │   ├── instant_notify.py    # 即時通知（Redis 優先 + 增量詳情抓取）
-│   │   ├── pre_filter.py        # 價格/坪數粗篩
-│   │   └── parser.py            # 資料解析
+│   │   └── instant_notify.py    # 即時通知（Redis 優先 + 增量詳情抓取）
+│   ├── matching/
+│   │   ├── matcher.py           # 訂閱比對核心邏輯（match_quick / match_full）
+│   │   └── pre_filter.py        # 詳情抓取前的價格/坪數粗篩
 │   ├── middleware/
-│   │   └── cors.py              # CORS 設定
+│   │   ├── cors.py              # CORS 設定
+│   │   └── logging.py           # 請求日誌
 │   ├── modules/
 │   │   ├── users/               # 使用者模組
 │   │   ├── providers/           # 登入提供者模組 & Redis 同步
 │   │   ├── subscriptions/       # 訂閱模組
 │   │   └── objects/             # 物件模組
 │   └── utils/
-│       ├── mappings.py          # 常數對照表
+│       ├── mappings/            # 常數對照表（kind/shape/fitment/options/other/sections）
 │       └── transformers.py      # ETL Transform 層
 ├── scripts/
 │   ├── test_list_bs4.py         # BS4 列表爬蟲測試
@@ -390,22 +390,26 @@ python scripts/test_detail_playwright.py <object_id>
 
 ## Migration 管理
 
-### 新增 Migration
+本專案採**單一 `migrations/init.sql`**，內容即完整資料庫 schema，與正式機現況同步。
+`deploy.sh` 透過 `schema_migrations` 表追蹤已套用的檔案，同一檔名只會執行一次。
 
-在 `migrations/` 資料夾新增 SQL 檔案，命名格式：
-
-```
-migrations/
-└── init.sql    # 資料庫初始化
-```
-
-### 執行 Migration
+### 執行
 
 ```bash
 ./deploy.sh migrate
 ```
 
-腳本會自動追蹤已執行的 migrations，只執行新的。
+- **全新資料庫**：套用 `init.sql` 建立完整 schema。
+- **已初始化的資料庫（含正式機）**：`init.sql` 已記錄於 `schema_migrations`，不會重跑。
+
+### 修改 schema
+
+> ⚠️ 編輯 `init.sql` **只對全新資料庫生效**，不會自動套用到已初始化的資料庫。
+
+要變更既有資料庫（例如正式機）的 schema：
+
+1. 更新 `migrations/init.sql`（保持它等於最新的完整 schema）。
+2. 對既有資料庫手動執行對應的 `ALTER`，或新增一支 `YYYYMMDDNN_xxx.sql` migration 檔（會被 `deploy.sh` 依檔名排序套用）後再 merge 回 `init.sql`。
 
 ---
 

@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS role_limits (
 INSERT INTO role_limits (role, max_subscriptions, description) VALUES
     ('admin', -1, '管理員，無限制'),
     ('vip', 20, 'VIP 用戶'),
-    ('user', 3, '一般用戶')
+    ('user', 2, '一般用戶')
 ON CONFLICT (role) DO NOTHING;
 
 CREATE TRIGGER update_role_limits_updated_at
@@ -157,6 +157,9 @@ CREATE TRIGGER update_subscriptions_updated_at
     BEFORE UPDATE ON subscriptions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+COMMENT ON COLUMN subscriptions.floor_min IS 'Minimum floor filter (inclusive)';
+COMMENT ON COLUMN subscriptions.floor_max IS 'Maximum floor filter (inclusive, NULL=no limit)';
+
 -- ============================================
 -- 5. Objects (物件表)
 -- ============================================
@@ -241,7 +244,7 @@ CREATE INDEX IF NOT EXISTS idx_objects_price ON objects(price);
 CREATE INDEX IF NOT EXISTS idx_objects_layout ON objects(layout);
 CREATE INDEX IF NOT EXISTS idx_objects_shape ON objects(shape);
 CREATE INDEX IF NOT EXISTS idx_objects_area ON objects(area);
-CREATE INDEX IF NOT EXISTS idx_objects_floor ON objects(floor);
+CREATE INDEX IF NOT EXISTS idx_objects_floor_new ON objects(floor);
 CREATE INDEX IF NOT EXISTS idx_objects_total_floor ON objects(total_floor);
 CREATE INDEX IF NOT EXISTS idx_objects_bathroom ON objects(bathroom);
 CREATE INDEX IF NOT EXISTS idx_objects_fitment ON objects(fitment);
@@ -250,7 +253,6 @@ CREATE INDEX IF NOT EXISTS idx_objects_options ON objects USING GIN(options);
 CREATE INDEX IF NOT EXISTS idx_objects_is_rooftop ON objects(is_rooftop);
 CREATE INDEX IF NOT EXISTS idx_objects_gender ON objects(gender);
 CREATE INDEX IF NOT EXISTS idx_objects_pet_allowed ON objects(pet_allowed);
-CREATE INDEX IF NOT EXISTS idx_objects_surrounding_distance ON objects(surrounding_distance);
 CREATE INDEX IF NOT EXISTS idx_objects_first_seen_at ON objects(first_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_objects_is_active ON objects(is_active);
 CREATE INDEX IF NOT EXISTS idx_objects_region_created_at ON objects(region, created_at DESC);
@@ -260,6 +262,9 @@ CREATE INDEX IF NOT EXISTS idx_objects_created_at ON objects(created_at DESC);
 CREATE TRIGGER update_objects_updated_at
     BEFORE UPDATE ON objects
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+COMMENT ON COLUMN objects.total_floor IS 'Total floors in building';
+COMMENT ON COLUMN objects.floor IS 'Current floor: positive=normal, 0=rooftop, negative=basement (B1=-1, B2=-2)';
 
 -- ============================================
 -- 6. Crawler Runs (爬蟲執行記錄)
@@ -323,8 +328,7 @@ SELECT
     last_seen_at,
     created_at,
     updated_at,
-    is_active,
-    has_detail
+    is_active
 FROM objects
 WHERE first_seen_at > NOW() - INTERVAL '7 days'
   AND is_active = TRUE
