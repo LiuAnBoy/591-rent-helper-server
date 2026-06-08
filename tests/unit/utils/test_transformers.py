@@ -476,6 +476,16 @@ class TestTransformToDbReady:
         assert result["price"] == 0
         assert result["pet_allowed"] is False
 
+    def test_kind_derived_from_kind_name(self):
+        # List-only objects have no numeric kind; derive it from kind_name.
+        data = {"id": 1, "kind_name": "雅房"}
+        assert transform_to_db_ready(data)["kind"] == 4
+
+    def test_kind_prefers_numeric_code(self):
+        # Explicit numeric kind wins over kind_name.
+        data = {"id": 1, "kind": "2", "kind_name": "雅房"}
+        assert transform_to_db_ready(data)["kind"] == 2
+
     def test_result_has_all_required_fields(self, sample_combined_data):
         result = transform_to_db_ready(sample_combined_data)
 

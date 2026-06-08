@@ -13,6 +13,7 @@ from src.utils.mappings import (
     OPTIONS_NAME_TO_CODE,
     OTHER_NAME_TO_CODE,
     SHAPE_NAME_TO_CODE,
+    convert_kind_name_to_code,
 )
 
 # ============================================
@@ -568,6 +569,12 @@ def transform_to_db_ready(combined: dict) -> DBReadyData:
         except (ValueError, TypeError):
             return default
 
+    # Kind: prefer the numeric code (from detail breadcrumb); fall back to the
+    # kind_name shown on the list page so list-only objects still get a code.
+    kind = safe_int(combined.get("kind"), 0)
+    if not kind:
+        kind = convert_kind_name_to_code(combined.get("kind_name")) or 0
+
     # Build result
     result: DBReadyData = {
         "id": obj_id,
@@ -577,7 +584,7 @@ def transform_to_db_ready(combined: dict) -> DBReadyData:
         "price_unit": price_unit,
         "region": safe_int(combined.get("region"), 0),
         "section": safe_int(combined.get("section"), 0),
-        "kind": safe_int(combined.get("kind"), 0),
+        "kind": kind,
         "kind_name": combined.get("kind_name", ""),
         "address": address or "",
         "floor": floor,

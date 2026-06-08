@@ -184,6 +184,43 @@ class Checker:
         id_list = ", ".join(str(obj["id"]) for obj in objects)
         checker_log.info(f"Saved {len(objects)} new objects: {id_list}")
 
+    async def _report_field_anomalies(
+        self, objects: list[DBReadyData], region: int
+    ) -> None:
+        """
+        Alert admin when always-present fields parse to empty (price/section/kind).
+
+        Objects are still saved; this only surfaces likely 591 markup changes.
+
+        Args:
+            objects: Newly processed objects for this run
+            region: Region code
+        """
+        checks = (
+            ("價格(price=0)", lambda o: not o.get("price")),
+            ("區域(section=0)", lambda o: not o.get("section")),
+            ("房型(kind=0)", lambda o: not o.get("kind")),
+        )
+
+        anomalies: list[str] = []
+        for label, is_bad in checks:
+            ids = [obj["id"] for obj in objects if is_bad(obj)]
+            if ids:
+                shown = ", ".join(str(i) for i in ids[:10])
+                more = "..." if len(ids) > 10 else ""
+                anomalies.append(f"{label} {len(ids)} 筆: {shown}{more}")
+
+        if not anomalies:
+            return
+
+        checker_log.warning(f"Field parse anomalies (region={region}): {anomalies}")
+        if self._broadcaster:
+            await self._broadcaster.notify_admin(
+                error_type=ErrorType.FIELD_MISSING,
+                region=region,
+                details="\n".join(anomalies),
+            )
+
     async def _match_subscriptions_in_redis(self, region: int, obj: dict) -> list[dict]:
         """
         Find matching subscriptions for an object from Redis.
@@ -427,28 +464,11 @@ class Checker:
                 if processed_objects:
                     await self._save_objects_batch(processed_objects, region)
 
-                # Step 5.5: Flag objects whose price could not be parsed.
-                # Rentals always have a concrete price, so price=0 means a
-                # parse failure (591 markup change / NUXT null). Still saved,
-                # but alert admin so it can be investigated.
-                missing_price_ids = [
-                    obj["id"] for obj in processed_objects if not obj.get("price")
-                ]
-                if missing_price_ids:
-                    checker_log.warning(
-                        f"{len(missing_price_ids)} objects with missing price: "
-                        f"{missing_price_ids}"
-                    )
-                    if self._broadcaster:
-                        await self._broadcaster.notify_admin(
-                            error_type=ErrorType.PRICE_MISSING,
-                            region=region,
-                            details=(
-                                f"{len(missing_price_ids)} 筆物件價格解析失敗 (price=0)\n"
-                                f"IDs: {missing_price_ids[:10]}"
-                                f"{'...' if len(missing_price_ids) > 10 else ''}"
-                            ),
-                        )
+                # Step 5.5: Flag fields that should always be present but came
+                # out empty (price/section/kind). Rentals always have a price,
+                # a district, and a type, so 0 means a parse failure (591 markup
+                # change / NUXT null). Objects are still saved; alert admin.
+                await self._report_field_anomalies(processed_objects, region)
 
                 # Step 6: Subscription matching (only for objects with detail)
                 # Reuse all_subs from pre-filter step (already fetched above)
