@@ -298,6 +298,19 @@ class TestFindDetailData:
         result = _find_detail_data({})
         assert result is None
 
+    def test_find_when_nested_deeper(self):
+        # 591 could wrap the payload one extra level deep; recursion must
+        # still locate the dict carrying both "service" and "info".
+        payload = {"service": {"key": "service"}, "info": [], "title": "x"}
+        nuxt = {"a": {"b": {"fetch": {"data": payload}}}}
+        result = _find_detail_data(nuxt)
+        assert result is payload
+
+    def test_ignores_partial_service_only(self):
+        # A stray "service" key without "info" must not be mistaken for payload.
+        nuxt = {"unrelated": {"service": 1}}
+        assert _find_detail_data(nuxt) is None
+
 
 class TestParseDetailRawFromNuxt:
     """Tests for _parse_detail_raw_from_nuxt function."""

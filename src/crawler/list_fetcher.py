@@ -104,12 +104,21 @@ class ListFetcher:
 
         # Try bs4 up to max_retries times
         for attempt in range(self._max_retries):
-            items = await self._bs4_fetcher.fetch_objects_raw(
-                region=region,
-                sort=sort,
-                max_items=max_items,
-                first_row=first_row,
-            )
+            try:
+                items = await self._bs4_fetcher.fetch_objects_raw(
+                    region=region,
+                    sort=sort,
+                    max_items=max_items,
+                    first_row=first_row,
+                )
+            except Exception as e:
+                # Network/HTTP errors must not abort the run; treat as a failed
+                # attempt so retries and the Playwright fallback still apply.
+                fetcher_log.warning(
+                    f"BS4 raw attempt {attempt + 1}/{self._max_retries} raised: {e}"
+                )
+                items = []
+
             if items:
                 fetcher_log.info(
                     f"BS4 raw fetched {len(items)} objects (attempt {attempt + 1})"
