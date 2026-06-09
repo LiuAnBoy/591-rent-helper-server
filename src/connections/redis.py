@@ -19,7 +19,6 @@ class RedisConnection:
 
     # TTL settings (seconds)
     TTL_SEEN_IDS = 60 * 60 * 24 * 7  # 7 days
-    TTL_OBJECT = 60 * 60 * 24 * 3  # 3 days
     TTL_INITIALIZED = 60 * 60 * 24 * 7  # 7 days
 
     def __init__(self):
@@ -65,10 +64,6 @@ class RedisConnection:
     def _subscriptions_key(self, region: int) -> str:
         """Generate key for region subscriptions hash."""
         return f"region:{region}:subscriptions"
-
-    def _object_key(self, object_id: int) -> str:
-        """Generate key for object data."""
-        return f"object:{object_id}"
 
     # ========== Seen IDs Operations ==========
 
@@ -148,76 +143,6 @@ class RedisConnection:
         key = self._seen_key(region)
         await self.client.delete(key)
         redis_log.warning(f"Cleared all seen IDs for region {region}")
-
-    # ========== Object Operations ==========
-
-    async def save_object(self, obj: dict) -> None:
-        """
-        Save object data to Redis with TTL.
-
-        Args:
-            obj: Object data dictionary (must have 'id' field)
-        """
-        object_id = obj["source_id"]
-        key = self._object_key(object_id)
-        await self.client.set(key, json.dumps(obj, ensure_ascii=False, default=str))
-        await self.client.expire(key, self.TTL_OBJECT)
-        redis_log.debug(f"Saved object {object_id} to Redis")
-
-    async def save_objects(self, objects: list[dict]) -> None:
-        """
-        Save multiple objects to Redis.
-
-        Args:
-            objects: List of object dictionaries
-        """
-        pipe = self.client.pipeline()
-        for obj in objects:
-            key = self._object_key(obj["source_id"])
-            pipe.set(key, json.dumps(obj, ensure_ascii=False, default=str))
-            pipe.expire(key, self.TTL_OBJECT)
-        await pipe.execute()
-        redis_log.debug(f"Saved {len(objects)} objects to Redis")
-
-    async def get_object(self, object_id: int) -> dict | None:
-        """
-        Get object data from Redis.
-
-        Args:
-            object_id: Object ID
-
-        Returns:
-            Object data dictionary or None if not found
-        """
-        key = self._object_key(object_id)
-        data = await self.client.get(key)
-        if data:
-            return json.loads(data)
-        return None
-
-    async def get_objects(self, object_ids: list[int]) -> list[dict]:
-        """
-        Get multiple objects from Redis.
-
-        Args:
-            object_ids: List of object IDs
-
-        Returns:
-            List of object dictionaries (excludes not found)
-        """
-        if not object_ids:
-            return []
-
-        pipe = self.client.pipeline()
-        for object_id in object_ids:
-            pipe.get(self._object_key(object_id))
-        results = await pipe.execute()
-
-        objects = []
-        for data in results:
-            if data:
-                objects.append(json.loads(data))
-        return objects
 
     # ========== Region Objects Cache Operations ==========
 
