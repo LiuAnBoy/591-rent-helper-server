@@ -343,15 +343,19 @@ python scripts/test_detail_playwright.py <object_id>
 │   ├── connections/
 │   │   ├── postgres.py          # PostgreSQL 連線
 │   │   └── redis.py             # Redis 連線
-│   ├── crawler/
-│   │   ├── types.py                  # Raw data 型別定義
-│   │   ├── combiner.py               # Raw data 合併
-│   │   ├── list_fetcher.py           # 列表爬蟲（自動備援）
-│   │   ├── list_fetcher_bs4.py       # BS4 列表爬取+解析
-│   │   ├── list_fetcher_playwright.py # Playwright 列表爬取+解析
-│   │   ├── detail_fetcher.py         # 詳情爬蟲（自動備援）
-│   │   ├── detail_fetcher_bs4.py     # BS4 詳情爬取+解析
-│   │   └── detail_fetcher_playwright.py # Playwright 詳情爬取+解析
+│   ├── crawler/                     # 來源外掛化（見 docs/ADDING_A_SOURCE.md）
+│   │   ├── base.py                  # Source 介面 + ListBatch/DetailBatch
+│   │   ├── contract.py             # DBReadyData（所有來源的標準化輸出契約）
+│   │   ├── registry.py            # 來源註冊處（get_source / all_sources）
+│   │   ├── workers.py             # 通用 worker 數計算
+│   │   └── sources/
+│   │       └── x591/               # 591 來源（第一個實作，可當範本）
+│   │           ├── source.py                # X591Source：串管線、輸出標準化
+│   │           ├── raw_types.py             # 591 raw 型別
+│   │           ├── combiner.py              # list + detail 合併
+│   │           ├── transformers.py          # 591 raw → DBReadyData
+│   │           ├── list_fetcher*.py         # 列表爬蟲（BS4 → Playwright 備援）
+│   │           └── detail_fetcher*.py       # 詳情爬蟲（BS4 → Playwright 備援）
 │   ├── jobs/
 │   │   ├── scheduler.py         # 排程器
 │   │   ├── checker.py           # 定時爬取 & 物件比對
@@ -369,8 +373,7 @@ python scripts/test_detail_playwright.py <object_id>
 │   │   ├── subscriptions/       # 訂閱模組
 │   │   └── objects/             # 物件模組
 │   └── utils/
-│       ├── mappings/            # 常數對照表（kind/shape/fitment/options/other/sections）
-│       └── transformers.py      # ETL Transform 層
+│       └── mappings/            # 常數對照表（kind/shape/fitment/options/other/sections）
 ├── scripts/
 │   ├── test_list_bs4.py         # BS4 列表爬蟲測試
 │   ├── test_list_playwright.py  # Playwright 列表爬蟲測試

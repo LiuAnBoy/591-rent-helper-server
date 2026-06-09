@@ -68,10 +68,11 @@ todos/
 # Local development docs (not tracked)
 .local-docs/
 
-# Docs - only keep API.md and OPTIONS.md
+# Docs - only keep reference docs (not local design specs)
 docs/*
 !docs/API.md
 !docs/OPTIONS.md
+!docs/ADDING_A_SOURCE.md
 
 # MCP
 .serena/

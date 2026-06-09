@@ -108,21 +108,25 @@ src/
 │   ├── postgres.py       # asyncpg connection pool
 │   └── redis.py          # Redis connection
 │
-├── crawler/               # Web scraping modules
-│   ├── types.py                  # Raw data type definitions
-│   ├── combiner.py               # Merge list + detail raw data
-│   ├── list_fetcher.py           # List fetcher orchestrator
-│   ├── list_fetcher_bs4.py       # BS4 list parser
-│   ├── list_fetcher_playwright.py # Playwright list fetcher
-│   ├── detail_fetcher.py         # Detail fetcher orchestrator (with fallback)
-│   ├── detail_fetcher_bs4.py     # BS4 detail parser
-│   └── detail_fetcher_playwright.py # Playwright detail fetcher
+├── crawler/               # Source-pluggable scraping (see docs/ADDING_A_SOURCE.md)
+│   ├── base.py            # Source Protocol + ListBatch/DetailBatch
+│   ├── contract.py        # DBReadyData (standardized output contract, all sources)
+│   ├── registry.py        # Source registry (get_source / all_sources)
+│   ├── workers.py         # Generic worker-count helpers
+│   └── sources/
+│       └── x591/          # 591 source (first impl; template for new sources)
+│           ├── source.py             # X591Source: drives pipeline, emits DBReadyData
+│           ├── raw_types.py          # 591 raw TypedDicts
+│           ├── combiner.py           # Merge list + detail raw
+│           ├── transformers.py       # 591 raw → DBReadyData
+│           ├── list_fetcher*.py      # List fetchers (BS4 → Playwright fallback)
+│           └── detail_fetcher*.py    # Detail fetchers (BS4 → Playwright fallback)
 │
-├── jobs/                  # Background jobs
+├── jobs/                  # Background jobs (source-agnostic core)
 │   ├── scheduler.py      # APScheduler configuration
-│   ├── checker.py        # Main crawl job (list → filter → detail → save → notify)
+│   ├── checker.py        # Main crawl job (drives Source: fetch_list → pre-filter → fetch_detail → save → match → notify)
 │   ├── broadcaster.py    # Telegram notification sender
-│   └── instant_notify.py # Immediate notification on subscription changes
+│   └── instant_notify.py # Immediate notification on subscription changes (uses Source.fetch_detail)
 │
 ├── matching/              # Subscription matching module
 │   ├── matcher.py        # Core matching logic (match_quick, match_full)
@@ -139,15 +143,19 @@ src/
 │   └── objects/          # Rental object storage
 │
 └── utils/
-    ├── mappings/         # Constants and code mappings (package)
-    │   ├── kind.py       # Rental kind codes
-    │   ├── shape.py      # Building shape codes
-    │   ├── fitment.py    # Fitment level codes
-    │   ├── options.py    # Equipment option codes
-    │   ├── other.py      # Feature ("other") codes
-    │   └── sections/     # Region/section code tables (taipei, new_taipei)
-    └── transformers.py   # ETL transform layer (raw → DB-ready)
+    └── mappings/         # Constants and code mappings (package)
+        ├── kind.py       # Rental kind codes
+        ├── shape.py      # Building shape codes
+        ├── fitment.py    # Fitment level codes
+        ├── options.py    # Equipment option codes
+        ├── other.py      # Feature ("other") codes
+        └── sections/     # Region/section code tables (taipei, new_taipei)
 ```
+
+> Adding a new rental source (dd-room, yungching, …) is a self-contained task:
+> add `src/crawler/sources/<name>/`, implement the `Source` interface, register
+> it in `registry.py`. The core and presentation layers do not change. Full
+> guide: **`docs/ADDING_A_SOURCE.md`**.
 
 ## Testing Crawlers
 
@@ -159,9 +167,21 @@ These scripts allow testing crawler components without running the full applicat
 
 ## Key Patterns
 
-### Crawler Fallback Strategy
+### Source Plugin Architecture
+Each rental origin is a `Source` (`src/crawler/base.py`) under `src/crawler/sources/<name>/`,
+emitting standardized `DBReadyData` (`src/crawler/contract.py`). The core (checker / matcher /
+repository) and presentation (channels) are source-agnostic; new origins register in
+`src/crawler/registry.py`. **Full guide: `docs/ADDING_A_SOURCE.md`.**
+
+### Crawler Fallback Strategy (591 source, internal)
 - **List pages:** BS4 (3 retries) → Playwright fallback
 - **Detail pages:** BS4 (3 retries) → Playwright fallback
+
+### Notification Anti-Flood
+- Per-subscription: a sub's first baseline scan is silent (suppressed until it has been seen once).
+- Per-region: a region with no seen history (fresh start / flushed / expired seen set) treats the
+  round as a **silent baseline** — objects saved + seen set seeded + subs marked initialized, but
+  nothing notified. Next (warm) round notifies only genuinely-new listings.
 
 ### Repository Pattern
 Each module in `src/modules/` follows:
@@ -188,7 +208,7 @@ Key variables (see `.env.example` for full list):
 
 ## Test Coverage
 
-**Total: 295 unit tests**
+**Total: 319 unit tests**
 
 ⚠️ **IMPORTANT: If you modify any code in the areas below, run `uv run pytest` to verify tests pass.**
 
@@ -197,9 +217,13 @@ Key variables (see `.env.example` for full list):
 | Module | Test File | Tests | Coverage |
 |--------|-----------|-------|----------|
 | `src/channels/telegram/formatter.py` | `test_formatter.py` | 25 | Message formatting, HTML escaping, gender line, command results |
-| `src/crawler/` (extractors + combiner + detail success) | `test_extractors.py` | 51 | Data extraction, NUXT parsing, HTML parsing, raw data combining, rooftop preservation, `_is_valid_detail` |
-| `src/matching/` | `test_matcher.py`, `test_pre_filter.py` | 139 | Subscription matching, parsing, floor extraction, pre-filtering, unknown/zero-price exclusion |
-| `src/utils/` (transformers) | `test_transformers.py` | 80 | All data transformers (price + extra-fee, kind-from-name, floor, layout, area, gender, etc.) |
+| `src/crawler/sources/x591/` (extractors + combiner + detail success) | `test_extractors.py` | 51 | Data extraction, NUXT parsing, HTML parsing, raw data combining, rooftop preservation, `_is_valid_detail` |
+| `src/crawler/sources/x591/` (full pipeline golden) | `test_pipeline_golden.py` | 2 | Exact `raw → DBReadyData` output (list+detail / list-only); refactor safety net |
+| `src/crawler/sources/x591/source.py` (lifecycle) | `test_x591_source.py` | 3 | X591Source owns fresh fetchers; never closes injected ones |
+| `src/matching/` | `test_matcher.py`, `test_pre_filter.py` | 139 | Subscription matching, parsing, floor extraction, pre-filtering, unknown/zero price+section exclusion |
+| `src/crawler/sources/x591/transformers.py` | `test_transformers.py` | 80 | All data transformers (price + extra-fee, kind-from-name, floor, layout, area, gender, etc.) |
+| `src/jobs/checker.py` (orchestration) | `test_checker_orchestration.py` | 13 | check() flow: pagination early-stop, pre-filter→detail, has_detail merge, seen-set, notify suppression, cold-region silent baseline, force_notify |
+| `src/jobs/instant_notify.py` (orchestration) | `test_instant_notify_orchestration.py` | 6 | notify flow: redis-hit match, detail backfill+merge, pre-filter skip, redis-miss DB fallback |
 
 ### Test Details
 
@@ -226,6 +250,11 @@ Key variables (see `.env.example` for full list):
 - Transform functions: ID, price (incl. extra-fee stripping), floor, layout, area, address, shape, fitment, gender (full-sentence forms), pet, options, surrounding
 - `TestTransformToDbReady` - Full transformation pipeline (incl. kind derived from kind_name)
 
+**Jobs orchestration (`test_checker_orchestration.py`, `test_instant_notify_orchestration.py`)**
+- Characterization tests: drive a real `Checker` / `InstantNotifier` with faked deps, asserting on the observable boundary (dependency calls + result dict), not internals — so they survived the Source-ification refactor.
+- `TestCheckOrchestration` - empty-page-1 failure, pagination early-stop / page-2-on-all-new, pre-filter limiting detail (incl. non-price/area + unknown-section), has_detail merge, seen-set seeding, initialized-sub broadcast vs uninitialized suppression, **cold-region silent baseline** + `force_notify` override, crawler_run success
+- `TestInstantNotify` - redis-hit detailed match, has_detail=false backfill + merge fidelity, pre-filter skip, match-without-service_id, redis-miss DB load + cache populate
+
 ### Manual Test Scripts (`scripts/`)
 
 ```bash
@@ -247,5 +276,5 @@ The following areas do not have unit tests:
 - `src/api/` - API routes, dependencies
 - `src/connections/` - Database connections
 - `src/modules/` - Repository layer
-- `src/jobs/` - `broadcaster.py` (incl. retry), `instant_notify.py`, `checker.py`, `scheduler.py` (orchestration only)
-- `src/crawler/*_fetcher.py` - Fetcher orchestrators (only extractors + `_is_valid_detail` tested)
+- `src/jobs/` - `broadcaster.py` (incl. retry), `scheduler.py` (orchestration only). `checker.py` / `instant_notify.py` now have characterization coverage (see table above)
+- `src/crawler/sources/x591/*_fetcher.py` - Fetcher orchestrators (only extractors, `_is_valid_detail`, the golden pipeline, and source lifecycle tested)
