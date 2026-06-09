@@ -11,6 +11,14 @@
 
 ### Changed
 
+- **詳細頁抓取改為「全爬」（per-source 設定）**：新增**每來源**爬取設定 `settings.sources`
+  （`config/settings.py`，以 `Source.key` 為鍵的 `SourceConfig`），591 設 `fetch_all=true`，
+  日後新增來源就加一個區塊（如 `ddroom: SourceConfig(fetch_all=False)`）。`fetch_all=true`
+  時每輪「全新物件」一律抓詳細頁、不再經 pre-filter → 物件全部以 `has_detail=True` 入庫
+  （資料完整、日後新增的訂閱可比對只有詳細頁才有的欄位），且不會因 pre-filter 誤判而漏推播。
+  pre-filter 邏輯（`src/matching/pre_filter.py`）完整保留(仍供 `instant_notify` 與未來來源使用)，
+  某來源要改回粗篩設 `fetch_all=False` 即可。Checker 於爬取時依
+  `settings.source_config(source.key)` 解析策略;`instant_notify` 不受影響。
 - **架構 / 來源外掛化（Phase 2）**：把爬蟲重構成「來源（Source）外掛」架構。每個租屋網站
   是一個 `Source` 實作，收在 `src/crawler/sources/<name>/`，輸出標準化的 `DBReadyData`；
   核心（去重/比對/儲存/通知）與推播層完全來源無關。新增來源 = 新資料夾 + 實作 `Source` +

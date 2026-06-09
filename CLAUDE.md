@@ -124,7 +124,7 @@ src/
 │
 ├── jobs/                  # Background jobs (source-agnostic core)
 │   ├── scheduler.py      # APScheduler configuration
-│   ├── checker.py        # Main crawl job (drives Source: fetch_list → pre-filter → fetch_detail → save → match → notify)
+│   ├── checker.py        # Main crawl job (drives Source: fetch_list → select detail (all|pre-filter) → fetch_detail → save → match → notify)
 │   ├── broadcaster.py    # Telegram notification sender
 │   └── instant_notify.py # Immediate notification on subscription changes (uses Source.fetch_detail)
 │
@@ -177,6 +177,21 @@ repository) and presentation (channels) are source-agnostic; new origins registe
 - **List pages:** BS4 (3 retries) → Playwright fallback
 - **Detail pages:** BS4 (3 retries) → Playwright fallback
 
+### Detail Fetch Strategy (per-source `fetch_all`)
+Which new objects get a detail-page fetch is a **per-source** policy, declared in
+`settings.sources` (keyed by `Source.key`, e.g. `"591"`) as `SourceConfig(fetch_all=...)`.
+The Checker resolves it at crawl time via `settings.source_config(source.key)`.
+- **`fetch_all=True`** (591's current form): fetch detail for **every** new object →
+  complete DB (every object stored `has_detail=True`, so later-added subscriptions
+  can match on detail-only fields) and no missed notifications.
+- **`fetch_all=False`** (legacy pre-filter): only fetch detail for objects a
+  subscription *might* match (`match_quick` via `src/matching/pre_filter.py`). The
+  pre-filter util stays available for any source that wants it. Per-cycle new
+  objects are small (~10 avg, ~27 peak), so `fetch_all`'s extra load is minor.
+
+New sources add their own block, e.g. `sources={"591": SourceConfig(fetch_all=True),
+"ddroom": SourceConfig(fetch_all=False)}`.
+
 ### Notification Anti-Flood
 - Per-subscription: a sub's first baseline scan is silent (suppressed until it has been seen once).
 - Per-region: a region with no seen history (fresh start / flushed / expired seen set) treats the
@@ -206,9 +221,12 @@ Key variables (see `.env.example` for full list):
 - `JWT_SECRET` - API authentication
 - `CRAWLER_INTERVAL_MINUTES` - Crawl frequency (default: 10)
 
+> Per-source crawl policy (e.g. `fetch_all`) lives in `settings.sources`
+> (`config/settings.py`), not in env vars — see "Detail Fetch Strategy" above.
+
 ## Test Coverage
 
-**Total: 319 unit tests**
+**Total: 322 unit tests**
 
 ⚠️ **IMPORTANT: If you modify any code in the areas below, run `uv run pytest` to verify tests pass.**
 
@@ -222,7 +240,7 @@ Key variables (see `.env.example` for full list):
 | `src/crawler/sources/x591/source.py` (lifecycle) | `test_x591_source.py` | 3 | X591Source owns fresh fetchers; never closes injected ones |
 | `src/matching/` | `test_matcher.py`, `test_pre_filter.py` | 139 | Subscription matching, parsing, floor extraction, pre-filtering, unknown/zero price+section exclusion |
 | `src/crawler/sources/x591/transformers.py` | `test_transformers.py` | 80 | All data transformers (price + extra-fee, kind-from-name, floor, layout, area, gender, etc.) |
-| `src/jobs/checker.py` (orchestration) | `test_checker_orchestration.py` | 13 | check() flow: pagination early-stop, pre-filter→detail, has_detail merge, seen-set, notify suppression, cold-region silent baseline, force_notify |
+| `src/jobs/checker.py` (orchestration) | `test_checker_orchestration.py` | 16 | check() flow: pagination early-stop, per-source fetch_all vs pre-filter→detail select, has_detail merge, seen-set, notify suppression, cold-region silent baseline, force_notify |
 | `src/jobs/instant_notify.py` (orchestration) | `test_instant_notify_orchestration.py` | 6 | notify flow: redis-hit match, detail backfill+merge, pre-filter skip, redis-miss DB fallback |
 
 ### Test Details
@@ -253,6 +271,7 @@ Key variables (see `.env.example` for full list):
 **Jobs orchestration (`test_checker_orchestration.py`, `test_instant_notify_orchestration.py`)**
 - Characterization tests: drive a real `Checker` / `InstantNotifier` with faked deps, asserting on the observable boundary (dependency calls + result dict), not internals — so they survived the Source-ification refactor.
 - `TestCheckOrchestration` - empty-page-1 failure, pagination early-stop / page-2-on-all-new, pre-filter limiting detail (incl. non-price/area + unknown-section), has_detail merge, seen-set seeding, initialized-sub broadcast vs uninitialized suppression, **cold-region silent baseline** + `force_notify` override, crawler_run success
+- `TestFetchAllMode` - `fetch_all=True`: every new object detail-fetched (incl. objects no sub matches, and when there are no subs), saved `has_detail=True`, `pre_filter_skipped=0`; plus per-source default resolved from `settings.sources`
 - `TestInstantNotify` - redis-hit detailed match, has_detail=false backfill + merge fidelity, pre-filter skip, match-without-service_id, redis-miss DB load + cache populate
 
 ### Manual Test Scripts (`scripts/`)

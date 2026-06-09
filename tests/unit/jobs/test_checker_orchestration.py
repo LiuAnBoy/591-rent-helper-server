@@ -241,8 +241,13 @@ def build_checker(
     detail_failed=0,
     broadcaster=None,
     enable_broadcast=True,
+    fetch_all=False,
 ):
-    """Wire a Checker with a real X591Source over faked fetchers + repo pre-set."""
+    """Wire a Checker with a real X591Source over faked fetchers + repo pre-set.
+
+    fetch_all defaults to False so the existing characterization tests keep
+    exercising the pre-filter path; fetch-all tests pass fetch_all=True.
+    """
     list_fetcher = FakeListFetcher(pages)
     detail_fetcher = FakeDetailFetcher(details, detail_not_found, detail_failed)
     postgres = FakePostgres()
@@ -259,6 +264,7 @@ def build_checker(
         source=source,
         broadcaster=bc,
         enable_broadcast=enable_broadcast,
+        fetch_all=fetch_all,
     )
     # Pre-set so _ensure_connections does not build a real ObjectRepository.
     checker._object_repo = repo
@@ -540,3 +546,78 @@ class TestCheckOrchestration:
         assert finished["status"] == "success"
         assert finished["total_fetched"] == 2
         assert finished["new_objects"] == 1
+
+
+class TestFetchAllMode:
+    """fetch_all=True: every new object gets a detail fetch (no pre-filter)."""
+
+    async def test_fetch_all_fetches_detail_for_every_new_object(self):
+        """Even an object no subscription would match still gets detail fetched."""
+        redis = FakeRedis(subs=[wide_sub()], new_ids={111, 222})
+        checker, deps = build_checker(
+            pages={
+                0: [
+                    make_list_item(111),  # in range
+                    make_list_item(222, price_raw="50,000元/月"),  # prefilter would skip
+                ],
+                30: [],
+            },
+            redis=redis,
+            details={111: make_detail(111), 222: make_detail(222)},
+            fetch_all=True,
+        )
+
+        result = await checker.check(region=1)
+
+        # Both objects fetched despite 222 being out of any sub's price range.
+        assert sorted(deps["detail_fetcher"].fetched_ids) == [111, 222]
+        assert result["pre_filter_input"] == 2
+        assert result["pre_filter_output"] == 2
+        assert result["pre_filter_skipped"] == 0
+        # Both saved with full detail.
+        saved = saved_by_source_id(deps["repo"])
+        assert saved["111"]["has_detail"] is True
+        assert saved["222"]["has_detail"] is True
+
+    async def test_fetch_all_fetches_detail_even_without_subscriptions(self):
+        """With no subs, fetch_all still enriches the DB (complete-DB goal)."""
+        redis = FakeRedis(subs=[], new_ids={111, 222})
+        checker, deps = build_checker(
+            pages={0: [make_list_item(111), make_list_item(222)], 30: []},
+            redis=redis,
+            details={111: make_detail(111), 222: make_detail(222)},
+            fetch_all=True,
+        )
+
+        result = await checker.check(region=1)
+
+        assert sorted(deps["detail_fetcher"].fetched_ids) == [111, 222]
+        assert result["pre_filter_skipped"] == 0
+        saved = saved_by_source_id(deps["repo"])
+        assert saved["111"]["has_detail"] is True
+        assert saved["222"]["has_detail"] is True
+        # No subscriptions -> nothing matched / broadcast.
+        assert result["matches"] == []
+        assert deps["broadcaster"].broadcasts == []
+
+    async def test_source_default_resolves_from_settings(self):
+        """No fetch_all override -> resolved per-source from settings (591=True)."""
+        redis = FakeRedis(subs=[wide_sub()], new_ids={111, 222})
+        checker, deps = build_checker(
+            pages={
+                0: [
+                    make_list_item(111),
+                    make_list_item(222, price_raw="50,000元/月"),  # prefilter would skip
+                ],
+                30: [],
+            },
+            redis=redis,
+            details={111: make_detail(111), 222: make_detail(222)},
+            fetch_all=None,  # -> settings.source_config("591").fetch_all == True
+        )
+
+        result = await checker.check(region=1)
+
+        # 591's configured default is fetch_all=True -> both fetched.
+        assert sorted(deps["detail_fetcher"].fetched_ids) == [111, 222]
+        assert result["pre_filter_skipped"] == 0

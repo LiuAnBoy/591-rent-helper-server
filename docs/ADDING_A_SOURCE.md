@@ -55,6 +55,25 @@ class DetailBatch:
     failed_ids: list[str]             # 沒成功補到 detail 的 source_id
 ```
 
+### 2.1 每來源爬取設定（`settings.sources`）
+
+每個來源「怎麼爬」的差異放在 `config/settings.py` 的 `settings.sources`，以 `Source.key`
+為鍵的 `SourceConfig`。目前唯一旋鈕是 `fetch_all`：
+
+- `fetch_all=True` — 每個新物件都補詳情（資料完整、不漏推播）。591 現在的形式。
+- `fetch_all=False` — 只對「可能符合訂閱」的物件補詳情（沿用 `src/matching/pre_filter.py` 的粗篩）。
+
+新增來源時加一個區塊即可（不設則預設 `fetch_all=True`）：
+
+```python
+sources: dict[str, SourceConfig] = {
+    "591": SourceConfig(fetch_all=True),
+    "ddroom": SourceConfig(fetch_all=False),   # 例：新來源想先用粗篩省請求
+}
+```
+
+> 注意：鍵用的是 `Source.key`（如 `"591"`），不是資料夾名（`x591`）。
+
 ### 核心怎麼驅動你（你不用寫這段，但要知道）
 
 `src/jobs/checker.py` 的主迴圈（全程只碰 `DBReadyData`）：
@@ -63,7 +82,10 @@ class DetailBatch:
 for source in registry.all_sources(redis):
     for region in source.regions:                  # 目前 591 由訂閱推得 active regions
         batch     = await source.fetch_list(region, MAX_PAGES)   # 你回標準化新物件
-        candidates= pre_filter(batch.items, subs)                # 核心：吃標準化代碼
+        if settings.source_config(source.key).fetch_all:         # 每來源策略（見 §2.1）
+            candidates = batch.items                             #   全爬：每個新物件都補詳情
+        else:
+            candidates = pre_filter(batch.items, subs)           #   粗篩：只補可能符合訂閱的
         enriched  = await source.fetch_detail(candidates)        # 你回標準化詳情
         save(merge(batch.items, enriched)); seed_seen; match; notify
 ```

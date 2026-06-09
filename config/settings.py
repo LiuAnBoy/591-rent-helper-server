@@ -6,6 +6,7 @@ Manages all configuration via environment variables using pydantic-settings.
 
 from functools import lru_cache
 
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -78,6 +79,20 @@ class CrawlerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="CRAWLER_")
 
 
+class SourceConfig(BaseModel):
+    """Per-source crawl config (keyed by ``Source.key`` in ``Settings.sources``).
+
+    Crawl behaviour that differs per origin lives here with the source, not as a
+    global flag. Add one block per new source.
+    """
+
+    # fetch_all=True  -> fetch the detail page for EVERY new object (complete DB,
+    #                    no missed notifications). 591's current form.
+    # fetch_all=False -> only fetch detail for objects a subscription might match
+    #                    (legacy pre-filter, via src/matching/pre_filter.py).
+    fetch_all: bool = True
+
+
 class Settings(BaseSettings):
     """Main application settings."""
 
@@ -103,6 +118,17 @@ class Settings(BaseSettings):
     redis: RedisSettings = RedisSettings()
     telegram: TelegramSettings = TelegramSettings()
     crawler: CrawlerSettings = CrawlerSettings()
+
+    # Per-source crawl config, keyed by Source.key (e.g. "591", matching
+    # DBReadyData["source"] — note: the source key is "591", not the folder
+    # name "x591"). Future sources add their own entry, e.g.:
+    #   sources={"591": SourceConfig(fetch_all=True),
+    #            "ddroom": SourceConfig(fetch_all=False)}
+    sources: dict[str, SourceConfig] = {"591": SourceConfig(fetch_all=True)}
+
+    def source_config(self, key: str) -> SourceConfig:
+        """Config for a source key, falling back to defaults if not listed."""
+        return self.sources.get(key, SourceConfig())
 
 
 @lru_cache

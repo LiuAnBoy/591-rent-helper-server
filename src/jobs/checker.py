@@ -42,6 +42,7 @@ class Checker:
         broadcaster: Broadcaster | None = None,
         enable_broadcast: bool = True,
         detail_max_workers: int = 3,
+        fetch_all: bool | None = None,
     ):
         """
         Initialize Checker.
@@ -53,6 +54,9 @@ class Checker:
             broadcaster: Broadcaster instance (will be created if not provided)
             enable_broadcast: Whether to send notifications (default True)
             detail_max_workers: Max parallel workers for detail page fetching
+            fetch_all: Override the per-source fetch_all policy (True = detail for
+                every new object; False = pre-filter first). When None, resolved
+                per source from settings.source_config(source.key).
         """
         self._postgres = postgres
         self._redis = redis
@@ -60,6 +64,7 @@ class Checker:
         self._broadcaster = broadcaster
         self._enable_broadcast = enable_broadcast
         self._detail_max_workers = detail_max_workers
+        self._fetch_all = fetch_all
         self._owns_source = False
         self._object_repo: ObjectRepository | None = None
 
@@ -222,7 +227,17 @@ class Checker:
         """
         await self._ensure_connections()
 
-        checker_log.info(f"Checking region={region}")
+        # Resolve the detail-fetch policy for THIS source. Each source declares
+        # its own crawl form in settings.sources (keyed by Source.key); a
+        # constructor override (self._fetch_all) wins when provided (tests).
+        if self._fetch_all is not None:
+            fetch_all = self._fetch_all
+        else:
+            from config.settings import get_settings
+
+            fetch_all = get_settings().source_config(self._source.key).fetch_all
+
+        checker_log.info(f"Checking region={region} (fetch_all={fetch_all})")
 
         # Start crawler run tracking
         run_id = await self._postgres.start_crawler_run(region)
@@ -292,47 +307,56 @@ class Checker:
             pre_filter_skipped = 0
 
             if new_items:
-                # Step 2: Pre-filter (on standardized data) before detail fetch.
-                # Only enrich objects that might match some subscription.
+                # Step 2: Decide which new objects get a detail fetch.
                 all_subs = await self._redis.get_subscriptions_by_region(region)
 
                 pre_filter_input = len(new_items)
                 detail_batch = DetailBatch()
 
-                if all_subs:
-                    candidates, pre_filter_skipped = filter_objects(new_items, all_subs)
-                    pre_filter_output = len(candidates)
-
-                    checker_log.info(
-                        f"Pre-filter: {pre_filter_input} → {pre_filter_output} "
-                        f"(skipped {pre_filter_skipped} by pre-filter)"
-                    )
-
-                    # Step 3: Source fetches detail for the candidates only.
-                    if candidates:
-                        checker_log.info(
-                            f"Fetching detail for {len(candidates)} objects (ETL)"
-                        )
-                        detail_batch = await self._source.fetch_detail(candidates)
-                        detail_fetched = len(detail_batch.enriched)
-                        detail_not_found = detail_batch.not_found
-                        detail_failed = detail_batch.failed
-
-                        # Notify admin only for actual errors (not 404s)
-                        if detail_failed > 0 and self._broadcaster:
-                            failed_ids = detail_batch.failed_ids
-                            await self._broadcaster.notify_admin(
-                                error_type=ErrorType.DETAIL_FETCH_FAILED,
-                                region=region,
-                                details=f"{detail_failed} detail pages failed\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
-                            )
+                # Per-source policy (see settings.sources):
+                #   fetch_all=True  - every new object (complete DB, no missed notify).
+                #   fetch_all=False - legacy pre-filter: only objects a sub might match.
+                if fetch_all:
+                    candidates = list(new_items)
+                    pre_filter_skipped = 0
                 else:
-                    # No subscriptions = nothing to match, skip all detail fetches
-                    pre_filter_output = 0
-                    pre_filter_skipped = pre_filter_input
+                    if all_subs:
+                        candidates, pre_filter_skipped = filter_objects(
+                            new_items, all_subs
+                        )
+                        checker_log.info(
+                            f"Pre-filter: {pre_filter_input} → {len(candidates)} "
+                            f"(skipped {pre_filter_skipped} by pre-filter)"
+                        )
+                    else:
+                        # No subscriptions = nothing to match, skip all detail fetches
+                        candidates = []
+                        pre_filter_skipped = pre_filter_input
+                        checker_log.info(
+                            f"No subscriptions for region {region}, skipping detail fetch"
+                        )
+
+                pre_filter_output = len(candidates)
+
+                # Step 3: Source fetches detail for the selected candidates.
+                if candidates:
                     checker_log.info(
-                        f"No subscriptions for region {region}, skipping detail fetch"
+                        f"Fetching detail for {len(candidates)} objects "
+                        f"(fetch_all={fetch_all})"
                     )
+                    detail_batch = await self._source.fetch_detail(candidates)
+                    detail_fetched = len(detail_batch.enriched)
+                    detail_not_found = detail_batch.not_found
+                    detail_failed = detail_batch.failed
+
+                    # Notify admin only for actual errors (not 404s)
+                    if detail_failed > 0 and self._broadcaster:
+                        failed_ids = detail_batch.failed_ids
+                        await self._broadcaster.notify_admin(
+                            error_type=ErrorType.DETAIL_FETCH_FAILED,
+                            region=region,
+                            details=f"{detail_failed} detail pages failed\nIDs: {failed_ids[:5]}{'...' if len(failed_ids) > 5 else ''}",
+                        )
 
                 # Step 4: Merge enriched detail back in. Objects that got detail
                 # become has_detail=true; the rest stay has_detail=false.
@@ -481,10 +505,11 @@ class Checker:
             # Build log message
             log_parts = [
                 f"Check complete: region={region}",
+                f"fetch_all={fetch_all}",
                 f"fetched={result['fetched']}",
                 f"new={result['new_count']}",
             ]
-            if pre_filter_input > 0:
+            if not fetch_all and pre_filter_input > 0:
                 log_parts.append(f"pre-filter={pre_filter_output}/{pre_filter_input}")
             # Detail stats: fetched/not_found/failed
             detail_stats = f"detail={detail_fetched}"
