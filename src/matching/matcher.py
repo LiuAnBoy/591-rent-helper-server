@@ -347,8 +347,10 @@ def match_section_quick(
     if not sub_section:
         return True  # No section filter
 
-    if obj_section is None:
-        return True  # No section info, don't filter
+    if not obj_section:
+        # No section info: None (raw list) or 0 (standardized unknown sentinel
+        # from transform's safe_int). Don't filter — detail fetch may resolve it.
+        return True
 
     return obj_section in sub_section
 

@@ -9,12 +9,13 @@ import asyncio
 
 from loguru import logger
 
-from src.crawler.list_fetcher_bs4 import ListFetcherBs4, get_bs4_fetcher
-from src.crawler.list_fetcher_playwright import (
+from src.crawler.sources.x591.list_fetcher_bs4 import ListFetcherBs4, get_bs4_fetcher
+from src.crawler.sources.x591.list_fetcher_playwright import (
     ListFetcherPlaywright,
     get_playwright_fetcher,
 )
-from src.crawler.types import ListRawData, calculate_list_workers
+from src.crawler.sources.x591.raw_types import ListRawData
+from src.crawler.workers import calculate_list_workers
 
 fetcher_log = logger.bind(module="ListFetcher")
 

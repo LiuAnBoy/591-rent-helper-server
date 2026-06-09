@@ -12,7 +12,7 @@ import urllib3
 from bs4 import BeautifulSoup
 from loguru import logger
 
-from src.crawler.types import ListRawData
+from src.crawler.sources.x591.raw_types import ListRawData
 from src.utils.mappings.sections import get_section_from_address
 
 # Suppress SSL warnings for 591's certificate issues

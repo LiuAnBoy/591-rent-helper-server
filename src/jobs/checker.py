@@ -4,23 +4,16 @@ Listing Checker Module.
 Checks for new objects and triggers notifications.
 """
 
-import asyncio
-
 from loguru import logger
 
 from src.connections.postgres import PostgresConnection, get_postgres
 from src.connections.redis import RedisConnection, get_redis
-from src.crawler.combiner import combine_raw_data, combine_with_list_only
-from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
-from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
-from src.crawler.types import DetailRawData, ListRawData
+from src.crawler.base import DetailBatch, Source
+from src.crawler.contract import DBReadyData
+from src.crawler.registry import get_source
 from src.jobs.broadcaster import Broadcaster, ErrorType, get_broadcaster
 from src.matching import filter_objects, match_object_to_subscription
 from src.modules.objects import ObjectRepository
-from src.utils import (
-    DBReadyData,
-    transform_to_db_ready,
-)
 
 checker_log = logger.bind(module="Checker")
 
@@ -45,8 +38,7 @@ class Checker:
         self,
         postgres: PostgresConnection | None = None,
         redis: RedisConnection | None = None,
-        list_fetcher: ListFetcher | None = None,
-        detail_fetcher: DetailFetcher | None = None,
+        source: Source | None = None,
         broadcaster: Broadcaster | None = None,
         enable_broadcast: bool = True,
         detail_max_workers: int = 3,
@@ -57,20 +49,18 @@ class Checker:
         Args:
             postgres: PostgreSQL connection (will be created if not provided)
             redis: Redis connection (will be created if not provided)
-            list_fetcher: List fetcher instance (will be created if not provided)
-            detail_fetcher: Detail fetcher with bs4 + Playwright fallback
+            source: Crawl Source (defaults to the registered 591 source)
             broadcaster: Broadcaster instance (will be created if not provided)
             enable_broadcast: Whether to send notifications (default True)
             detail_max_workers: Max parallel workers for detail page fetching
         """
         self._postgres = postgres
         self._redis = redis
-        self._list_fetcher = list_fetcher
-        self._detail_fetcher = detail_fetcher
+        self._source = source
         self._broadcaster = broadcaster
         self._enable_broadcast = enable_broadcast
         self._detail_max_workers = detail_max_workers
-        self._owns_fetcher = False
+        self._owns_source = False
         self._object_repo: ObjectRepository | None = None
 
     async def _ensure_connections(self) -> None:
@@ -81,24 +71,18 @@ class Checker:
             self._redis = await get_redis()
         if self._object_repo is None:
             self._object_repo = ObjectRepository(self._postgres.pool)
-        if self._list_fetcher is None:
-            self._list_fetcher = get_list_fetcher(headless=True)
-            self._owns_fetcher = True
-            await self._list_fetcher.start()
-        if self._detail_fetcher is None:
-            self._detail_fetcher = get_detail_fetcher(
-                playwright_max_workers=self._detail_max_workers
-            )
-            await self._detail_fetcher.start()
+        if self._source is None:
+            # Single source for now; multi-source = loop registry.all_sources().
+            self._source = get_source("591", self._redis)
+            self._owns_source = True
+            await self._source.start()
         if self._broadcaster is None and self._enable_broadcast:
             self._broadcaster = get_broadcaster()
 
     async def close(self) -> None:
         """Close owned resources."""
-        if self._owns_fetcher and self._list_fetcher:
-            await self._list_fetcher.close()
-        if self._detail_fetcher:
-            await self._detail_fetcher.close()
+        if self._owns_source and self._source:
+            await self._source.close()
 
     async def sync_subscriptions_to_redis(self) -> int:
         """
@@ -122,37 +106,6 @@ class Checker:
 
         checker_log.info(f"Synced {len(subscriptions)} subscriptions to Redis")
         return len(subscriptions)
-
-    def _transform_object(
-        self,
-        list_data: ListRawData,
-        detail_data: DetailRawData | None,
-        region: int,
-    ) -> DBReadyData:
-        """
-        Transform raw data to DB-ready format (no I/O operations).
-
-        ETL Flow:
-        1. Combine: list_data + detail_data → CombinedRawData
-        2. Transform: CombinedRawData → DBReadyData
-
-        Args:
-            list_data: Raw data from list page
-            detail_data: Raw data from detail page (can be None)
-            region: Region code
-
-        Returns:
-            DBReadyData dict (for subscription matching)
-        """
-        # Step 1: Combine raw data
-        if detail_data:
-            combined = combine_raw_data(list_data, detail_data)
-        else:
-            # If detail fetch failed, use list data only
-            combined = combine_with_list_only(list_data)
-
-        # Step 2: Transform to DB-ready format
-        return transform_to_db_ready(combined)
 
     async def _save_objects_batch(
         self,
@@ -276,95 +229,52 @@ class Checker:
 
         # Progress counters kept outside try so the except path can record
         # actual progress instead of overwriting it with zeros.
-        all_new_ids: set[int] = set()
+        all_new_ids: set[str] = set()
         total_fetched = 0
 
         try:
-            # Step 1: Fetch list with auto-pagination
-            # If page 1 is all new items, automatically fetch page 2
-            all_list_items: list[ListRawData] = []
-            pages_fetched = 0
+            # Whether this region has any crawl history yet. Captured BEFORE the
+            # save step seeds the seen set. A region with no history (fresh start,
+            # flushed/expired seen set, brand-new region) must treat this round as
+            # a silent baseline — otherwise every current listing looks "new" and,
+            # if subs are already initialized, the whole page gets notified.
+            region_has_history = await self._redis.has_seen_ids(region)
 
-            for page in range(self.MAX_PAGES):
-                first_row = page * self.PAGE_SIZE
+            # Step 1: Source crawls the region's list pages and returns NEW,
+            # standardized listings (it owns pagination + the seen-set early-stop).
+            list_batch = await self._source.fetch_list(region, self.MAX_PAGES)
+            total_fetched = list_batch.total_fetched
 
-                # Fetch page
-                page_items = await self._list_fetcher.fetch_objects_raw(
-                    region=region,
-                    sort="posttime_desc",
-                    first_row=first_row,
+            if total_fetched == 0:
+                # First list page returned nothing -> fetch failure.
+                checker_log.warning("No objects fetched from page 1")
+                if self._broadcaster:
+                    await self._broadcaster.notify_admin(
+                        error_type=ErrorType.LIST_FETCH_FAILED,
+                        region=region,
+                        details="ListFetcher 無法抓取列表頁 (ETL raw)",
+                    )
+                await self._postgres.finish_crawler_run(
+                    run_id=run_id,
+                    status="failed",
+                    total_fetched=0,
+                    new_objects=0,
+                    error_message="No objects fetched from page 1",
                 )
+                return {
+                    "region": region,
+                    "fetched": 0,
+                    "new_count": 0,
+                    "matches": [],
+                    "detail_fetched": 0,
+                    "broadcast": {"total": 0, "success": 0, "failed": 0},
+                    "initialized_subs": [],
+                }
 
-                if not page_items:
-                    if page == 0:
-                        # First page failed - this is an error
-                        checker_log.warning("No objects fetched from page 1")
-                        if self._broadcaster:
-                            await self._broadcaster.notify_admin(
-                                error_type=ErrorType.LIST_FETCH_FAILED,
-                                region=region,
-                                details="ListFetcher 無法抓取列表頁 (ETL raw)",
-                            )
-                        await self._postgres.finish_crawler_run(
-                            run_id=run_id,
-                            status="failed",
-                            total_fetched=0,
-                            new_objects=0,
-                            error_message="No objects fetched from page 1",
-                        )
-                        return {
-                            "region": region,
-                            "fetched": 0,
-                            "new_count": 0,
-                            "matches": [],
-                            "detail_fetched": 0,
-                            "broadcast": {"total": 0, "success": 0, "failed": 0},
-                            "initialized_subs": [],
-                        }
-                    # Later pages empty - just stop pagination
-                    break
-
-                pages_fetched += 1
-                total_fetched += len(page_items)
-
-                # Check which items are new (skip items with empty ID)
-                page_ids = {int(item["id"]) for item in page_items if item.get("id")}
-                new_ids_in_page = await self._redis.get_new_ids(region, page_ids)
-
-                # Collect new items
-                for item in page_items:
-                    if item.get("id") and int(item["id"]) in new_ids_in_page:
-                        all_list_items.append(item)
-                        all_new_ids.add(int(item["id"]))
-
-                checker_log.info(
-                    f"Page {page + 1}: {len(new_ids_in_page)}/{len(page_items)} new"
-                )
-
-                # Decide if we need next page
-                if len(new_ids_in_page) < len(page_items):
-                    # Found some old items, no need for next page
-                    break
-
-                # All items are new, might need next page
-                if page < self.MAX_PAGES - 1:
-                    checker_log.info("All items are new, fetching next page...")
-                    await asyncio.sleep(1)  # Rate limit between pages
-
-            # Log summary
-            if pages_fetched > 1:
-                checker_log.info(
-                    f"Fetched {total_fetched} objects from {pages_fetched} pages, "
-                    f"{len(all_new_ids)} new"
-                )
-            else:
-                checker_log.info(
-                    f"Fetched {total_fetched} objects from list, {len(all_new_ids)} new"
-                )
-
-            # Use collected data for rest of flow
-            list_raw_items = all_list_items
-            new_ids = all_new_ids
+            # Standardized, has_detail=False, already de-duplicated to new only.
+            new_items = list_batch.items
+            new_ids = {item["source_id"] for item in new_items}
+            all_new_ids = set(new_ids)
 
             # Initialize result variables
             matches = []
@@ -381,59 +291,36 @@ class Checker:
             pre_filter_output = 0
             pre_filter_skipped = 0
 
-            if new_ids:
-                # Build lookup dict for list raw data (skip empty IDs)
-                list_data_by_id = {
-                    int(item["id"]): item for item in list_raw_items if item.get("id")
-                }
-
-                # Get only NEW items for pre-filtering
-                new_items = [
-                    list_data_by_id[oid] for oid in new_ids if oid in list_data_by_id
-                ]
-
-                # Step 2.5: Pre-filter before detail fetch
-                # Only fetch detail for objects that might match some subscription
+            if new_items:
+                # Step 2: Pre-filter (on standardized data) before detail fetch.
+                # Only enrich objects that might match some subscription.
                 all_subs = await self._redis.get_subscriptions_by_region(region)
 
                 pre_filter_input = len(new_items)
-                details: dict[int, DetailRawData] = {}
+                detail_batch = DetailBatch()
 
                 if all_subs:
-                    filtered_items, pre_filter_skipped = filter_objects(
-                        new_items, all_subs
-                    )
-                    pre_filter_output = len(filtered_items)
-
-                    # Get IDs from filtered items (need detail)
-                    ids_need_detail = [int(item["id"]) for item in filtered_items]
+                    candidates, pre_filter_skipped = filter_objects(new_items, all_subs)
+                    pre_filter_output = len(candidates)
 
                     checker_log.info(
                         f"Pre-filter: {pre_filter_input} → {pre_filter_output} "
                         f"(skipped {pre_filter_skipped} by pre-filter)"
                     )
 
-                    # Step 3: Fetch detail raw data for filtered items only
-                    if ids_need_detail:
-                        await asyncio.sleep(1)
+                    # Step 3: Source fetches detail for the candidates only.
+                    if candidates:
                         checker_log.info(
-                            f"Fetching detail for {len(ids_need_detail)} objects (ETL)"
+                            f"Fetching detail for {len(candidates)} objects (ETL)"
                         )
-
-                        (
-                            details,
-                            detail_not_found,
-                            detail_failed,
-                        ) = await self._detail_fetcher.fetch_details_batch_raw(
-                            ids_need_detail
-                        )
-                        detail_fetched = len(details)
+                        detail_batch = await self._source.fetch_detail(candidates)
+                        detail_fetched = len(detail_batch.enriched)
+                        detail_not_found = detail_batch.not_found
+                        detail_failed = detail_batch.failed
 
                         # Notify admin only for actual errors (not 404s)
                         if detail_failed > 0 and self._broadcaster:
-                            failed_ids = [
-                                oid for oid in ids_need_detail if oid not in details
-                            ]
+                            failed_ids = detail_batch.failed_ids
                             await self._broadcaster.notify_admin(
                                 error_type=ErrorType.DETAIL_FETCH_FAILED,
                                 region=region,
@@ -447,18 +334,12 @@ class Checker:
                         f"No subscriptions for region {region}, skipping detail fetch"
                     )
 
-                # Step 4: Transform ALL new objects (with or without detail)
-                # Objects with detail → has_detail=true
-                # Objects without detail → has_detail=false
-                for object_id in new_ids:
-                    if object_id not in list_data_by_id:
-                        continue
-                    list_data = list_data_by_id[object_id]
-                    detail_data = details.get(object_id)  # None if not fetched
-                    processed_obj = self._transform_object(
-                        list_data, detail_data, region
-                    )
-                    processed_objects.append(processed_obj)
+                # Step 4: Merge enriched detail back in. Objects that got detail
+                # become has_detail=true; the rest stay has_detail=false.
+                processed_objects = [
+                    detail_batch.enriched.get(item["source_id"], item)
+                    for item in new_items
+                ]
 
                 # Step 5: Batch save ALL new objects to DB and Redis
                 if processed_objects:
@@ -477,6 +358,18 @@ class Checker:
                 )
                 uninitialized_ids = {sub["id"] for sub in uninitialized_subs}
 
+                # A region with no prior crawl history treats this whole round as a
+                # silent baseline: objects are still saved and the seen set seeded
+                # (above), subs get marked initialized (below), but nothing is
+                # notified. Without this, a cold seen set makes every current
+                # listing look "new" and floods already-initialized subs.
+                region_baseline = not region_has_history
+                if region_baseline and not force_notify:
+                    checker_log.info(
+                        f"Region {region} has no seen history; this round is a "
+                        f"silent baseline (seeding seen set, no notifications)"
+                    )
+
                 # Only match objects with has_detail=true
                 objects_with_detail = [
                     obj for obj in processed_objects if obj.get("has_detail", False)
@@ -490,13 +383,17 @@ class Checker:
                             continue
 
                         sub_id = sub["id"]
-                        if sub_id in uninitialized_ids:
-                            # First baseline scan for this sub: don't notify
-                            # (avoids flooding when the seen set is empty).
+                        # Suppress on a cold-region baseline or a not-yet-initialized
+                        # sub (first baseline scan) — unless force_notify overrides
+                        # it (manual testing).
+                        suppress = not force_notify and (
+                            region_baseline or sub_id in uninitialized_ids
+                        )
+                        if suppress:
                             if sub_id not in initialized_subs:
                                 initialized_subs.append(sub_id)
                         else:
-                            # Initialized subscription - match and notify
+                            # Notify this match.
                             matches.append((obj, [sub]))
                             checker_log.info(
                                 f"Object {obj['source_id']} matches subscription {sub_id}"

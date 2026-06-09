@@ -7,7 +7,7 @@ Data access layer for rental object operations.
 from asyncpg import Pool
 from loguru import logger
 
-from src.utils import DBReadyData
+from src.crawler.contract import DBReadyData
 
 objects_log = logger.bind(module="Objects")
 

@@ -4,21 +4,21 @@ Unit tests for src/crawler/extractors/
 
 from bs4 import BeautifulSoup
 
-from src.crawler.combiner import (
+from src.crawler.sources.x591.combiner import (
     combine_raw_data,
     combine_with_detail_only,
     combine_with_list_only,
 )
-from src.crawler.detail_fetcher import _is_valid_detail
-from src.crawler.detail_fetcher_bs4 import _parse_detail_raw
-from src.crawler.detail_fetcher_playwright import (
+from src.crawler.sources.x591.detail_fetcher import _is_valid_detail
+from src.crawler.sources.x591.detail_fetcher_bs4 import _parse_detail_raw
+from src.crawler.sources.x591.detail_fetcher_playwright import (
     _extract_surrounding,
     _find_detail_data,
     _parse_detail_raw_from_nuxt,
     extract_detail_raw_from_nuxt,
 )
-from src.crawler.list_fetcher_bs4 import _parse_item_raw
-from src.crawler.list_fetcher_playwright import (
+from src.crawler.sources.x591.list_fetcher_bs4 import _parse_item_raw
+from src.crawler.sources.x591.list_fetcher_playwright import (
     _find_items,
     _parse_item_raw_from_nuxt,
     extract_list_raw_from_nuxt,

@@ -8,12 +8,11 @@ from loguru import logger
 
 from src.connections.postgres import get_postgres
 from src.connections.redis import get_redis
-from src.crawler.detail_fetcher import DetailFetcher
-from src.crawler.types import CombinedRawData
+from src.crawler.contract import DBReadyData
+from src.crawler.registry import get_source
 from src.jobs.broadcaster import get_broadcaster
 from src.matching import filter_redis_objects, match_object_to_subscription
 from src.modules.objects import ObjectRepository
-from src.utils import DBReadyData, transform_to_db_ready
 
 notify_log = logger.bind(module="Notify")
 
@@ -241,57 +240,23 @@ class InstantNotifier:
             obj for obj in filtered_objects if not obj.get("has_detail", False)
         ]
 
-        # Step 4: Fetch detail for objects without it
+        # Step 4: Fetch detail for objects without it (via the source)
         if objects_need_detail:
             notify_log.info(
                 f"Fetching detail for {len(objects_need_detail)} objects without detail"
             )
 
-            # Own instance (not the shared singleton): instant notify can run
+            # Own source instance (not the shared one): instant notify can run
             # concurrently with the scheduled checker, and closing a shared
             # fetcher would tear down the browser the other one is still using.
-            detail_fetcher = DetailFetcher()
-            await detail_fetcher.start()
+            source = get_source("591", self._redis)
+            await source.start()
 
             try:
-                ids_to_fetch = [obj["source_id"] for obj in objects_need_detail]
-                details, _, _ = await detail_fetcher.fetch_details_batch_raw(
-                    ids_to_fetch
+                detail_batch = await source.fetch_detail(objects_need_detail)
+                updated_objects: list[DBReadyData] = list(
+                    detail_batch.enriched.values()
                 )
-
-                # Update objects with fetched details
-                updated_objects: list[dict] = []
-                for obj in objects_need_detail:
-                    obj_id = obj["source_id"]
-                    detail_data = details.get(obj_id)
-
-                    if detail_data:
-                        # Create combined data and transform
-                        combined: CombinedRawData = {
-                            "id": str(obj_id),
-                            "url": obj.get("url", ""),
-                            "title": obj.get("title", ""),
-                            "price_raw": str(obj.get("price", "")),
-                            "tags": obj.get("tags", []),
-                            "kind_name": obj.get("kind_name", ""),
-                            "address_raw": obj.get("address", ""),
-                            "surrounding_type": detail_data.get("surrounding_type"),
-                            "surrounding_raw": detail_data.get("surrounding_raw"),
-                            "region": str(region),
-                            "section": str(obj.get("section", "")),
-                            "kind": str(obj.get("kind", "")),
-                            "floor_raw": detail_data.get("floor_raw", ""),
-                            "layout_raw": detail_data.get("layout_raw", ""),
-                            "area_raw": detail_data.get("area_raw", ""),
-                            "gender_raw": detail_data.get("gender_raw"),
-                            "shape_raw": detail_data.get("shape_raw"),
-                            "fitment_raw": detail_data.get("fitment_raw"),
-                            "options": detail_data.get("options", []),
-                            "has_detail": True,
-                        }
-
-                        db_ready = transform_to_db_ready(combined)
-                        updated_objects.append(db_ready)
 
                 # Persist all backfilled detail in one transaction (atomic), then
                 # refresh the Redis cache so DB and cache do not drift apart.
@@ -302,17 +267,18 @@ class InstantNotifier:
                         f"Updated {len(updated_objects)} objects with detail"
                     )
 
-                    # Update filtered_objects with new data
-                    updated_by_id = {
-                        obj["source_id"]: obj for obj in updated_objects
+                    # Replace filtered objects with their enriched versions, keyed
+                    # by (source, source_id) so a future second source sharing a
+                    # source_id cannot overwrite the wrong object.
+                    enriched_by_key = {
+                        (o["source"], o["source_id"]): o for o in updated_objects
                     }
                     filtered_objects = [
-                        updated_by_id.get(obj["source_id"], obj)
+                        enriched_by_key.get((obj["source"], obj["source_id"]), obj)
                         for obj in filtered_objects
                     ]
-
             finally:
-                await detail_fetcher.close()
+                await source.close()
 
         # Step 5: Match only objects with has_detail=true
         objects_with_detail = [
@@ -426,57 +392,23 @@ class InstantNotifier:
             obj for obj in filtered_objects if not obj.get("has_detail", False)
         ]
 
-        # Step 4: Fetch detail for objects without it
+        # Step 4: Fetch detail for objects without it (via the source)
         if objects_need_detail:
             notify_log.info(
                 f"Fetching detail for {len(objects_need_detail)} objects without detail"
             )
 
-            # Own instance (not the shared singleton): instant notify can run
+            # Own source instance (not the shared one): instant notify can run
             # concurrently with the scheduled checker, and closing a shared
             # fetcher would tear down the browser the other one is still using.
-            detail_fetcher = DetailFetcher()
-            await detail_fetcher.start()
+            source = get_source("591", self._redis)
+            await source.start()
 
             try:
-                ids_to_fetch = [obj["source_id"] for obj in objects_need_detail]
-                details, _, _ = await detail_fetcher.fetch_details_batch_raw(
-                    ids_to_fetch
+                detail_batch = await source.fetch_detail(objects_need_detail)
+                updated_objects: list[DBReadyData] = list(
+                    detail_batch.enriched.values()
                 )
-
-                # Update objects with fetched details
-                updated_objects: list[dict] = []
-                for obj in objects_need_detail:
-                    obj_id = obj["source_id"]
-                    detail_data = details.get(obj_id)
-
-                    if detail_data:
-                        # Create combined data and transform
-                        combined: CombinedRawData = {
-                            "id": str(obj_id),
-                            "url": obj.get("url", ""),
-                            "title": obj.get("title", ""),
-                            "price_raw": str(obj.get("price", "")),
-                            "tags": obj.get("tags", []),
-                            "kind_name": obj.get("kind_name", ""),
-                            "address_raw": obj.get("address", ""),
-                            "surrounding_type": detail_data.get("surrounding_type"),
-                            "surrounding_raw": detail_data.get("surrounding_raw"),
-                            "region": str(region),
-                            "section": str(obj.get("section", "")),
-                            "kind": str(obj.get("kind", "")),
-                            "floor_raw": detail_data.get("floor_raw", ""),
-                            "layout_raw": detail_data.get("layout_raw", ""),
-                            "area_raw": detail_data.get("area_raw", ""),
-                            "gender_raw": detail_data.get("gender_raw"),
-                            "shape_raw": detail_data.get("shape_raw"),
-                            "fitment_raw": detail_data.get("fitment_raw"),
-                            "options": detail_data.get("options", []),
-                            "has_detail": True,
-                        }
-
-                        db_ready = transform_to_db_ready(combined)
-                        updated_objects.append(db_ready)
 
                 # Persist all backfilled detail in one transaction (atomic), then
                 # refresh the Redis cache so DB and cache do not drift apart.
@@ -487,17 +419,18 @@ class InstantNotifier:
                         f"Updated {len(updated_objects)} objects with detail"
                     )
 
-                    # Update filtered_objects with new data
-                    updated_by_id = {
-                        obj["source_id"]: obj for obj in updated_objects
+                    # Replace filtered objects with their enriched versions, keyed
+                    # by (source, source_id) so a future second source sharing a
+                    # source_id cannot overwrite the wrong object.
+                    enriched_by_key = {
+                        (o["source"], o["source_id"]): o for o in updated_objects
                     }
                     filtered_objects = [
-                        updated_by_id.get(obj["source_id"], obj)
+                        enriched_by_key.get((obj["source"], obj["source_id"]), obj)
                         for obj in filtered_objects
                     ]
-
             finally:
-                await detail_fetcher.close()
+                await source.close()
 
         # Step 5: Match only objects with has_detail=true
         objects_with_detail = [

@@ -11,6 +11,15 @@
 
 ### Changed
 
+- **架構 / 來源外掛化（Phase 2）**：把爬蟲重構成「來源（Source）外掛」架構。每個租屋網站
+  是一個 `Source` 實作，收在 `src/crawler/sources/<name>/`，輸出標準化的 `DBReadyData`；
+  核心（去重/比對/儲存/通知）與推播層完全來源無關。新增來源 = 新資料夾 + 實作 `Source` +
+  registry 註冊一行，核心零改動。新增 `crawler/base.py`（Source 介面 + `ListBatch`/`DetailBatch`）、
+  `crawler/contract.py`（`DBReadyData`）、`crawler/registry.py`、`crawler/workers.py`；
+  591 全部管線移入 `crawler/sources/x591/`。`checker` / `instant_notify` 改透過 `Source` 介面
+  驅動，不再 import 任何爬蟲內部模組。**新增說明書 `docs/ADDING_A_SOURCE.md`。**
+- **物件 / 多來源儲存（Phase 1）**：`objects` 改用 DB 自動產生的 UUID 主鍵，原 `id` 轉為
+  `source_id`，新增 `source`（現有資料填 `591`），以 `(source, source_id)` 辨識物件。
 - **Migration / 合併單一檔**：將 12 支增量 migration（`002`~`20260211002`）合併回單一
   `migrations/init.sql`，內容對齊正式機現況（以 prod schema dump 逐欄/索引/view/seed 驗證等價）。
   正式機 `schema_migrations` 已記錄各檔名故不重跑；全新部署只套用 `init.sql`，
@@ -36,6 +45,21 @@
 - **即時通知 / backfill 原子性**：即時通知補 detail 時逐筆更新 PostgreSQL、最後才更新
   Redis，中途失敗會造成兩邊 `has_detail`/detail 不一致。改為用單一交易的
   `update_batch_with_detail`（全有或全無），成功後才刷新 Redis 快取。
+
+### Fixed（多來源化，Phase 2）
+
+- **通知 / 冷啟動洗版**：server 重啟（或 redis seen-set 被清/過期）時，seen-set 是空的、
+  整頁都被當「新」，而訂閱旗標還在 `initialized` → 不抑制 → 整頁全推播。改為：某區若**沒有
+  爬取歷史**（`has_seen_ids` 為 false），該輪當「靜默基準」——照常存物件、填 seen-set、標記
+  訂閱 initialized，但**不發任何通知**；下一輪 seen-set 暖了才正常推真正的新刊登。一條規則
+  涵蓋重啟 / redis flush / seen-set 過期 / 全新區域。順帶把原本沒接線的 `force_notify` 接上
+  （手動測試時可繞過抑制）。
+- **比對 / section 未知被誤篩**：pre-filter 改在標準化資料上跑後，list 頁未解析出的 `section`
+  會變成 `0`，導致原本「區域未知先不過濾」的物件被提前淘汰、漏抓 detail。改為 `match_section_quick`
+  把 `0`（標準化的未知哨兵）與 `None` 同樣視為「不過濾」。
+- **即時通知 / 共用 singleton fetcher（重構回歸修正）**：`X591Source` 改建自己的全新 fetcher
+  實例（而非 `get_*_fetcher()` 單例），`close()` 只關自己擁有的；即時通知每次建自己的 source、
+  用完即關,不會關掉排程器正在用的瀏覽器。
 
 ### Fixed
 

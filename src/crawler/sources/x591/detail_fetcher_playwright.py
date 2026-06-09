@@ -9,7 +9,8 @@ import asyncio
 from loguru import logger
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
-from src.crawler.types import DetailFetchStatus, DetailRawData, calculate_detail_workers
+from src.crawler.sources.x591.raw_types import DetailFetchStatus, DetailRawData
+from src.crawler.workers import calculate_detail_workers
 
 fetcher_log = logger.bind(module="Playwright")
 
