@@ -130,14 +130,23 @@ def wide_sub(sub_id: int = 1) -> dict:
 
 
 class FakeRedis:
-    def __init__(self, *, subs=None, new_ids=None, uninitialized_ids=None):
+    def __init__(
+        self, *, subs=None, new_ids=None, uninitialized_ids=None, has_history=True
+    ):
         self._subs = subs or []
         # new_ids: None -> treat every queried id as new; else a set of int ids
         self._new_ids = new_ids
         self._uninitialized_ids = set(uninitialized_ids or [])
+        # has_history: does the region already have a seen set? Default True
+        # (warm region) so existing notify tests behave normally; False models a
+        # cold region (fresh start / flushed / expired) -> silent baseline.
+        self._has_history = has_history
         self.added_seen: list[tuple[int, set]] = []
         self.marked_initialized: list[int] = []
         self.updated_objects: list[tuple[int, list]] = []
+
+    async def has_seen_ids(self, region):
+        return self._has_history
 
     async def get_new_ids(self, region, ids):
         if self._new_ids is None:
@@ -453,6 +462,53 @@ class TestCheckOrchestration:
         assert deps["broadcaster"].broadcasts == []
         assert result["initialized_subs"] == [1]
         assert 1 in deps["redis"].marked_initialized
+
+    async def test_cold_region_is_silent_baseline(self):
+        """A region with no seen history suppresses ALL notifications this round.
+
+        Even an already-initialized sub is not notified (this is the server-
+        restart / flushed-seen-set flood fix): objects are still saved and the
+        seen set seeded, and subs are marked initialized so the next warm round
+        notifies normally. Contrast with the warm-region case
+        (test_initialized_sub_match_is_broadcast) which DOES broadcast.
+        """
+        # Cold region (has_history=False); sub is initialized (uninitialized empty).
+        redis = FakeRedis(subs=[wide_sub()], new_ids={111}, has_history=False)
+        checker, deps = build_checker(
+            pages={0: [make_list_item(111), make_list_item(999)]},
+            redis=redis,
+            details={111: make_detail(111)},
+        )
+
+        result = await checker.check(region=1)
+
+        # Matched internally but suppressed -> nothing broadcast.
+        assert result["matches"] == []
+        assert deps["broadcaster"].broadcasts == []
+        # Object still saved and the seen set seeded this round.
+        assert "111" in saved_by_source_id(deps["repo"])
+        assert deps["redis"].added_seen
+        # Sub marked initialized so the next (warm) round notifies normally.
+        assert 1 in deps["redis"].marked_initialized
+
+    async def test_force_notify_overrides_cold_region_baseline(self):
+        """force_notify bypasses both the cold-region and uninitialized suppression."""
+        redis = FakeRedis(
+            subs=[wide_sub()],
+            new_ids={111},
+            uninitialized_ids={1},  # would normally suppress
+            has_history=False,  # cold region would normally suppress
+        )
+        checker, deps = build_checker(
+            pages={0: [make_list_item(111), make_list_item(999)]},
+            redis=redis,
+            details={111: make_detail(111)},
+        )
+
+        result = await checker.check(region=1, force_notify=True)
+
+        assert len(result["matches"]) == 1
+        assert len(deps["broadcaster"].broadcasts) == 1
 
     async def test_no_subscriptions_skips_detail_but_saves(self):
         """With no subs, detail fetch is skipped but new objects are still saved."""

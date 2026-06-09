@@ -233,6 +233,13 @@ class Checker:
         total_fetched = 0
 
         try:
+            # Whether this region has any crawl history yet. Captured BEFORE the
+            # save step seeds the seen set. A region with no history (fresh start,
+            # flushed/expired seen set, brand-new region) must treat this round as
+            # a silent baseline — otherwise every current listing looks "new" and,
+            # if subs are already initialized, the whole page gets notified.
+            region_has_history = await self._redis.has_seen_ids(region)
+
             # Step 1: Source crawls the region's list pages and returns NEW,
             # standardized listings (it owns pagination + the seen-set early-stop).
             list_batch = await self._source.fetch_list(region, self.MAX_PAGES)
@@ -351,6 +358,18 @@ class Checker:
                 )
                 uninitialized_ids = {sub["id"] for sub in uninitialized_subs}
 
+                # A region with no prior crawl history treats this whole round as a
+                # silent baseline: objects are still saved and the seen set seeded
+                # (above), subs get marked initialized (below), but nothing is
+                # notified. Without this, a cold seen set makes every current
+                # listing look "new" and floods already-initialized subs.
+                region_baseline = not region_has_history
+                if region_baseline and not force_notify:
+                    checker_log.info(
+                        f"Region {region} has no seen history; this round is a "
+                        f"silent baseline (seeding seen set, no notifications)"
+                    )
+
                 # Only match objects with has_detail=true
                 objects_with_detail = [
                     obj for obj in processed_objects if obj.get("has_detail", False)
@@ -364,13 +383,17 @@ class Checker:
                             continue
 
                         sub_id = sub["id"]
-                        if sub_id in uninitialized_ids:
-                            # First baseline scan for this sub: don't notify
-                            # (avoids flooding when the seen set is empty).
+                        # Suppress on a cold-region baseline or a not-yet-initialized
+                        # sub (first baseline scan) — unless force_notify overrides
+                        # it (manual testing).
+                        suppress = not force_notify and (
+                            region_baseline or sub_id in uninitialized_ids
+                        )
+                        if suppress:
                             if sub_id not in initialized_subs:
                                 initialized_subs.append(sub_id)
                         else:
-                            # Initialized subscription - match and notify
+                            # Notify this match.
                             matches.append((obj, [sub]))
                             checker_log.info(
                                 f"Object {obj['source_id']} matches subscription {sub_id}"
