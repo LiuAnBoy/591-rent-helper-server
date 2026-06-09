@@ -344,6 +344,28 @@ class TestCheckOrchestration:
         assert result["pre_filter_output"] == 1
         assert result["pre_filter_skipped"] == 1
 
+    async def test_prefilter_respects_non_price_criterion(self):
+        """A non-price quick criterion (area) also gates the detail fetch.
+
+        Guards the upcoming move of pre-filter onto standardized data: if a
+        non-price condition silently regressed, this 10坪 item would wrongly
+        pass an area_min=20 filter and trigger a detail fetch.
+        """
+        sub = wide_sub()
+        sub["area_min"] = 20  # our 10坪 listing is below the minimum -> skip
+        redis = FakeRedis(subs=[sub], new_ids={111})
+        checker, deps = build_checker(
+            pages={0: [make_list_item(111), make_list_item(999)]},
+            redis=redis,
+            details={111: make_detail(111)},
+        )
+
+        result = await checker.check(region=1)
+
+        assert deps["detail_fetcher"].fetched_ids is None
+        assert result["pre_filter_output"] == 0
+        assert result["pre_filter_skipped"] == 1
+
     async def test_all_new_objects_saved_with_correct_has_detail(self):
         """Candidates are saved has_detail=True; non-candidates has_detail=False."""
         redis = FakeRedis(subs=[wide_sub()], new_ids={111, 222})
@@ -381,8 +403,12 @@ class TestCheckOrchestration:
         assert len(result["matches"]) == 1
         assert len(deps["broadcaster"].broadcasts) == 1
         grouped = deps["broadcaster"].broadcasts[0]
-        # grouped: list of (obj, subs); the matched object is our 111
-        assert grouped[0][0]["source_id"] == "111"
+        # grouped: list of (obj, subs) tuples — verify both the object identity
+        # and that the matching subscription is grouped under it.
+        assert len(grouped) == 1
+        obj, subs = grouped[0]
+        assert obj["source_id"] == "111"
+        assert [s["id"] for s in subs] == [1]
 
     async def test_uninitialized_sub_not_notified_but_marked(self):
         """First-scan (uninitialized) subs are baseline-marked, never notified."""

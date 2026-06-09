@@ -47,7 +47,7 @@ def _assert_db_ready_equals(actual: dict, expected: dict) -> None:
 
 _LIST_RAW = {
     "region": 1,
-    "section": "7",
+    "section": 7,  # real list parser yields an int section (or None)
     "id": "12345678",
     "url": "https://rent.591.com.tw/12345678",
     "title": "台北市信義區套房",

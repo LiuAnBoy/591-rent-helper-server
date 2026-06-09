@@ -96,7 +96,7 @@ def make_detail(source_id):
         "kind": "2",
         "floor_raw": "3F/10F",
         "layout_raw": "2房1廳1衛",
-        "area_raw": "10坪",
+        "area_raw": "12坪",  # distinct from the cached stub's area (10.0) to prove merge
         "gender_raw": None,
         "shape_raw": "電梯大樓",
         "fitment_raw": "新裝潢",
@@ -245,6 +245,13 @@ class TestInstantNotify:
 
         assert FakeDetailFetcher.fetched_ids == ["111"]
         assert len(FakeRepo.updated_batches) == 1  # detail persisted
+        # Verify the fetched detail content was actually merged, not just the
+        # has_detail flag flipped: area 12.0 comes from the detail (12坪), while
+        # the cached stub had area 10.0.
+        persisted = FakeRepo.updated_batches[0][0]
+        assert persisted["source_id"] == "111"
+        assert persisted["has_detail"] is True
+        assert persisted["area"] == 12.0
         assert result["matched"] == 1
         assert result["notified"] == 1
 
@@ -284,6 +291,9 @@ class TestInstantNotify:
         )
 
         assert len(notifier._redis.set_calls) == 1  # cache populated
+        cached_region, cached_payload = notifier._redis.set_calls[0]
+        assert cached_region == 1
+        assert [o["source_id"] for o in cached_payload] == ["111"]
         assert result["matched"] == 1
         assert result["notified"] == 1
 
