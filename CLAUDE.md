@@ -226,7 +226,7 @@ Key variables (see `.env.example` for full list):
 
 ## Test Coverage
 
-**Total: 322 unit tests**
+**Total: 323 unit tests**
 
 ⚠️ **IMPORTANT: If you modify any code in the areas below, run `uv run pytest` to verify tests pass.**
 
@@ -240,7 +240,7 @@ Key variables (see `.env.example` for full list):
 | `src/crawler/sources/x591/source.py` (lifecycle) | `test_x591_source.py` | 3 | X591Source owns fresh fetchers; never closes injected ones |
 | `src/matching/` | `test_matcher.py`, `test_pre_filter.py` | 139 | Subscription matching, parsing, floor extraction, pre-filtering, unknown/zero price+section exclusion |
 | `src/crawler/sources/x591/transformers.py` | `test_transformers.py` | 80 | All data transformers (price + extra-fee, kind-from-name, floor, layout, area, gender, etc.) |
-| `src/jobs/checker.py` (orchestration) | `test_checker_orchestration.py` | 16 | check() flow: pagination early-stop, per-source fetch_all vs pre-filter→detail select, has_detail merge, seen-set, notify suppression, cold-region silent baseline, force_notify |
+| `src/jobs/checker.py` (orchestration) | `test_checker_orchestration.py` | 17 | check() flow: pagination early-stop, per-source fetch_all vs pre-filter→detail select, has_detail merge, seen-set, notify suppression, cold-region silent baseline, force_notify |
 | `src/jobs/instant_notify.py` (orchestration) | `test_instant_notify_orchestration.py` | 6 | notify flow: redis-hit match, detail backfill+merge, pre-filter skip, redis-miss DB fallback |
 
 ### Test Details

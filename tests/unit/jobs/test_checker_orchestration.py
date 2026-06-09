@@ -592,6 +592,9 @@ class TestFetchAllMode:
         result = await checker.check(region=1)
 
         assert sorted(deps["detail_fetcher"].fetched_ids) == [111, 222]
+        # fetch_all + no subs: still detail every new object; stats stay coherent.
+        assert result["pre_filter_input"] == 2
+        assert result["pre_filter_output"] == 2
         assert result["pre_filter_skipped"] == 0
         saved = saved_by_source_id(deps["repo"])
         assert saved["111"]["has_detail"] is True
@@ -621,3 +624,38 @@ class TestFetchAllMode:
         # 591's configured default is fetch_all=True -> both fetched.
         assert sorted(deps["detail_fetcher"].fetched_ids) == [111, 222]
         assert result["pre_filter_skipped"] == 0
+
+    async def test_source_config_false_drives_prefilter(self, monkeypatch):
+        """fetch_all=None genuinely reads settings: flip 591 to False -> pre-filter.
+
+        Proves the no-override path is settings-driven (not a hardcoded True):
+        with the source configured fetch_all=False, the out-of-range 222 must be
+        pre-filtered out and only 111 detail-fetched.
+        """
+        from config.settings import SourceConfig
+
+        class _FakeSettings:
+            def source_config(self, key):
+                return SourceConfig(fetch_all=False)
+
+        monkeypatch.setattr("config.settings.get_settings", lambda: _FakeSettings())
+
+        redis = FakeRedis(subs=[wide_sub()], new_ids={111, 222})
+        checker, deps = build_checker(
+            pages={
+                0: [
+                    make_list_item(111),
+                    make_list_item(222, price_raw="50,000元/月"),  # out of range
+                ],
+                30: [],
+            },
+            redis=redis,
+            details={111: make_detail(111), 222: make_detail(222)},
+            fetch_all=None,
+        )
+
+        result = await checker.check(region=1)
+
+        assert deps["detail_fetcher"].fetched_ids == [111]
+        assert result["pre_filter_output"] == 1
+        assert result["pre_filter_skipped"] == 1
