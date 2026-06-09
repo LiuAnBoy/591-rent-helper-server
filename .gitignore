@@ -65,6 +65,9 @@ data/
 tmp/
 todos/
 
+# Design specs - ignore any folder named "specs" anywhere
+specs/
+
 # Local development docs (not tracked)
 .local-docs/
 
