@@ -18,6 +18,7 @@ crafted to genuinely match wide_sub through the real logic.
 import pytest
 
 import src.jobs.instant_notify as instant_notify_mod
+from src.crawler.sources.x591.source import X591Source
 from src.jobs.instant_notify import InstantNotifier
 
 
@@ -171,13 +172,14 @@ class FakeRepo:
 
 
 class FakeDetailFetcher:
-    """Stand-in for the inline DetailFetcher()."""
+    """Detail fetcher fake injected into the X591Source.
+
+    The source calls fetch_details_batch_raw with int ids, so ``details`` is
+    keyed by int.
+    """
 
     details: dict = {}
     fetched_ids = None
-
-    def __init__(self):
-        pass
 
     async def start(self):
         pass
@@ -191,15 +193,49 @@ class FakeDetailFetcher:
         return found, 0, 0
 
 
+class FakeListFetcher:
+    """List fetcher fake; present so X591Source.start() builds no real fetcher.
+
+    Instant notify never calls fetch_list, so this is only here to satisfy the
+    source's dependency wiring.
+    """
+
+    async def start(self):
+        pass
+
+    async def close(self):
+        pass
+
+    async def fetch_objects_raw(self, region, sort, first_row):
+        return []
+
+
 @pytest.fixture(autouse=True)
 def _patch_inline_collaborators(monkeypatch):
-    """Patch the inline-created ObjectRepository / DetailFetcher and reset state."""
+    """Inject a fake-backed source + repo; reset shared fake state."""
     FakeRepo.db_objects = []
     FakeRepo.updated_batches = []
     FakeDetailFetcher.details = {}
     FakeDetailFetcher.fetched_ids = None
+
+    def fake_get_source(key, redis):
+        return X591Source(
+            redis=redis,
+            list_fetcher=FakeListFetcher(),
+            detail_fetcher=FakeDetailFetcher(),
+        )
+
     monkeypatch.setattr(instant_notify_mod, "ObjectRepository", FakeRepo)
-    monkeypatch.setattr(instant_notify_mod, "DetailFetcher", FakeDetailFetcher)
+    monkeypatch.setattr(instant_notify_mod, "get_source", fake_get_source)
+    # The rate-limit sleep now lives in the source.
+    monkeypatch.setattr(
+        "src.crawler.sources.x591.source.asyncio.sleep",
+        _async_noop,
+    )
+
+
+async def _async_noop(*args, **kwargs):
+    return None
 
 
 def build_notifier(*, region_objects=None, broadcaster=None):
@@ -234,7 +270,7 @@ class TestInstantNotify:
 
     async def test_object_without_detail_is_backfilled_then_matched(self):
         """A has_detail=False cached object gets detail fetched, then matches."""
-        FakeDetailFetcher.details = {"111": make_detail(111)}
+        FakeDetailFetcher.details = {111: make_detail(111)}
         notifier = build_notifier(
             region_objects=[make_std_object(111, has_detail=False)]
         )
@@ -243,7 +279,7 @@ class TestInstantNotify:
             user_id=1, subscription=wide_sub(), service="telegram", service_id="chat-1"
         )
 
-        assert FakeDetailFetcher.fetched_ids == ["111"]
+        assert FakeDetailFetcher.fetched_ids == [111]
         assert len(FakeRepo.updated_batches) == 1  # detail persisted
         # Verify the fetched detail content was actually merged, not just the
         # has_detail flag flipped: area 12.0 comes from the detail (12坪), while

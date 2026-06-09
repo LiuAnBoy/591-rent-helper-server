@@ -19,17 +19,18 @@ fixtures are crafted to genuinely match / not-match through the real logic.
 
 import pytest
 
+from src.crawler.sources.x591.source import X591Source
 from src.jobs.checker import Checker
 
 
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
-    """Skip the real rate-limit sleeps in check() so unit tests stay fast."""
+    """Skip the real rate-limit sleeps (now in the source) so tests stay fast."""
 
     async def _instant(*args, **kwargs):
         return None
 
-    monkeypatch.setattr("src.jobs.checker.asyncio.sleep", _instant)
+    monkeypatch.setattr("src.crawler.sources.x591.source.asyncio.sleep", _instant)
 
 # --------------------------------------------------------------------------
 # Raw data builders (shapes mirror 591 ListRawData / DetailRawData)
@@ -232,17 +233,21 @@ def build_checker(
     broadcaster=None,
     enable_broadcast=True,
 ):
-    """Wire a Checker with all dependencies faked and the repo pre-set."""
+    """Wire a Checker with a real X591Source over faked fetchers + repo pre-set."""
     list_fetcher = FakeListFetcher(pages)
     detail_fetcher = FakeDetailFetcher(details, detail_not_found, detail_failed)
     postgres = FakePostgres()
     repo = FakeRepo()
     bc = broadcaster if broadcaster is not None else FakeBroadcaster()
+    # Real source over fake fetchers: exercises the actual pagination / early-stop
+    # / detail-merge logic that now lives in X591Source.
+    source = X591Source(
+        redis=redis, list_fetcher=list_fetcher, detail_fetcher=detail_fetcher
+    )
     checker = Checker(
         postgres=postgres,
         redis=redis,
-        list_fetcher=list_fetcher,
-        detail_fetcher=detail_fetcher,
+        source=source,
         broadcaster=bc,
         enable_broadcast=enable_broadcast,
     )
@@ -251,6 +256,7 @@ def build_checker(
     return checker, {
         "list_fetcher": list_fetcher,
         "detail_fetcher": detail_fetcher,
+        "source": source,
         "postgres": postgres,
         "repo": repo,
         "broadcaster": bc,

@@ -93,6 +93,9 @@ module = [
     "src.crawler.sources.x591.detail_fetcher_bs4",
     "src.crawler.sources.x591.list_fetcher",
     "src.crawler.sources.x591.detail_fetcher",
+    "src.crawler.sources.x591.combiner",
+    "src.crawler.sources.x591.transformers",
+    "src.crawler.sources.x591.source",
 ]
 disable_error_code = ["union-attr", "arg-type", "assignment", "attr-defined", "typeddict-item", "operator", "misc"]
 
@@ -108,7 +111,7 @@ module = [
     "src.jobs.broadcaster",
     "src.jobs.checker",
 ]
-disable_error_code = ["union-attr", "arg-type", "assignment", "no-redef"]
+disable_error_code = ["union-attr", "arg-type", "assignment", "no-redef", "misc"]
 
 # Signal handler and decorator patterns
 [[tool.mypy.overrides]]
