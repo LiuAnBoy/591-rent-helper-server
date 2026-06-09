@@ -14,7 +14,8 @@ from src.crawler.list_fetcher_playwright import (
     ListFetcherPlaywright,
     get_playwright_fetcher,
 )
-from src.crawler.types import ListRawData, calculate_list_workers
+from src.crawler.types import ListRawData
+from src.crawler.workers import calculate_list_workers
 
 fetcher_log = logger.bind(module="ListFetcher")
 

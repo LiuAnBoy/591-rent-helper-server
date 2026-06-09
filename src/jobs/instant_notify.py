@@ -8,12 +8,13 @@ from loguru import logger
 
 from src.connections.postgres import get_postgres
 from src.connections.redis import get_redis
+from src.crawler.contract import DBReadyData
 from src.crawler.detail_fetcher import DetailFetcher
 from src.crawler.types import CombinedRawData
 from src.jobs.broadcaster import get_broadcaster
 from src.matching import filter_redis_objects, match_object_to_subscription
 from src.modules.objects import ObjectRepository
-from src.utils import DBReadyData, transform_to_db_ready
+from src.utils import transform_to_db_ready
 
 notify_log = logger.bind(module="Notify")
 

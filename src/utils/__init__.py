@@ -13,7 +13,6 @@ from src.utils.mappings import (
     convert_shape_to_code,
 )
 from src.utils.transformers import (
-    DBReadyData,
     transform_address,
     transform_area,
     transform_fitment,
@@ -41,7 +40,6 @@ __all__ = [
     "convert_options_to_codes",
     "convert_other_to_codes",
     # Transformers
-    "DBReadyData",
     "transform_id",
     "transform_price",
     "transform_floor",

@@ -14,7 +14,8 @@ import urllib3
 from bs4 import BeautifulSoup
 from loguru import logger
 
-from src.crawler.types import DetailFetchStatus, DetailRawData, calculate_detail_workers
+from src.crawler.types import DetailFetchStatus, DetailRawData
+from src.crawler.workers import calculate_detail_workers
 
 # Suppress SSL warnings for 591's certificate issues
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
