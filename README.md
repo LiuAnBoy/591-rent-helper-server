@@ -11,6 +11,7 @@
 - **增量詳情抓取** - 只在需要時抓取詳情頁，減少請求數量
 - **Redis 快取優先** - InstantNotify 優先使用 Redis 快取，提升回應速度
 - 平台無關的指令系統（未來可擴充 LINE、Discord）
+- **多來源外掛架構** - 標準化輸出，可自行擴充其他租屋來源（見 [說明書](docs/ADDING_A_SOURCE.md)）
 - JWT 身份驗證
 - 白天/夜間不同爬取間隔
 - 一鍵部署腳本
@@ -40,6 +41,19 @@
 **Redis 快取結構**：
 - `seen:{region}` - 已爬取物件 ID 集合（用於 Checker 過濾）
 - `region:{region}:objects` - 區域物件快取（30 分鐘 TTL，用於 InstantNotify）
+
+## 多來源架構（可自行擴充來源）
+
+爬蟲採**來源外掛（Source）架構**：每個租屋網站是一個獨立的 `Source`，收在
+`src/crawler/sources/<name>/`，對外一律輸出**標準化**的 `DBReadyData`。核心（去重 /
+比對 / 儲存 / 通知）與推播層完全來源無關，因此**新增一個來源不會動到核心**。
+
+> 新增來源 = 在 `sources/` 多一個資料夾、實作 `Source` 介面、在 registry 註冊一行。
+
+- 591 來源（`sources/x591/`）是第一個實作，可直接當範本。
+- 每個來源可在 `settings.sources` 宣告自己的爬取策略（例如 `fetch_all` 是否每筆都抓詳情）。
+
+完整教學請參考 **[docs/ADDING_A_SOURCE.md](docs/ADDING_A_SOURCE.md)**。
 
 ## 執行流程
 
