@@ -17,7 +17,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.crawler.detail_fetcher_playwright import DetailFetcherPlaywright
+from src.crawler.sources.x591.detail_fetcher_playwright import DetailFetcherPlaywright
 
 
 async def main(object_ids: list[int]):

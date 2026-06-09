@@ -10,15 +10,15 @@ from loguru import logger
 
 from src.connections.postgres import PostgresConnection, get_postgres
 from src.connections.redis import RedisConnection, get_redis
-from src.crawler.combiner import combine_raw_data, combine_with_list_only
 from src.crawler.contract import DBReadyData
-from src.crawler.detail_fetcher import DetailFetcher, get_detail_fetcher
-from src.crawler.list_fetcher import ListFetcher, get_list_fetcher
-from src.crawler.types import DetailRawData, ListRawData
+from src.crawler.sources.x591.combiner import combine_raw_data, combine_with_list_only
+from src.crawler.sources.x591.detail_fetcher import DetailFetcher, get_detail_fetcher
+from src.crawler.sources.x591.list_fetcher import ListFetcher, get_list_fetcher
+from src.crawler.sources.x591.raw_types import DetailRawData, ListRawData
+from src.crawler.sources.x591.transformers import transform_to_db_ready
 from src.jobs.broadcaster import Broadcaster, ErrorType, get_broadcaster
 from src.matching import filter_objects, match_object_to_subscription
 from src.modules.objects import ObjectRepository
-from src.utils import transform_to_db_ready
 
 checker_log = logger.bind(module="Checker")
 

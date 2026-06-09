@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 from loguru import logger
 from playwright.async_api import Browser, Page, async_playwright
 
-from src.crawler.types import ListRawData
+from src.crawler.sources.x591.raw_types import ListRawData
 from src.modules.objects import RentalObject
 
 fetcher_log = logger.bind(module="Playwright")

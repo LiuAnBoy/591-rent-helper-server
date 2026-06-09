@@ -5,7 +5,11 @@ This module combines raw data from List and Detail pages according to
 specific priority rules. Part of the ETL Extract/Combine phase.
 """
 
-from src.crawler.types import CombinedRawData, DetailRawData, ListRawData
+from src.crawler.sources.x591.raw_types import (
+    CombinedRawData,
+    DetailRawData,
+    ListRawData,
+)
 
 
 def _is_rooftop_floor(floor_raw: str | None) -> bool:

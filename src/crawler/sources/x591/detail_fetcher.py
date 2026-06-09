@@ -9,9 +9,9 @@ import asyncio
 
 from loguru import logger
 
-from src.crawler.detail_fetcher_bs4 import DetailFetcherBs4
-from src.crawler.detail_fetcher_playwright import DetailFetcherPlaywright
-from src.crawler.types import DetailFetchStatus, DetailRawData
+from src.crawler.sources.x591.detail_fetcher_bs4 import DetailFetcherBs4
+from src.crawler.sources.x591.detail_fetcher_playwright import DetailFetcherPlaywright
+from src.crawler.sources.x591.raw_types import DetailFetchStatus, DetailRawData
 
 fetcher_log = logger.bind(module="DetailFetcher")
 

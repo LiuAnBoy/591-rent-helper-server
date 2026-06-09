@@ -17,8 +17,8 @@ Note on ordering: ``tags``, ``options`` and ``other`` are derived via
 They are compared as sets; every other field is compared exactly.
 """
 
-from src.crawler.combiner import combine_raw_data, combine_with_list_only
-from src.utils.transformers import transform_to_db_ready
+from src.crawler.sources.x591.combiner import combine_raw_data, combine_with_list_only
+from src.crawler.sources.x591.transformers import transform_to_db_ready
 
 # Fields whose order is non-deterministic (set-derived) -> compare as sets.
 _SET_FIELDS = ("tags", "options", "other")

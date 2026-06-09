@@ -2,7 +2,7 @@
 Unit tests for src/utils/transformers.py
 """
 
-from src.utils.transformers import (
+from src.crawler.sources.x591.transformers import (
     transform_address,
     transform_area,
     transform_fitment,
