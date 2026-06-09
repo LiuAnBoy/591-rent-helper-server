@@ -45,7 +45,10 @@ class DetailBatch:
             successfully.
         not_found: Count of candidates whose detail page was a 404.
         failed: Count of candidates whose detail fetch errored (non-404).
-        failed_ids: source_ids of the errored (non-404) candidates.
+        failed_ids: source_ids of every candidate with no successful detail.
+            The fetcher reports only aggregate not_found/failed counts (not
+            per-id status), so this list includes both 404s and errors; it is
+            used for an admin alert that only fires when ``failed`` > 0.
     """
 
     enriched: dict[str, DBReadyData] = field(default_factory=dict)

@@ -372,6 +372,26 @@ class TestCheckOrchestration:
         assert result["pre_filter_output"] == 0
         assert result["pre_filter_skipped"] == 1
 
+    async def test_unknown_section_is_not_prefiltered_out(self):
+        """A listing whose section didn't parse must still get a detail fetch.
+
+        On the list page section is often None; after standardization it becomes
+        the 0 unknown-sentinel. With a section subscription filter, the object
+        must NOT be dropped at pre-filter (detail may resolve the section) — the
+        old raw pre-filter let unknown sections through.
+        """
+        redis = FakeRedis(subs=[wide_sub()], new_ids={111})  # wide_sub: section [7]
+        checker, deps = build_checker(
+            pages={0: [make_list_item(111, section=None), make_list_item(999)]},
+            redis=redis,
+            details={111: make_detail(111)},  # detail resolves section -> 7
+        )
+
+        result = await checker.check(region=1)
+
+        assert deps["detail_fetcher"].fetched_ids == [111]
+        assert result["pre_filter_output"] == 1
+
     async def test_all_new_objects_saved_with_correct_has_detail(self):
         """Candidates are saved has_detail=True; non-candidates has_detail=False."""
         redis = FakeRedis(subs=[wide_sub()], new_ids={111, 222})

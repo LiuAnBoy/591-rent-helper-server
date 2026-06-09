@@ -19,8 +19,8 @@ from src.crawler.sources.x591.combiner import (
     combine_raw_data,
     combine_with_list_only,
 )
-from src.crawler.sources.x591.detail_fetcher import DetailFetcher, get_detail_fetcher
-from src.crawler.sources.x591.list_fetcher import ListFetcher, get_list_fetcher
+from src.crawler.sources.x591.detail_fetcher import DetailFetcher
+from src.crawler.sources.x591.list_fetcher import ListFetcher
 from src.crawler.sources.x591.raw_types import CombinedRawData, ListRawData
 from src.crawler.sources.x591.transformers import transform_to_db_ready
 
@@ -62,23 +62,28 @@ class X591Source:
         self._list_raw_by_id: dict[str, ListRawData] = {}
 
     async def start(self) -> None:
-        """Create and start owned fetchers (no-op for injected ones)."""
+        """Create and start owned fetchers (no-op for injected ones).
+
+        Fresh per-instance fetchers (NOT the get_*_fetcher singletons): instant
+        notify builds its own source and closes it, so sharing the singleton
+        would tear down the browser the scheduled checker is still using.
+        """
         if self._list_fetcher is None:
-            self._list_fetcher = get_list_fetcher(headless=True)
+            self._list_fetcher = ListFetcher(headless=True)
             self._owns_list = True
             await self._list_fetcher.start()
         if self._detail_fetcher is None:
-            self._detail_fetcher = get_detail_fetcher(
+            self._detail_fetcher = DetailFetcher(
                 playwright_max_workers=self._detail_max_workers
             )
             self._owns_detail = True
             await self._detail_fetcher.start()
 
     async def close(self) -> None:
-        """Close owned fetchers."""
+        """Close only fetchers this source created (never injected ones)."""
         if self._owns_list and self._list_fetcher:
             await self._list_fetcher.close()
-        if self._detail_fetcher:
+        if self._owns_detail and self._detail_fetcher:
             await self._detail_fetcher.close()
 
     async def fetch_list(self, region: int, max_pages: int) -> ListBatch:
