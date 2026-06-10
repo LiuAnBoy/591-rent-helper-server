@@ -58,6 +58,10 @@ class TelegramHandler:
         Returns:
             True if handled successfully
         """
+        # Inline-button presses arrive as callback queries (no message).
+        if update.callback_query:
+            return await self._handle_callback(update.callback_query)
+
         if not update.message:
             tg_log.debug("Update has no message, skipping")
             return True
@@ -105,8 +109,14 @@ class TelegramHandler:
                 # Format result using Telegram formatter
                 response = self._formatter.format_command_result(result)
 
-                # Add inline keyboard for specific commands
-                reply_markup = self._get_reply_markup(result.title)
+                # Add inline keyboard for specific commands (notify menus need
+                # the user's live state, so they are resolved asynchronously).
+                if result.title in ("notify_pause_menu", "notify_resume_menu"):
+                    reply_markup = await self._build_notify_menu(
+                        chat_id, result.title
+                    )
+                else:
+                    reply_markup = self._get_reply_markup(result.title)
 
                 await self._bot.send_message(
                     chat_id,
@@ -162,6 +172,128 @@ class TelegramHandler:
             return InlineKeyboardMarkup(keyboard)
 
         return None
+
+    async def _build_notify_menu(
+        self, chat_id: int, title: str
+    ) -> InlineKeyboardMarkup | None:
+        """Build the pause/resume menu from the user's live state.
+
+        Args:
+            chat_id: Telegram chat id (== provider_id for private chats).
+            title: "notify_pause_menu" or "notify_resume_menu".
+
+        Returns:
+            The inline keyboard, or None if the user is not bound.
+        """
+        if not self._pool:
+            return None
+
+        from src.channels.telegram.menus import build_pause_menu, build_resume_menu
+        from src.modules.providers import UserProviderRepository
+        from src.modules.subscriptions import SubscriptionRepository
+
+        prov_repo = UserProviderRepository(self._pool)
+        provider = await prov_repo.find_by_provider(
+            provider=self.SERVICE_NAME, provider_id=str(chat_id)
+        )
+        if not provider:
+            return None
+
+        sub_repo = SubscriptionRepository(self._pool)
+        subs = await sub_repo.get_by_user(provider.user_id)
+        web_app_url = os.getenv("WEB_APP_URL", "")
+
+        if title == "notify_pause_menu":
+            return build_pause_menu(provider.notify_enabled, subs, web_app_url)
+        return build_resume_menu(provider.notify_enabled, subs, web_app_url)
+
+    async def _handle_callback(self, cq) -> bool:
+        """Route a ``notif:*`` callback: verify ownership, mutate, toast, refresh.
+
+        Args:
+            cq: Telegram CallbackQuery.
+
+        Returns:
+            True (always handled).
+        """
+        from src.channels.commands.notify import apply_user_notify
+        from src.modules.providers import UserProviderRepository
+        from src.modules.subscriptions import SubscriptionRepository
+        from src.modules.subscriptions.service import set_enabled
+
+        data = cq.data or ""
+        chat_id = cq.message.chat_id if cq.message else None
+        from_id = str(cq.from_user.id)
+
+        if not data.startswith("notif:") or not self._pool:
+            await self._bot.answer_callback(cq.id)
+            return True
+
+        prov_repo = UserProviderRepository(self._pool)
+        provider = await prov_repo.find_by_provider(
+            provider=self.SERVICE_NAME, provider_id=from_id
+        )
+        if not provider:
+            await self._bot.answer_callback(cq.id, "尚未綁定帳號")
+            return True
+
+        sub_repo = SubscriptionRepository(self._pool)
+        parts = data.split(":")
+        action = parts[1]
+        toast = ""
+
+        if action == "pause_user":
+            await apply_user_notify(self._pool, self.SERVICE_NAME, from_id, False)
+            toast = "已暫停使用者通知"
+        elif action == "resume_user":
+            res = await apply_user_notify(self._pool, self.SERVICE_NAME, from_id, True)
+            toast = (
+                "已開啟使用者通知"
+                if res["has_enabled_subs"]
+                else "已開啟使用者通知，但你目前沒有任何啟用中的訂閱，請至少啟用一個訂閱"
+            )
+        elif action in ("disable_sub", "enable_sub"):
+            sub_id = int(parts[2])
+            existing = await sub_repo.get_by_id(sub_id)
+            # R1: never trust the id in callback_data — verify ownership server-side.
+            if not existing or existing["user_id"] != provider.user_id:
+                await self._bot.answer_callback(cq.id, "無權限")
+                return True
+
+            want = action == "enable_sub"
+            if existing["enabled"] == want:
+                toast = "狀態未變更"
+            else:
+                await set_enabled(sub_repo, existing, want)
+                if not want:
+                    toast = "已停用此訂閱"
+                elif not provider.notify_enabled:
+                    toast = "已啟用，但使用者通知目前關閉，請先開啟使用者通知"
+                else:
+                    toast = "已啟用，有新物件會立即通知你"
+        else:
+            await self._bot.answer_callback(cq.id)
+            return True
+
+        await self._bot.answer_callback(cq.id, toast)
+        await self._refresh_menu_after(chat_id, cq.message, action)
+        return True
+
+    async def _refresh_menu_after(self, chat_id, message, action: str) -> None:
+        """Rebuild and edit the menu after an action; resend on edit failure."""
+        if chat_id is None or message is None:
+            return
+        if action in ("pause_user", "disable_sub"):
+            title, text = "notify_pause_menu", "選擇要暫停的項目："
+        else:
+            title, text = "notify_resume_menu", "選擇要恢復的項目："
+
+        markup = await self._build_notify_menu(chat_id, title)
+        if markup is None:
+            return
+        ok = await self._bot.edit_reply_markup(chat_id, message.message_id, markup)
+        if not ok:
+            await self._bot.send_message(chat_id, text, reply_markup=markup)
 
     async def _handle_text(self, chat_id: int, text: str) -> bool:
         """
