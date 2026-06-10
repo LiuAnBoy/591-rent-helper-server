@@ -102,6 +102,55 @@ class TelegramBot:
             tg_log.error(f"Failed to send message to {chat_id}: {e}")
             return False
 
+    async def answer_callback(
+        self, callback_query_id: str, text: str | None = None
+    ) -> bool:
+        """
+        Answer a callback query (shows a toast to the user).
+
+        Args:
+            callback_query_id: The callback query id to answer.
+            text: Optional toast text.
+
+        Returns:
+            True if answered successfully.
+        """
+        if not self._bot:
+            return False
+        try:
+            await self._bot.answer_callback_query(
+                callback_query_id=callback_query_id, text=text, show_alert=False
+            )
+            return True
+        except Exception as e:
+            tg_log.error(f"Failed to answer callback {callback_query_id}: {e}")
+            return False
+
+    async def edit_reply_markup(
+        self, chat_id: int | str, message_id: int, reply_markup: Any | None
+    ) -> bool:
+        """
+        Edit an existing message's inline keyboard.
+
+        Args:
+            chat_id: Target chat ID.
+            message_id: The message to edit.
+            reply_markup: New inline keyboard (or None to remove).
+
+        Returns:
+            True if edited; False if it failed (caller may fall back to resend).
+        """
+        if not self._bot:
+            return False
+        try:
+            await self._bot.edit_message_reply_markup(
+                chat_id=chat_id, message_id=message_id, reply_markup=reply_markup
+            )
+            return True
+        except Exception as e:
+            tg_log.warning(f"edit_message_reply_markup failed: {e}")
+            return False
+
     async def send_photo(
         self,
         chat_id: int | str,
