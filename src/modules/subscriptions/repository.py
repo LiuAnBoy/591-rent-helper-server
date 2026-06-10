@@ -268,6 +268,10 @@ class SubscriptionRepository:
         UPDATE subscriptions s
         SET disabled_sources = calc.new_ds,
             enabled = CASE
+                -- cardinality guard: an empty key set makes ``@> '{}'`` always
+                -- true, so without it every toggle would force enabled=False.
+                -- (registry.source_keys() is never empty, but stay correct.)
+                WHEN cardinality($3::text[]) = 0 THEN calc.old_enabled
                 WHEN calc.new_ds @> $3::text[] THEN FALSE       -- now all muted
                 WHEN calc.old_all_muted THEN TRUE               -- was all muted, now not
                 ELSE calc.old_enabled                           -- unchanged
