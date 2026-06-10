@@ -238,8 +238,9 @@ class TelegramHandler:
             return True
 
         sub_repo = SubscriptionRepository(self._pool)
+        # callback_data is client-supplied; never assume its shape.
         parts = data.split(":")
-        action = parts[1]
+        action = parts[1] if len(parts) >= 2 else ""
         toast = ""
 
         if action == "pause_user":
@@ -253,6 +254,9 @@ class TelegramHandler:
                 else "已開啟使用者通知，但你目前沒有任何啟用中的訂閱，請至少啟用一個訂閱"
             )
         elif action in ("disable_sub", "enable_sub"):
+            if len(parts) < 3 or not parts[2].isdigit():
+                await self._bot.answer_callback(cq.id, "無效操作")
+                return True
             sub_id = int(parts[2])
             existing = await sub_repo.get_by_id(sub_id)
             # R1: never trust the id in callback_data — verify ownership server-side.

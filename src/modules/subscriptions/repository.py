@@ -224,14 +224,15 @@ class SubscriptionRepository:
         """Atomically add/remove ``source`` from disabled_sources and apply the
         one-directional source -> enabled coupling (spec A.3).
 
-        Done in a single UPDATE (no read-modify-write) to avoid concurrent-write
-        races: a subquery computes the new disabled_sources from the current row,
-        and ``enabled`` is derived as "at least one source still receivable".
+        The row is locked (``SELECT ... FOR UPDATE``) before computing, so
+        concurrent source toggles serialize instead of clobbering each other.
 
-        Coupling: ``enabled = NOT (new_disabled_sources ⊇ all_source_keys)`` —
-        every registered source disabled -> enabled False; any source still open
-        -> enabled True. The master switch path never calls this, so the coupling
-        stays one-directional.
+        Coupling (preserves a manually-paused subscription — the master switch
+        path is the ONLY thing that may leave ``enabled`` inconsistent with the
+        sources, and we must not silently undo it):
+        - transition INTO "all sources muted"     -> enabled = False  (rule 1)
+        - transition OUT OF "all sources muted"    -> enabled = True   (rule 2)
+        - otherwise                                -> enabled UNCHANGED (rule 3)
 
         Args:
             subscription_id: Subscription ID.
@@ -243,12 +244,17 @@ class SubscriptionRepository:
             Updated subscription row (dict) or None if not found.
         """
         query = """
-        UPDATE subscriptions
-        SET disabled_sources = calc.new_ds,
-            enabled = NOT (calc.new_ds @> $3::text[]),
-            updated_at = NOW()
-        FROM (
+        WITH locked AS (
+            SELECT id, enabled, disabled_sources
+            FROM subscriptions
+            WHERE id = $1
+            FOR UPDATE
+        ),
+        calc AS (
             SELECT
+                id,
+                enabled AS old_enabled,
+                (disabled_sources @> $3::text[]) AS old_all_muted,
                 CASE
                     WHEN $4::boolean THEN array_remove(disabled_sources, $2)
                     ELSE (
@@ -257,11 +263,19 @@ class SubscriptionRepository:
                         )
                     )
                 END AS new_ds
-            FROM subscriptions
-            WHERE id = $1
-        ) AS calc
-        WHERE subscriptions.id = $1
-        RETURNING subscriptions.*
+            FROM locked
+        )
+        UPDATE subscriptions s
+        SET disabled_sources = calc.new_ds,
+            enabled = CASE
+                WHEN calc.new_ds @> $3::text[] THEN FALSE       -- now all muted
+                WHEN calc.old_all_muted THEN TRUE               -- was all muted, now not
+                ELSE calc.old_enabled                           -- unchanged
+            END,
+            updated_at = NOW()
+        FROM calc
+        WHERE s.id = calc.id
+        RETURNING s.*
         """
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(

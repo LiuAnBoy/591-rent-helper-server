@@ -111,6 +111,23 @@ async def test_enable_sub_owned_but_user_notify_off_warns(handler, monkeypatch):
     assert bot.answers[-1] == "已啟用，但使用者通知目前關閉，請先開啟使用者通知"
 
 
+async def test_malformed_sub_callback_is_rejected(handler, monkeypatch):
+    """Malformed callback_data (no / non-numeric id) -> '無效操作', no mutation."""
+    h, bot = handler
+    calls: list = []
+    _patch_common(
+        monkeypatch,
+        existing_sub={"id": 1, "user_id": 7, "enabled": False},
+        set_enabled_calls=calls,
+    )
+
+    await h._handle_callback(_make_cq("notif:disable_sub"))  # missing id
+    await h._handle_callback(_make_cq("notif:enable_sub:abc"))  # non-numeric
+
+    assert bot.answers == ["無效操作", "無效操作"]
+    assert calls == []  # never mutated
+
+
 async def test_unbound_user_gets_prompt(handler, monkeypatch):
     """An unbound user (no provider) is told to bind, no mutation."""
     h, bot = handler

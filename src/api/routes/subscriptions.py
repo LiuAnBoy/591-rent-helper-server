@@ -327,6 +327,9 @@ async def set_subscription_source(
         raise HTTPException(status_code=403, detail="無權限修改此訂閱")
 
     updated = await set_source_enabled(repo, existing, data.source, data.enabled)
+    if updated is None:
+        # Raced with a delete between the ownership check and the update.
+        raise HTTPException(status_code=404, detail="訂閱不存在")
 
     subs_log.info(
         f"Set source {data.source}={data.enabled} for subscription {subscription_id} "

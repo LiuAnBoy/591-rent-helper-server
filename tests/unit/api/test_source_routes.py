@@ -83,3 +83,22 @@ async def test_set_source_success_returns_state(monkeypatch):
         "enabled": False,
         "disabled_sources": ["591"],
     }
+
+
+async def test_set_source_vanished_during_update_404(monkeypatch):
+    """If the row is deleted between ownership check and update -> 404, not 500."""
+    _patch_repo(monkeypatch, {"id": 1, "user_id": 1, "enabled": True})
+
+    async def fake_set_source_enabled(repo, existing, source, enabled):
+        return None
+
+    monkeypatch.setattr(
+        "src.modules.subscriptions.service.set_source_enabled",
+        fake_set_source_enabled,
+    )
+    user = SimpleNamespace(id=1)
+    with pytest.raises(HTTPException) as exc:
+        await subs_routes.set_subscription_source(
+            1, subs_routes.SourceToggle(source="591", enabled=True), user
+        )
+    assert exc.value.status_code == 404
