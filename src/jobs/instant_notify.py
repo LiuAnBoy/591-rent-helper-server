@@ -299,6 +299,8 @@ class InstantNotifier:
             matched_objects = []
 
             for obj in objects_with_detail:
+                if obj["source"] in sub.get("disabled_sources", []):
+                    continue
                 if match_object_to_subscription(obj, sub):
                     matched_objects.append(obj)
 
@@ -471,6 +473,8 @@ class InstantNotifier:
         matched = []
 
         for obj in objects:
+            if obj["source"] in subscription.get("disabled_sources", []):
+                continue
             if match_object_to_subscription(obj, subscription):
                 matched.append(obj)
 

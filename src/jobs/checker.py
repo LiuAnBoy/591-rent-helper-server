@@ -409,6 +409,10 @@ class Checker:
                     # obj is already DBReadyData (dict), no conversion needed
 
                     for sub in all_subs:
+                        # Source layer: skip objects whose source this sub muted
+                        # (per-subscription × per-source). Default [] = receive all.
+                        if obj["source"] in sub.get("disabled_sources", []):
+                            continue
                         if not match_object_to_subscription(obj, sub):
                             continue
 
