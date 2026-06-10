@@ -191,6 +191,9 @@ class SubscriptionResponse(SubscriptionBase):
     id: int
     user_id: int
     enabled: bool = True
+    disabled_sources: list[str] = Field(
+        default_factory=list, description="關閉的來源 (Source.key)，opt-out：不在 = 收"
+    )
     pet_required: bool = Field(False, description="需要可養寵物")
     created_at: datetime
     updated_at: datetime

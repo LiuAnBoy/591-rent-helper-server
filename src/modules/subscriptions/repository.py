@@ -214,6 +214,61 @@ class SubscriptionRepository:
             rows = await conn.fetch(query)
             return [dict(row) for row in rows]
 
+    async def set_source_enabled(
+        self,
+        subscription_id: int,
+        source: str,
+        enabled: bool,
+        all_source_keys: list[str],
+    ) -> dict | None:
+        """Atomically add/remove ``source`` from disabled_sources and apply the
+        one-directional source -> enabled coupling (spec A.3).
+
+        Done in a single UPDATE (no read-modify-write) to avoid concurrent-write
+        races: a subquery computes the new disabled_sources from the current row,
+        and ``enabled`` is derived as "at least one source still receivable".
+
+        Coupling: ``enabled = NOT (new_disabled_sources ⊇ all_source_keys)`` —
+        every registered source disabled -> enabled False; any source still open
+        -> enabled True. The master switch path never calls this, so the coupling
+        stays one-directional.
+
+        Args:
+            subscription_id: Subscription ID.
+            source: Source.key to toggle.
+            enabled: True = receive (remove from disabled), False = mute (add).
+            all_source_keys: Currently registered source keys (registry).
+
+        Returns:
+            Updated subscription row (dict) or None if not found.
+        """
+        query = """
+        UPDATE subscriptions
+        SET disabled_sources = calc.new_ds,
+            enabled = NOT (calc.new_ds @> $3::text[]),
+            updated_at = NOW()
+        FROM (
+            SELECT
+                CASE
+                    WHEN $4::boolean THEN array_remove(disabled_sources, $2)
+                    ELSE (
+                        SELECT ARRAY(
+                            SELECT DISTINCT unnest(disabled_sources || ARRAY[$2])
+                        )
+                    )
+                END AS new_ds
+            FROM subscriptions
+            WHERE id = $1
+        ) AS calc
+        WHERE subscriptions.id = $1
+        RETURNING subscriptions.*
+        """
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                query, subscription_id, source, all_source_keys, enabled
+            )
+            return dict(row) if row else None
+
     async def get_active_regions(self) -> list[int]:
         """
         Get all unique regions that have enabled subscriptions.
