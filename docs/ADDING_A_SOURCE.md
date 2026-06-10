@@ -55,22 +55,19 @@ class DetailBatch:
     failed_ids: list[str]             # 沒成功補到 detail 的 source_id
 ```
 
-### 2.1 每來源爬取設定（`settings.sources`）
+### 2.1 每來源爬取設定（manifest 的 `fetch_all`）
 
-每個來源「怎麼爬」的差異放在 `config/settings.py` 的 `settings.sources`，以 `Source.key`
-為鍵的 `SourceConfig`。目前唯一旋鈕是 `fetch_all`：
+每個來源「怎麼爬」的差異寫在 manifest（`src/crawler/registry.py` 的 `SOURCES`）那一筆的
+`fetch_all`：
 
 - `fetch_all=True` — 每個新物件都補詳情（資料完整、不漏推播）。591 現在的形式。
 - `fetch_all=False` — 只對「可能符合訂閱」的物件補詳情（沿用 `src/matching/pre_filter.py` 的粗篩）。
 
-新增來源時加一個區塊即可（不設則預設 `fetch_all=True`）：
+也就是你在 §3 註冊那一筆 `SourceDescriptor` 設好即可（預設 `True`）。
 
-```python
-sources: dict[str, SourceConfig] = {
-    "591": SourceConfig(fetch_all=True),
-    "ddroom": SourceConfig(fetch_all=False),   # 例：新來源想先用粗篩省請求
-}
-```
+> **覆蓋（少用）**：若想在不改 code 的情況下臨時改某來源的 `fetch_all`，可在
+> `config/settings.py` 的 `settings.sources`（預設空 `{}`，僅放覆蓋值）加一筆
+> `SourceConfig`；checker 解析時「manifest 預設 + settings 覆蓋」。平常不必碰。
 
 > 注意：鍵用的是 `Source.key`（如 `"591"`），不是資料夾名（`x591`）。
 
@@ -82,7 +79,7 @@ sources: dict[str, SourceConfig] = {
 for source in registry.all_sources(redis):
     for region in source.regions:                  # 目前 591 由訂閱推得 active regions
         batch     = await source.fetch_list(region, MAX_PAGES)   # 你回標準化新物件
-        if settings.source_config(source.key).fetch_all:         # 每來源策略（見 §2.1）
+        if resolve_fetch_all(source.key):                        # manifest 預設 + settings 覆蓋（§2.1）
             candidates = batch.items                             #   全爬：每個新物件都補詳情
         else:
             candidates = pre_filter(batch.items, subs)           #   粗篩：只補可能符合訂閱的
@@ -174,13 +171,22 @@ src/crawler/
    - 去重/提早停這類「爬取優化」可在 Source 內自理（591 用 Redis seen-set 做提早停，
      建構子收 `redis`；若你的來源不需要可以不收）。
 3. **寫 `transformers.py`**：raw → `DBReadyData`，把該站欄位對應到系統代碼。
-4. **註冊**：`src/crawler/registry.py` 的 `_SOURCE_FACTORIES` 加一行：
+4. **註冊**：`src/crawler/registry.py` 的 `SOURCES` manifest 加一筆 `SourceDescriptor`
+   （`key` / `name` / `factory` / `fetch_all` 一處寫齊）：
    ```python
-   _SOURCE_FACTORIES = {
-       X591Source.key: lambda redis: X591Source(redis),
-       DdRoomSource.key: lambda redis: DdRoomSource(redis),   # ← 新增
-   }
+   SOURCES: list[SourceDescriptor] = [
+       SourceDescriptor(
+           key=X591Source.key, name="591 租屋網",
+           factory=lambda redis: X591Source(redis), fetch_all=True,
+       ),
+       SourceDescriptor(                                          # ← 新增
+           key=DdRoomSource.key, name="好房網",
+           factory=lambda redis: DdRoomSource(redis), fetch_all=False,
+       ),
+   ]
    ```
+   這一筆同時餵 crawl 驅動、爬取政策（§2.1）、`GET /sources` 與 TG 來源 label——
+   其他地方零改動。
 5. **測試**（見下一節）。
 6. **完成** —— 不用碰 `checker.py` / `instant_notify.py` / `matcher.py` / 任何核心或推播檔。
 

@@ -173,14 +173,30 @@ emitting standardized `DBReadyData` (`src/crawler/contract.py`). The core (check
 repository) and presentation (channels) are source-agnostic; new origins register in
 `src/crawler/registry.py`. **Full guide: `docs/ADDING_A_SOURCE.md`.**
 
+Sources are declared in a single **manifest** — `registry.SOURCES: list[SourceDescriptor]`
+(`key` / `name` / `factory` / `fetch_all`). Adding a source = append one descriptor; every
+consumer reads it via `source_keys()` / `source_catalog()` (key+name, for `GET /sources` &
+TG labels) / `get_source()` / `all_sources()` / `source_default_fetch_all()`.
+
+### Per-subscription × per-source toggle
+Each subscription can mute individual sources: `subscriptions.disabled_sources TEXT[]`
+(opt-out — a source NOT in the array = received; empty = all). The match loops in
+`checker.py` / `instant_notify.py` guard with `obj["source"] in sub.get("disabled_sources", [])`;
+`matcher.py` stays pure. API: `PATCH /subscriptions/{id}/sources` ({source, enabled}, atomic
+`array_append`/`array_remove`). **One-directional coupling**: disabling the last receivable
+source sets `enabled=False`; enabling one from the all-muted state sets `enabled=True`; the
+master `enabled` toggle never touches sources. All enable/sources mutations go through the
+shared `src/modules/subscriptions/service.py` (REST toggle / source coupling / TG callback).
+
 ### Crawler Fallback Strategy (591 source, internal)
 - **List pages:** BS4 (3 retries) → Playwright fallback
 - **Detail pages:** BS4 (3 retries) → Playwright fallback
 
 ### Detail Fetch Strategy (per-source `fetch_all`)
-Which new objects get a detail-page fetch is a **per-source** policy, declared in
-`settings.sources` (keyed by `Source.key`, e.g. `"591"`) as `SourceConfig(fetch_all=...)`.
-The Checker resolves it at crawl time via `settings.source_config(source.key)`.
+Which new objects get a detail-page fetch is a **per-source** policy. The default lives in
+the manifest (`SourceDescriptor.fetch_all`); `settings.sources` (default empty `{}`) is an
+optional **override** layer. The Checker resolves it at crawl time as "manifest default +
+settings override" — `settings.source_config(key)` if set, else `registry.source_default_fetch_all(key)`.
 - **`fetch_all=True`** (591's current form): fetch detail for **every** new object →
   complete DB (every object stored `has_detail=True`, so later-added subscriptions
   can match on detail-only fields) and no missed notifications.
@@ -189,8 +205,8 @@ The Checker resolves it at crawl time via `settings.source_config(source.key)`.
   pre-filter util stays available for any source that wants it. Per-cycle new
   objects are small (~10 avg, ~27 peak), so `fetch_all`'s extra load is minor.
 
-New sources add their own block, e.g. `sources={"591": SourceConfig(fetch_all=True),
-"ddroom": SourceConfig(fetch_all=False)}`.
+New sources set `fetch_all` in their manifest descriptor; only add a `settings.sources` entry
+to override it without touching code.
 
 ### Notification Anti-Flood
 - Per-subscription: a sub's first baseline scan is silent (suppressed until it has been seen once).
@@ -208,6 +224,7 @@ Each module in `src/modules/` follows:
 PostgreSQL tables: `users`, `subscriptions`, `objects`, `crawler_runs`, `recent_objects` (view)
 
 - `crawler_runs` — Tracks crawler execution status + broadcast results (total/success/failed/errors)
+- `subscriptions.disabled_sources TEXT[]` — per-subscription muted sources (opt-out; empty = all received)
 
 Migrations in `migrations/` folder, tracked via `schema_migrations` table.
 
@@ -221,12 +238,13 @@ Key variables (see `.env.example` for full list):
 - `JWT_SECRET` - API authentication
 - `CRAWLER_INTERVAL_MINUTES` - Crawl frequency (default: 10)
 
-> Per-source crawl policy (e.g. `fetch_all`) lives in `settings.sources`
-> (`config/settings.py`), not in env vars — see "Detail Fetch Strategy" above.
+> Per-source crawl policy (e.g. `fetch_all`) is declared in the source manifest
+> (`registry.SOURCES`), overridable via `settings.sources` — not env vars. See
+> "Detail Fetch Strategy" above.
 
 ## Test Coverage
 
-**Total: 323 unit tests**
+**Total: 348 unit tests**
 
 ⚠️ **IMPORTANT: If you modify any code in the areas below, run `uv run pytest` to verify tests pass.**
 
@@ -238,10 +256,15 @@ Key variables (see `.env.example` for full list):
 | `src/crawler/sources/x591/` (extractors + combiner + detail success) | `test_extractors.py` | 51 | Data extraction, NUXT parsing, HTML parsing, raw data combining, rooftop preservation, `_is_valid_detail` |
 | `src/crawler/sources/x591/` (full pipeline golden) | `test_pipeline_golden.py` | 2 | Exact `raw → DBReadyData` output (list+detail / list-only); refactor safety net |
 | `src/crawler/sources/x591/source.py` (lifecycle) | `test_x591_source.py` | 3 | X591Source owns fresh fetchers; never closes injected ones |
+| `src/crawler/registry.py` (source manifest) | `test_registry.py` | 5 | `source_keys` / `source_catalog` (key+name) / `source_default_fetch_all` / unknown-key KeyError |
+| `src/modules/subscriptions/service.py` | `test_subscriptions_service.py` | 3 | shared mutation service: set_enabled re-enable→sync+notify / disable→no notify / set_source_enabled uses registry keys |
+| `src/api/routes/` (sources + sub source toggle) | `test_source_routes.py` | 5 | `GET /sources` catalog; `PATCH /sources` unknown-source 400 / 404 / 403 / success returns enabled+disabled_sources |
+| `src/channels/telegram/menus.py` | `test_menus.py` | 7 | pause/resume dynamic menus: user button visibility, enabled/disabled sub buttons, callback_data, truncation, no-url omits settings |
+| `src/channels/telegram/handler.py` (callback) | `test_callback_handler.py` | 3 | `notif:*` callback: ownership rejection (R1), cross-layer toast, unbound prompt |
 | `src/matching/` | `test_matcher.py`, `test_pre_filter.py` | 139 | Subscription matching, parsing, floor extraction, pre-filtering, unknown/zero price+section exclusion |
 | `src/crawler/sources/x591/transformers.py` | `test_transformers.py` | 80 | All data transformers (price + extra-fee, kind-from-name, floor, layout, area, gender, etc.) |
-| `src/jobs/checker.py` (orchestration) | `test_checker_orchestration.py` | 17 | check() flow: pagination early-stop, per-source fetch_all vs pre-filter→detail select, has_detail merge, seen-set, notify suppression, cold-region silent baseline, force_notify |
-| `src/jobs/instant_notify.py` (orchestration) | `test_instant_notify_orchestration.py` | 6 | notify flow: redis-hit match, detail backfill+merge, pre-filter skip, redis-miss DB fallback |
+| `src/jobs/checker.py` (orchestration) | `test_checker_orchestration.py` | 18 | check() flow: pagination early-stop, per-source fetch_all vs pre-filter→detail select, has_detail merge, seen-set, notify suppression, cold-region silent baseline, force_notify, **disabled_sources guard** |
+| `src/jobs/instant_notify.py` (orchestration) | `test_instant_notify_orchestration.py` | 7 | notify flow: redis-hit match, detail backfill+merge, pre-filter skip, redis-miss DB fallback, **disabled_sources guard** |
 
 ### Test Details
 
@@ -292,8 +315,9 @@ uv run python scripts/test_detail_bs4.py 99999999
 ### Not Yet Covered
 
 The following areas do not have unit tests:
-- `src/api/` - API routes, dependencies
+- `src/api/` - most routes/dependencies (the sources + per-subscription source toggle routes are covered in `test_source_routes.py`)
 - `src/connections/` - Database connections
-- `src/modules/` - Repository layer
+- `src/modules/` - Repository layer (the subscription mutation `service.py` is covered in `test_subscriptions_service.py`). **The `set_source_enabled` atomic SQL + enabled coupling is verified against the dev DB manually, not in the unit suite (no DB integration harness).**
 - `src/jobs/` - `broadcaster.py` (incl. retry), `scheduler.py` (orchestration only). `checker.py` / `instant_notify.py` now have characterization coverage (see table above)
 - `src/crawler/sources/x591/*_fetcher.py` - Fetcher orchestrators (only extractors, `_is_valid_detail`, the golden pipeline, and source lifecycle tested)
+- `src/channels/telegram/handler.py` - only the `notif:*` callback ownership/routing path is tested; `_build_notify_menu` Redis/DB wiring is manual-verified (needs a live bot/webhook)

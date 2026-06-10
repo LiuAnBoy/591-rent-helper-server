@@ -50,9 +50,7 @@ class FakeProvRepo:
 
 
 def _patch_common(monkeypatch, *, existing_sub, set_enabled_calls):
-    monkeypatch.setattr(
-        "src.modules.providers.UserProviderRepository", FakeProvRepo
-    )
+    monkeypatch.setattr("src.modules.providers.UserProviderRepository", FakeProvRepo)
 
     class FakeSubRepo:
         def __init__(self, pool):
@@ -64,9 +62,7 @@ def _patch_common(monkeypatch, *, existing_sub, set_enabled_calls):
         async def get_by_user(self, user_id, enabled_only=False):
             return []
 
-    monkeypatch.setattr(
-        "src.modules.subscriptions.SubscriptionRepository", FakeSubRepo
-    )
+    monkeypatch.setattr("src.modules.subscriptions.SubscriptionRepository", FakeSubRepo)
 
     async def fake_set_enabled(repo, existing, enabled):
         set_enabled_calls.append((existing["id"], enabled))
@@ -126,9 +122,7 @@ async def test_unbound_user_gets_prompt(handler, monkeypatch):
         async def find_by_provider(self, provider, provider_id):
             return None
 
-    monkeypatch.setattr(
-        "src.modules.providers.UserProviderRepository", NoProvRepo
-    )
+    monkeypatch.setattr("src.modules.providers.UserProviderRepository", NoProvRepo)
 
     await h._handle_callback(_make_cq("notif:pause_user"))
 

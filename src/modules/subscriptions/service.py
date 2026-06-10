@@ -55,7 +55,9 @@ async def _sync_and_maybe_notify(
                 service_id=sub["service_id"],
             )
         )
-        svc_log.info(f"Triggered instant notify for re-enabled subscription {sub['id']}")
+        svc_log.info(
+            f"Triggered instant notify for re-enabled subscription {sub['id']}"
+        )
     return sub
 
 

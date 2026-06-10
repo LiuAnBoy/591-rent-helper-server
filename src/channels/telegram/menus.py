@@ -40,7 +40,11 @@ def build_pause_menu(
     rows: list[list[InlineKeyboardButton]] = []
     if notify_enabled:
         rows.append(
-            [InlineKeyboardButton("👤 暫停全部（使用者）", callback_data="notif:pause_user")]
+            [
+                InlineKeyboardButton(
+                    "👤 暫停全部（使用者）", callback_data="notif:pause_user"
+                )
+            ]
         )
     for s in subs:
         if s.get("enabled"):
@@ -72,7 +76,11 @@ def build_resume_menu(
     rows: list[list[InlineKeyboardButton]] = []
     if not notify_enabled:
         rows.append(
-            [InlineKeyboardButton("👤 開啟全部（使用者）", callback_data="notif:resume_user")]
+            [
+                InlineKeyboardButton(
+                    "👤 開啟全部（使用者）", callback_data="notif:resume_user"
+                )
+            ]
         )
     for s in subs:
         if not s.get("enabled"):

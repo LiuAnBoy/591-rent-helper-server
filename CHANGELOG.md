@@ -9,8 +9,29 @@
 
 ## [Unreleased]
 
+### Added
+
+- **各別訂閱來源開關（per-subscription × per-source）**：每一筆訂閱可各別選擇要收哪些
+  來源的通知。`subscriptions` 新增 `disabled_sources TEXT[]`（opt-out，不在清單 = 收，
+  預設全收、新來源自動全收）。比對迴圈（`checker` / `instant_notify`）加上來源 guard；
+  `matcher.py` 維持純條件比對。新 API：`PATCH /subscriptions/{id}/sources`（`{source, enabled}`，
+  未知來源 400）、`GET /sources`（來源 key + 顯示名稱，給前端/TG 用）。**單向連動**：關掉
+  最後一個來源 → 該訂閱 `enabled=false`；全關下開任一來源 → `enabled=true`；主開關不回頭
+  改來源（原子 SQL 改寫，避免競態）。新增共用 mutation service（`src/modules/subscriptions/service.py`），
+  REST toggle / 來源連動 / TG callback 三入口共用。
+- **TG 暫停／開始通知改為動態選單**：「暫停通知 / 開始通知」不再立即切換，改回覆「掃描現況 +
+  動態按鈕」選單（使用者層、各訂閱、詳細設定 WebApp）。新增 inline **callback query 路由**
+  （`notif:*`，含伺服器端擁有權驗證，不信任 callback_data）。恢復某一層時若另一層仍全關，
+  跳出跨層提醒（如「使用者通知目前關閉，請先開啟」）。
+
 ### Changed
 
+- **source 宣告統一為單一 manifest**：`src/crawler/registry.py` 改為 `SOURCES: list[SourceDescriptor]`
+  （`key` / `name` / `factory` / `fetch_all` 一處寫齊）。新增 `source_catalog()`、
+  `source_default_fetch_all()`;`source_keys` / `get_source` / `all_sources` 向後相容改從
+  `SOURCES` 衍生。`settings.sources` 退化為**覆蓋層**（預設空 `{}`），政策解析改為「manifest
+  預設 + settings 覆蓋」（在 checker）。**加新來源只需編輯 manifest 一筆**，crawl / 政策 /
+  API / TG label 全部自動沿用。
 - **詳細頁抓取改為「全爬」（per-source 設定）**：新增**每來源**爬取設定 `settings.sources`
   （`config/settings.py`，以 `Source.key` 為鍵的 `SourceConfig`），591 設 `fetch_all=true`，
   日後新增來源就加一個區塊（如 `ddroom: SourceConfig(fetch_all=False)`）。`fetch_all=true`
