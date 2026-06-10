@@ -234,8 +234,14 @@ class Checker:
             fetch_all = self._fetch_all
         else:
             from config.settings import get_settings
+            from src.crawler import registry
 
-            fetch_all = get_settings().source_config(self._source.key).fetch_all
+            override = get_settings().source_config(self._source.key)
+            fetch_all = (
+                override.fetch_all
+                if override is not None
+                else registry.source_default_fetch_all(self._source.key)
+            )
 
         checker_log.info(f"Checking region={region} (fetch_all={fetch_all})")
 
