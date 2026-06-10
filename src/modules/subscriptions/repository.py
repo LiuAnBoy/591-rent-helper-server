@@ -215,76 +215,41 @@ class SubscriptionRepository:
             return [dict(row) for row in rows]
 
     async def set_source_enabled(
-        self,
-        subscription_id: int,
-        source: str,
-        enabled: bool,
-        all_source_keys: list[str],
+        self, subscription_id: int, source: str, enabled: bool
     ) -> dict | None:
-        """Atomically add/remove ``source`` from disabled_sources and apply the
-        one-directional source -> enabled coupling (spec A.3).
+        """Atomically add/remove ``source`` from a subscription's disabled_sources.
 
-        The row is locked (``SELECT ... FOR UPDATE``) before computing, so
-        concurrent source toggles serialize instead of clobbering each other.
+        Source state lives ONLY in ``disabled_sources``; this never touches
+        ``subscriptions.enabled`` (that is the user's manual master switch). A
+        subscription with every source muted simply matches nothing (the source
+        guard in the match loops filters it) — no coupling needed.
 
-        Coupling (preserves a manually-paused subscription — the master switch
-        path is the ONLY thing that may leave ``enabled`` inconsistent with the
-        sources, and we must not silently undo it):
-        - transition INTO "all sources muted"     -> enabled = False  (rule 1)
-        - transition OUT OF "all sources muted"    -> enabled = True   (rule 2)
-        - otherwise                                -> enabled UNCHANGED (rule 3)
+        The mutation is expressed with direct column references, so it is
+        concurrency-safe (each concurrent update re-evaluates against the locked
+        row): ``enabled`` toggles are idempotent ``array_remove``; ``disable``
+        appends only when not already present (no duplicates).
 
         Args:
             subscription_id: Subscription ID.
             source: Source.key to toggle.
             enabled: True = receive (remove from disabled), False = mute (add).
-            all_source_keys: Currently registered source keys (registry).
 
         Returns:
             Updated subscription row (dict) or None if not found.
         """
         query = """
-        WITH locked AS (
-            SELECT id, enabled, disabled_sources
-            FROM subscriptions
-            WHERE id = $1
-            FOR UPDATE
-        ),
-        calc AS (
-            SELECT
-                id,
-                enabled AS old_enabled,
-                (disabled_sources @> $3::text[]) AS old_all_muted,
-                CASE
-                    WHEN $4::boolean THEN array_remove(disabled_sources, $2)
-                    ELSE (
-                        SELECT ARRAY(
-                            SELECT DISTINCT unnest(disabled_sources || ARRAY[$2])
-                        )
-                    )
-                END AS new_ds
-            FROM locked
-        )
-        UPDATE subscriptions s
-        SET disabled_sources = calc.new_ds,
-            enabled = CASE
-                -- cardinality guard: an empty key set makes ``@> '{}'`` always
-                -- true, so without it every toggle would force enabled=False.
-                -- (registry.source_keys() is never empty, but stay correct.)
-                WHEN cardinality($3::text[]) = 0 THEN calc.old_enabled
-                WHEN calc.new_ds @> $3::text[] THEN FALSE       -- now all muted
-                WHEN calc.old_all_muted THEN TRUE               -- was all muted, now not
-                ELSE calc.old_enabled                           -- unchanged
+        UPDATE subscriptions
+        SET disabled_sources = CASE
+                WHEN $3::boolean THEN array_remove(disabled_sources, $2)
+                WHEN $2 = ANY(disabled_sources) THEN disabled_sources
+                ELSE disabled_sources || ARRAY[$2]
             END,
             updated_at = NOW()
-        FROM calc
-        WHERE s.id = calc.id
-        RETURNING s.*
+        WHERE id = $1
+        RETURNING *
         """
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                query, subscription_id, source, all_source_keys, enabled
-            )
+            row = await conn.fetchrow(query, subscription_id, source, enabled)
             return dict(row) if row else None
 
     async def get_active_regions(self) -> list[int]:

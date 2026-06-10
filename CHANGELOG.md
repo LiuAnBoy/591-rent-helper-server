@@ -15,14 +15,17 @@
   來源的通知。`subscriptions` 新增 `disabled_sources TEXT[]`（opt-out，不在清單 = 收，
   預設全收、新來源自動全收）。比對迴圈（`checker` / `instant_notify`）加上來源 guard；
   `matcher.py` 維持純條件比對。新 API：`PATCH /subscriptions/{id}/sources`（`{source, enabled}`，
-  未知來源 400）、`GET /sources`（來源 key + 顯示名稱，給前端/TG 用）。**單向連動**：關掉
-  最後一個來源 → 該訂閱 `enabled=false`；全關下開任一來源 → `enabled=true`；主開關不回頭
-  改來源（原子 SQL 改寫，避免競態）。新增共用 mutation service（`src/modules/subscriptions/service.py`），
-  REST toggle / 來源連動 / TG callback 三入口共用。
+  未知來源 400）、`GET /sources`（來源 key + 顯示名稱，給前端/TG 用）。來源開關**只改
+  `disabled_sources`、不碰 `subscriptions.enabled`**（後者是使用者手動主開關，單一寫入者）；
+  全來源關 = 靠 guard 自然不推播。
+- **三層通知階梯 + 編輯 guard**：送達需三層皆開（使用者 `notify_enabled` → 訂閱 `enabled`
+  → 來源不在 `disabled_sources`）。**編輯下層受上層約束**：使用者通知關 → 不能改訂閱／來源
+  開關（API 403、TG「請先開啟使用者通知」）；訂閱關 → 不能改其來源開關（403、「請先啟用此訂閱」）。
+  前端對應灰掉、TG 選單僅在使用者通知開啟時顯示訂閱按鈕。
 - **TG 暫停／開始通知改為動態選單**：「暫停通知 / 開始通知」不再立即切換，改回覆「掃描現況 +
   動態按鈕」選單（使用者層、各訂閱、詳細設定 WebApp）。新增 inline **callback query 路由**
-  （`notif:*`，含伺服器端擁有權驗證，不信任 callback_data）。恢復某一層時若另一層仍全關，
-  跳出跨層提醒（如「使用者通知目前關閉，請先開啟」）。
+  （`notif:*`，含伺服器端擁有權驗證，不信任 callback_data、防畸形 data）。共用 mutation
+  service（`src/modules/subscriptions/service.py`）給 REST toggle / TG callback 共用。
 
 ### Changed
 

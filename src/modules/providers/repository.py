@@ -62,6 +62,27 @@ class UserProviderRepository:
             rows = await conn.fetch(query, user_id)
             return [UserProvider(**dict(row)) for row in rows]
 
+    async def is_notify_enabled(self, user_id: int) -> bool:
+        """Whether the user has user-level notifications on (any provider).
+
+        Used to gate lower-layer edits: a user with notifications paused cannot
+        modify per-subscription / per-source toggles (hierarchy guard).
+
+        Args:
+            user_id: User ID.
+
+        Returns:
+            True if at least one provider has ``notify_enabled = TRUE``.
+        """
+        query = """
+        SELECT EXISTS (
+            SELECT 1 FROM user_providers
+            WHERE user_id = $1 AND notify_enabled = TRUE
+        )
+        """
+        async with self._pool.acquire() as conn:
+            return bool(await conn.fetchval(query, user_id))
+
     async def create(
         self,
         user_id: int,

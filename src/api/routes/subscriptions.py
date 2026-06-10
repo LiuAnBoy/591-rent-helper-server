@@ -256,6 +256,17 @@ async def delete_subscription(
         raise HTTPException(status_code=500, detail="刪除訂閱失敗") from None
 
 
+async def _assert_user_notify_on(user_id: int) -> None:
+    """Hierarchy guard: a user with notifications paused cannot edit lower layers
+    (per-subscription / per-source). Raises 403 when user-level notify is off."""
+    from src.modules.providers import UserProviderRepository
+
+    postgres = await get_postgres()
+    prov_repo = UserProviderRepository(postgres.pool)
+    if not await prov_repo.is_notify_enabled(user_id):
+        raise HTTPException(status_code=403, detail="請先開啟使用者通知")
+
+
 @router.patch("/{subscription_id}/toggle")
 async def toggle_subscription(
     subscription_id: int,
@@ -263,6 +274,8 @@ async def toggle_subscription(
 ) -> dict:
     """
     Toggle subscription enabled status.
+
+    Blocked while user-level notifications are off (hierarchy guard).
 
     Requires authentication.
 
@@ -280,6 +293,10 @@ async def toggle_subscription(
 
     if existing["user_id"] != current_user.id:
         raise HTTPException(status_code=403, detail="無權限修改此訂閱")
+
+    # Hierarchy guard: can't modify a subscription's notify state while the
+    # user-level master switch is off.
+    await _assert_user_notify_on(current_user.id)
 
     new_status = not existing["enabled"]
     await set_enabled(repo, existing, new_status)
@@ -304,8 +321,11 @@ async def set_subscription_source(
     """
     Enable/disable one source for a subscription (per-subscription × source).
 
-    Disabling the last receivable source mutes the whole subscription
-    (enabled=False); enabling a source from the all-muted state re-enables it.
+    Only edits ``disabled_sources`` (the master ``enabled`` is untouched). A
+    fully-muted subscription simply receives nothing via the match-loop guard.
+
+    Hierarchy guard: blocked while user-level notify is off OR the subscription
+    itself is disabled.
 
     Requires authentication.
 
@@ -326,14 +346,19 @@ async def set_subscription_source(
     if existing["user_id"] != current_user.id:
         raise HTTPException(status_code=403, detail="無權限修改此訂閱")
 
+    # Hierarchy guard: source notify is the lowest layer — both the user-level
+    # master switch and this subscription must be on to edit it.
+    await _assert_user_notify_on(current_user.id)
+    if not existing["enabled"]:
+        raise HTTPException(status_code=403, detail="請先啟用此訂閱")
+
     updated = await set_source_enabled(repo, existing, data.source, data.enabled)
     if updated is None:
         # Raced with a delete between the ownership check and the update.
         raise HTTPException(status_code=404, detail="訂閱不存在")
 
     subs_log.info(
-        f"Set source {data.source}={data.enabled} for subscription {subscription_id} "
-        f"(enabled -> {updated['enabled']})"
+        f"Set source {data.source}={data.enabled} for subscription {subscription_id}"
     )
     return {
         "success": True,

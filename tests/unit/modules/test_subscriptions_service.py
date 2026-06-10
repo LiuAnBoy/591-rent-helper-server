@@ -25,8 +25,8 @@ class FakeRepo:
     async def get_by_id_with_provider(self, sub_id):
         return self._provider_sub
 
-    async def set_source_enabled(self, sub_id, source, enabled, keys):
-        self.set_source_calls.append((sub_id, source, enabled, keys))
+    async def set_source_enabled(self, sub_id, source, enabled):
+        self.set_source_calls.append((sub_id, source, enabled))
         return self._updated_row
 
 
@@ -101,8 +101,8 @@ async def test_set_enabled_disable_syncs_without_notify(monkeypatch):
     assert notified == []
 
 
-async def test_set_source_enabled_uses_registry_keys_and_returns_row(monkeypatch):
-    """Calls repo with registry keys, syncs, returns the updated row."""
+async def test_set_source_enabled_updates_sources_and_syncs(monkeypatch):
+    """Only edits disabled_sources; resyncs Redis (no enabled coupling/notify)."""
     synced: list = []
     _patch_sync(monkeypatch, synced)
 
@@ -115,14 +115,12 @@ async def test_set_source_enabled_uses_registry_keys_and_returns_row(monkeypatch
             "service_id": None,
             "region": 1,
         },
-        updated_row={"id": 1, "enabled": True, "disabled_sources": []},
+        updated_row={"id": 1, "enabled": True, "disabled_sources": ["591"]},
     )
     existing = {"id": 1, "enabled": True, "region": 1}
 
-    res = await service.set_source_enabled(repo, existing, "591", True)
+    res = await service.set_source_enabled(repo, existing, "591", False)
 
-    assert res == {"id": 1, "enabled": True, "disabled_sources": []}
-    sub_id, source, enabled, keys = repo.set_source_calls[0]
-    assert (source, enabled) == ("591", True)
-    assert keys == ["591"]  # from registry.source_keys()
-    assert synced == [False]  # was already enabled -> not a re-enable
+    assert res == {"id": 1, "enabled": True, "disabled_sources": ["591"]}
+    assert repo.set_source_calls == [(1, "591", False)]
+    assert synced == [False]  # resynced so the guard sees the new array; not a re-enable

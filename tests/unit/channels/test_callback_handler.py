@@ -41,15 +41,14 @@ def _make_cq(data, *, user_id=123, chat_id=123):
     )
 
 
-class FakeProvRepo:
-    def __init__(self, pool):
-        pass
+def _patch_common(monkeypatch, *, existing_sub, set_enabled_calls, notify_enabled=True):
+    class FakeProvRepo:
+        def __init__(self, pool):
+            pass
 
-    async def find_by_provider(self, provider, provider_id):
-        return SimpleNamespace(user_id=7, notify_enabled=False)
+        async def find_by_provider(self, provider, provider_id):
+            return SimpleNamespace(user_id=7, notify_enabled=notify_enabled)
 
-
-def _patch_common(monkeypatch, *, existing_sub, set_enabled_calls):
     monkeypatch.setattr("src.modules.providers.UserProviderRepository", FakeProvRepo)
 
     class FakeSubRepo:
@@ -87,6 +86,7 @@ async def test_enable_sub_rejects_non_owner(handler, monkeypatch):
         monkeypatch,
         existing_sub={"id": 9, "user_id": 999, "enabled": False},
         set_enabled_calls=calls,
+        notify_enabled=True,
     )
 
     await h._handle_callback(_make_cq("notif:enable_sub:9"))
@@ -95,20 +95,21 @@ async def test_enable_sub_rejects_non_owner(handler, monkeypatch):
     assert calls == []  # never mutated
 
 
-async def test_enable_sub_owned_but_user_notify_off_warns(handler, monkeypatch):
-    """Enabling an owned sub while user-level is off shows the cross-layer hint."""
+async def test_enable_sub_blocked_when_user_notify_off(handler, monkeypatch):
+    """Hierarchy guard: can't modify a sub while user-level notify is off."""
     h, bot = handler
     calls: list = []
     _patch_common(
         monkeypatch,
         existing_sub={"id": 9, "user_id": 7, "enabled": False},
         set_enabled_calls=calls,
+        notify_enabled=False,
     )
 
     await h._handle_callback(_make_cq("notif:enable_sub:9"))
 
-    assert calls == [(9, True)]  # owned -> mutated
-    assert bot.answers[-1] == "已啟用，但使用者通知目前關閉，請先開啟使用者通知"
+    assert bot.answers == ["請先開啟使用者通知"]
+    assert calls == []  # blocked before mutation
 
 
 async def test_malformed_sub_callback_is_rejected(handler, monkeypatch):

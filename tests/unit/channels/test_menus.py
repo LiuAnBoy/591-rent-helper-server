@@ -33,12 +33,28 @@ def test_pause_menu_skips_disabled_subs():
     assert not any("整層" in t for t in _btn_texts(markup))
 
 
-def test_resume_menu_lists_disabled_subs_and_user_when_off():
+def test_resume_menu_lists_disabled_subs_when_user_on():
+    subs = [{"id": 2, "name": "整層", "enabled": False}]
+    markup = build_resume_menu(notify_enabled=True, subs=subs, web_app_url="https://x")
+    assert any("整層" in t for t in _btn_texts(markup))
+    assert "notif:enable_sub:2" in _callback_datas(markup)
+
+
+def test_resume_menu_when_user_off_only_shows_user_button():
+    """Hierarchy guard: while user notify is off, sub toggles are hidden."""
     subs = [{"id": 2, "name": "整層", "enabled": False}]
     markup = build_resume_menu(notify_enabled=False, subs=subs, web_app_url="https://x")
-    assert any("整層" in t for t in _btn_texts(markup))
     assert "notif:resume_user" in _callback_datas(markup)
-    assert "notif:enable_sub:2" in _callback_datas(markup)
+    assert "notif:enable_sub:2" not in _callback_datas(markup)
+    assert not any("整層" in t for t in _btn_texts(markup))
+
+
+def test_pause_menu_when_user_off_hides_sub_buttons():
+    """Hierarchy guard: user already off -> no user button, no sub buttons."""
+    subs = [{"id": 1, "name": "套房", "enabled": True}]
+    markup = build_pause_menu(notify_enabled=False, subs=subs, web_app_url="https://x")
+    assert "notif:disable_sub:1" not in _callback_datas(markup)
+    assert not any("套房" in t for t in _btn_texts(markup))
 
 
 def test_resume_menu_hides_user_when_already_on():
@@ -48,7 +64,7 @@ def test_resume_menu_hides_user_when_already_on():
 
 def test_long_name_truncated():
     subs = [{"id": 1, "name": "超" * 50, "enabled": True}]
-    markup = build_pause_menu(notify_enabled=False, subs=subs, web_app_url="")
+    markup = build_pause_menu(notify_enabled=True, subs=subs, web_app_url="")
     label = [t for t in _btn_texts(markup) if "超" in t][0]
     assert "…" in label and len(label) < 60
 

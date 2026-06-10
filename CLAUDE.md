@@ -182,11 +182,19 @@ TG labels) / `get_source()` / `all_sources()` / `source_default_fetch_all()`.
 Each subscription can mute individual sources: `subscriptions.disabled_sources TEXT[]`
 (opt-out — a source NOT in the array = received; empty = all). The match loops in
 `checker.py` / `instant_notify.py` guard with `obj["source"] in sub.get("disabled_sources", [])`;
-`matcher.py` stays pure. API: `PATCH /subscriptions/{id}/sources` ({source, enabled}, atomic
-`array_append`/`array_remove`). **One-directional coupling**: disabling the last receivable
-source sets `enabled=False`; enabling one from the all-muted state sets `enabled=True`; the
-master `enabled` toggle never touches sources. All enable/sources mutations go through the
-shared `src/modules/subscriptions/service.py` (REST toggle / source coupling / TG callback).
+`matcher.py` stays pure. API: `PATCH /subscriptions/{id}/sources` ({source, enabled}).
+`set_source_enabled` only edits `disabled_sources` (atomic, direct column refs) — it **never
+touches `subscriptions.enabled`**; a fully-muted subscription simply matches nothing via the
+guard. `enabled` is purely the user's manual master switch (single writer). Enable/disable of
+`sub.enabled` goes through the shared `src/modules/subscriptions/service.py`.
+
+### Three-layer notify hierarchy + edit guards
+Delivery requires all three layers on: `user_providers.notify_enabled` (user) → `subscriptions.enabled`
+(subscription) → source not in `disabled_sources` (source). **Editing a lower layer is gated by
+the higher ones** (`UserProviderRepository.is_notify_enabled`): user-notify off → can't toggle
+`sub.enabled` or sources (403 / TG "請先開啟使用者通知"); subscription off → can't edit its sources
+(403 / "請先啟用此訂閱"). The web UI greys out gated controls; the TG pause/resume menus only show
+sub buttons while user-notify is on.
 
 ### Crawler Fallback Strategy (591 source, internal)
 - **List pages:** BS4 (3 retries) → Playwright fallback

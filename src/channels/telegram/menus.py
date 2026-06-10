@@ -46,16 +46,18 @@ def build_pause_menu(
                 )
             ]
         )
-    for s in subs:
-        if s.get("enabled"):
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        f"📋 停用：{_truncate(s['name'])}",
-                        callback_data=f"notif:disable_sub:{s['id']}",
-                    )
-                ]
-            )
+        # Per-subscription toggles are only editable while user-level notify is
+        # on (hierarchy guard) — hide them otherwise.
+        for s in subs:
+            if s.get("enabled"):
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            f"📋 停用：{_truncate(s['name'])}",
+                            callback_data=f"notif:disable_sub:{s['id']}",
+                        )
+                    ]
+                )
     if web_app_url:
         rows.append(_settings_row(web_app_url))
     return InlineKeyboardMarkup(rows)
@@ -75,6 +77,8 @@ def build_resume_menu(
     """
     rows: list[list[InlineKeyboardButton]] = []
     if not notify_enabled:
+        # User-level is off: the only meaningful action is turning it back on.
+        # Per-subscription toggles are gated until then (hierarchy guard).
         rows.append(
             [
                 InlineKeyboardButton(
@@ -82,16 +86,17 @@ def build_resume_menu(
                 )
             ]
         )
-    for s in subs:
-        if not s.get("enabled"):
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        f"📋 啟用：{_truncate(s['name'])}",
-                        callback_data=f"notif:enable_sub:{s['id']}",
-                    )
-                ]
-            )
+    else:
+        for s in subs:
+            if not s.get("enabled"):
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            f"📋 啟用：{_truncate(s['name'])}",
+                            callback_data=f"notif:enable_sub:{s['id']}",
+                        )
+                    ]
+                )
     if web_app_url:
         rows.append(_settings_row(web_app_url))
     return InlineKeyboardMarkup(rows)

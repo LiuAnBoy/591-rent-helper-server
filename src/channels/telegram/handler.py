@@ -257,6 +257,11 @@ class TelegramHandler:
             if len(parts) < 3 or not parts[2].isdigit():
                 await self._bot.answer_callback(cq.id, "無效操作")
                 return True
+            # Hierarchy guard: can't modify a subscription while user-level
+            # notify is off — turn that on first.
+            if not provider.notify_enabled:
+                await self._bot.answer_callback(cq.id, "請先開啟使用者通知")
+                return True
             sub_id = int(parts[2])
             existing = await sub_repo.get_by_id(sub_id)
             # R1: never trust the id in callback_data — verify ownership server-side.
@@ -269,12 +274,7 @@ class TelegramHandler:
                 toast = "狀態未變更"
             else:
                 await set_enabled(sub_repo, existing, want)
-                if not want:
-                    toast = "已停用此訂閱"
-                elif not provider.notify_enabled:
-                    toast = "已啟用，但使用者通知目前關閉，請先開啟使用者通知"
-                else:
-                    toast = "已啟用，有新物件會立即通知你"
+                toast = "已啟用，有新物件會立即通知你" if want else "已停用此訂閱"
         else:
             await self._bot.answer_callback(cq.id)
             return True
