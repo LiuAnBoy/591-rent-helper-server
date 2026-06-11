@@ -36,6 +36,8 @@ class TelegramHandler:
         self._pool = pool
         self._commands: dict[str, BaseCommand] = {}
         self._formatter: TelegramFormatter = get_telegram_formatter()
+        # Per-user consecutive callback-error count (in-memory); reset on success.
+        self._cb_error_counts: dict[str, int] = {}
 
         # Register all commands
         self._register_commands()
@@ -234,54 +236,79 @@ class TelegramHandler:
             provider=self.SERVICE_NAME, provider_id=from_id
         )
         if not provider:
-            await self._bot.answer_callback(cq.id, "尚未綁定帳號")
+            await self._reply(cq, chat_id, "尚未綁定帳號。請點「開啟管理頁面」按鈕登入。")
             return True
 
         sub_repo = SubscriptionRepository(self._pool)
         # callback_data is client-supplied; never assume its shape.
         parts = data.split(":")
         action = parts[1] if len(parts) >= 2 else ""
-        toast = ""
 
-        if action == "pause_user":
-            await apply_user_notify(self._pool, self.SERVICE_NAME, from_id, False)
-            toast = "已暫停使用者通知"
-        elif action == "resume_user":
-            res = await apply_user_notify(self._pool, self.SERVICE_NAME, from_id, True)
-            toast = (
-                "已開啟使用者通知"
-                if res["has_enabled_subs"]
-                else "已開啟使用者通知，但你目前沒有任何啟用中的訂閱，請至少啟用一個訂閱"
-            )
-        elif action in ("disable_sub", "enable_sub"):
+        # Validate sub actions up-front (expected outcomes, not errors): malformed
+        # data, hierarchy guard, ownership, no-op. Each replies and returns.
+        existing = None
+        want = None
+        if action in ("disable_sub", "enable_sub"):
             if len(parts) < 3 or not parts[2].isdigit():
-                await self._bot.answer_callback(cq.id, "無效操作")
+                await self._reply(cq, chat_id, "⚠️ 無效操作")
                 return True
-            # Hierarchy guard: can't modify a subscription while user-level
-            # notify is off — turn that on first.
             if not provider.notify_enabled:
-                await self._bot.answer_callback(cq.id, "請先開啟使用者通知")
+                await self._reply(cq, chat_id, "請先開啟使用者通知，才能調整個別訂閱。")
                 return True
-            sub_id = int(parts[2])
-            existing = await sub_repo.get_by_id(sub_id)
+            existing = await sub_repo.get_by_id(int(parts[2]))
             # R1: never trust the id in callback_data — verify ownership server-side.
             if not existing or existing["user_id"] != provider.user_id:
-                await self._bot.answer_callback(cq.id, "無權限")
+                await self._reply(cq, chat_id, "⚠️ 無權限操作此訂閱")
                 return True
-
             want = action == "enable_sub"
             if existing["enabled"] == want:
-                toast = "狀態未變更"
-            else:
-                await set_enabled(sub_repo, existing, want)
-                toast = "已啟用，有新物件會立即通知你" if want else "已停用此訂閱"
-        else:
+                await self._reply(cq, chat_id, "ℹ️ 狀態未變更")
+                await self._refresh_menu_after(chat_id, cq.message, action)
+                return True
+        elif action not in ("pause_user", "resume_user"):
             await self._bot.answer_callback(cq.id)
             return True
 
-        await self._bot.answer_callback(cq.id, toast)
+        # Perform the mutation; on failure reply "try later" / "contact dev".
+        try:
+            if action == "pause_user":
+                await apply_user_notify(self._pool, self.SERVICE_NAME, from_id, False)
+                msg = "✅ 已暫停使用者通知"
+            elif action == "resume_user":
+                res = await apply_user_notify(
+                    self._pool, self.SERVICE_NAME, from_id, True
+                )
+                msg = (
+                    "✅ 已開啟使用者通知，有新物件會立即通知你"
+                    if res["has_enabled_subs"]
+                    else "✅ 已開啟使用者通知\n⚠️ 你目前沒有任何啟用中的訂閱，請至少啟用一個"
+                )
+            else:  # disable_sub / enable_sub (validated above)
+                await set_enabled(sub_repo, existing, want)
+                msg = "✅ 已啟用，有新物件會立即通知你" if want else "✅ 已停用此訂閱"
+        except Exception as e:
+            tg_log.error(f"Callback action {action} failed for {from_id}: {e}")
+            count = self._cb_error_counts.get(from_id, 0) + 1
+            self._cb_error_counts[from_id] = count
+            err = (
+                "⚠️ 連續多次操作失敗，請聯絡開發者。"
+                if count >= 3
+                else "⚠️ 操作失敗，請稍後再試一次。"
+            )
+            await self._reply(cq, chat_id, err)
+            return True
+
+        # Success: reset the error streak, confirm, and refresh the menu.
+        self._cb_error_counts.pop(from_id, None)
+        await self._reply(cq, chat_id, msg)
         await self._refresh_menu_after(chat_id, cq.message, action)
         return True
+
+    async def _reply(self, cq, chat_id, text: str) -> None:
+        """Dismiss the button spinner and send a visible chat message."""
+        await self._bot.answer_callback(cq.id)
+        if chat_id is not None and text:
+            await self._bot.send_message(chat_id, text)
 
     async def _refresh_menu_after(self, chat_id, message, action: str) -> None:
         """Rebuild and edit the menu after an action; resend on edit failure."""
