@@ -151,6 +151,21 @@ async def test_unbound_user_gets_prompt(handler, monkeypatch):
     assert any("尚未綁定帳號" in t for t in bot.sent_texts)
 
 
+async def test_unknown_action_replies_invalid(handler, monkeypatch):
+    """An unknown notif:* action gets a visible '無效操作' reply."""
+    h, bot = handler
+    _patch_common(
+        monkeypatch,
+        existing_sub={"id": 1, "user_id": 7, "enabled": True},
+        set_enabled_calls=[],
+        notify_enabled=True,
+    )
+
+    await h._handle_callback(_make_cq("notif:foo"))
+
+    assert "⚠️ 無效操作" in bot.sent_texts
+
+
 async def test_disable_sub_success_sends_confirmation(handler, monkeypatch):
     """A successful disable replies with a confirmation message (not just a toast)."""
     h, bot = handler
