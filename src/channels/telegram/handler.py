@@ -266,10 +266,13 @@ class TelegramHandler:
                 await self._refresh_menu_after(chat_id, cq.message, action)
                 return True
         elif action not in ("pause_user", "resume_user"):
-            await self._bot.answer_callback(cq.id)
+            # Unknown notif:* action (forged / future data) — visible, consistent.
+            await self._reply(cq, chat_id, "⚠️ 無效操作")
             return True
 
-        # Perform the mutation; on failure reply "try later" / "contact dev".
+        # Perform the mutation; on failure reply "try later" / "contact dev". The
+        # streak counts MUTATION failures only (DB/Redis) — a confirmation that
+        # fails to deliver is logged in TelegramBot.send_message, not counted here.
         try:
             if action == "pause_user":
                 await apply_user_notify(self._pool, self.SERVICE_NAME, from_id, False)
@@ -288,6 +291,10 @@ class TelegramHandler:
                 msg = "✅ 已啟用，有新物件會立即通知你" if want else "✅ 已停用此訂閱"
         except Exception as e:
             tg_log.error(f"Callback action {action} failed for {from_id}: {e}")
+            # Bound the in-memory map: it only holds users mid-error-streak (cleared
+            # on success), but cap it so a prolonged outage can't grow it unbounded.
+            if len(self._cb_error_counts) > 1000:
+                self._cb_error_counts.clear()
             count = self._cb_error_counts.get(from_id, 0) + 1
             self._cb_error_counts[from_id] = count
             err = (
