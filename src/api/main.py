@@ -63,6 +63,7 @@ from src.api.routes import (  # noqa: E402
     bindings_router,
     checker_router,
     health_router,
+    sources_router,
     subscriptions_router,
     telegram_router,
     users_router,
@@ -170,6 +171,7 @@ app.include_router(users_router)
 app.include_router(bindings_router)
 app.include_router(checker_router)
 app.include_router(subscriptions_router)
+app.include_router(sources_router)
 app.include_router(telegram_router)
 
 

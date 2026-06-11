@@ -252,6 +252,20 @@ def build_notifier(*, region_objects=None, broadcaster=None):
 
 
 class TestInstantNotify:
+    async def test_disabled_source_skips_match(self):
+        """A subscription that muted '591' does not match 591 objects."""
+        sub = wide_sub()
+        sub["disabled_sources"] = ["591"]
+        notifier = build_notifier(region_objects=[make_std_object(111)])
+
+        result = await notifier.notify_for_subscription(
+            user_id=1, subscription=sub, service="telegram", service_id="chat-1"
+        )
+
+        assert result["matched"] == 0
+        assert result["notified"] == 0
+        assert notifier._broadcaster.sent == []
+
     async def test_redis_hit_detailed_match_notifies(self):
         """A cached has_detail object that matches is notified immediately."""
         notifier = build_notifier(region_objects=[make_std_object(111)])

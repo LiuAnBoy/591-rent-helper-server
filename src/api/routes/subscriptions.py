@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 from loguru import logger
+from pydantic import BaseModel
 
 from src.api.dependencies import CurrentUser
 
@@ -255,6 +256,17 @@ async def delete_subscription(
         raise HTTPException(status_code=500, detail="刪除訂閱失敗") from None
 
 
+async def _assert_user_notify_on(user_id: int) -> None:
+    """Hierarchy guard: a user with notifications paused cannot edit lower layers
+    (per-subscription / per-source). Raises 403 when user-level notify is off."""
+    from src.modules.providers import UserProviderRepository
+
+    postgres = await get_postgres()
+    prov_repo = UserProviderRepository(postgres.pool)
+    if not await prov_repo.is_notify_enabled(user_id):
+        raise HTTPException(status_code=403, detail="請先開啟使用者通知")
+
+
 @router.patch("/{subscription_id}/toggle")
 async def toggle_subscription(
     subscription_id: int,
@@ -263,12 +275,14 @@ async def toggle_subscription(
     """
     Toggle subscription enabled status.
 
+    Blocked while user-level notifications are off (hierarchy guard).
+
     Requires authentication.
 
     Args:
         subscription_id: Subscription ID
     """
-    import asyncio
+    from src.modules.subscriptions.service import set_enabled
 
     repo = await get_repository()
 
@@ -280,34 +294,74 @@ async def toggle_subscription(
     if existing["user_id"] != current_user.id:
         raise HTTPException(status_code=403, detail="無權限修改此訂閱")
 
-    # Toggle
-    was_disabled = not existing[
-        "enabled"
-    ]  # True if currently disabled, will be enabled
+    # Hierarchy guard: can't modify a subscription's notify state while the
+    # user-level master switch is off.
+    await _assert_user_notify_on(current_user.id)
+
     new_status = not existing["enabled"]
-    await repo.update(subscription_id, {"enabled": new_status})
-
-    # Get updated subscription with provider info and sync to Redis
-    sub_with_provider = await repo.get_by_id_with_provider(subscription_id)
-    if sub_with_provider:
-        await sync_subscription_to_redis(sub_with_provider, was_disabled=was_disabled)
-
-        # If re-enabling, trigger instant notification
-        if was_disabled and new_status:
-            if sub_with_provider.get("service") and sub_with_provider.get("service_id"):
-                from src.jobs.instant_notify import notify_for_new_subscription
-
-                asyncio.create_task(
-                    notify_for_new_subscription(
-                        user_id=current_user.id,
-                        subscription=sub_with_provider,
-                        service=sub_with_provider["service"],
-                        service_id=sub_with_provider["service_id"],
-                    )
-                )
-                subs_log.info(
-                    f"Triggered instant notify for re-enabled subscription {subscription_id}"
-                )
+    await set_enabled(repo, existing, new_status)
 
     subs_log.info(f"Toggled subscription {subscription_id} to {new_status}")
     return {"success": True}
+
+
+class SourceToggle(BaseModel):
+    """Request body for toggling one source on a subscription."""
+
+    source: str
+    enabled: bool
+
+
+@router.patch("/{subscription_id}/sources")
+async def set_subscription_source(
+    subscription_id: int,
+    data: SourceToggle,
+    current_user: CurrentUser,
+) -> dict:
+    """
+    Enable/disable one source for a subscription (per-subscription × source).
+
+    Only edits ``disabled_sources`` (the master ``enabled`` is untouched). A
+    fully-muted subscription simply receives nothing via the match-loop guard.
+
+    Hierarchy guard: blocked while user-level notify is off OR the subscription
+    itself is disabled.
+
+    Requires authentication.
+
+    Args:
+        subscription_id: Subscription ID
+        data: {source, enabled}
+    """
+    from src.crawler import registry
+    from src.modules.subscriptions.service import set_source_enabled
+
+    if data.source not in registry.source_keys():
+        raise HTTPException(status_code=400, detail="未知的來源代碼")
+
+    repo = await get_repository()
+    existing = await repo.get_by_id(subscription_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="訂閱不存在")
+    if existing["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="無權限修改此訂閱")
+
+    # Hierarchy guard: source notify is the lowest layer — both the user-level
+    # master switch and this subscription must be on to edit it.
+    await _assert_user_notify_on(current_user.id)
+    if not existing["enabled"]:
+        raise HTTPException(status_code=403, detail="請先啟用此訂閱")
+
+    updated = await set_source_enabled(repo, existing, data.source, data.enabled)
+    if updated is None:
+        # Raced with a delete between the ownership check and the update.
+        raise HTTPException(status_code=404, detail="訂閱不存在")
+
+    subs_log.info(
+        f"Set source {data.source}={data.enabled} for subscription {subscription_id}"
+    )
+    return {
+        "success": True,
+        "enabled": updated["enabled"],
+        "disabled_sources": updated.get("disabled_sources", []),
+    }

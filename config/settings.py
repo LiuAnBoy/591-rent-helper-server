@@ -119,16 +119,16 @@ class Settings(BaseSettings):
     telegram: TelegramSettings = TelegramSettings()
     crawler: CrawlerSettings = CrawlerSettings()
 
-    # Per-source crawl config, keyed by Source.key (e.g. "591", matching
-    # DBReadyData["source"] — note: the source key is "591", not the folder
-    # name "x591"). Future sources add their own entry, e.g.:
-    #   sources={"591": SourceConfig(fetch_all=True),
-    #            "ddroom": SourceConfig(fetch_all=False)}
-    sources: dict[str, SourceConfig] = {"591": SourceConfig(fetch_all=True)}
+    # Per-source crawl policy OVERRIDES, keyed by Source.key (e.g. "591",
+    # matching DBReadyData["source"]). Empty by default: the real default lives
+    # in the source manifest (src/crawler/registry.py SOURCES). Only add an
+    # entry here to override a source's manifest default (e.g. via config), e.g.:
+    #   sources={"591": SourceConfig(fetch_all=False)}
+    sources: dict[str, SourceConfig] = {}
 
-    def source_config(self, key: str) -> SourceConfig:
-        """Config for a source key, falling back to defaults if not listed."""
-        return self.sources.get(key, SourceConfig())
+    def source_config(self, key: str) -> SourceConfig | None:
+        """Return the override SourceConfig for ``key``, or None if none set."""
+        return self.sources.get(key)
 
 
 @lru_cache

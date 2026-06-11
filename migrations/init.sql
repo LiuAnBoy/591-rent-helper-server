@@ -143,6 +143,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 
     -- ========== 狀態 ==========
     enabled         BOOLEAN DEFAULT TRUE,
+    -- 該訂閱關閉的來源 (Source.key)，opt-out：不在清單內 = 收。預設空 = 全收。
+    disabled_sources TEXT[] NOT NULL DEFAULT '{}',
     created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

@@ -51,7 +51,8 @@
 > 新增來源 = 在 `sources/` 多一個資料夾、實作 `Source` 介面、在 registry 註冊一行。
 
 - 591 來源（`sources/x591/`）是第一個實作，可直接當範本。
-- 每個來源可在 `settings.sources` 宣告自己的爬取策略（例如 `fetch_all` 是否每筆都抓詳情）。
+- 每個來源在 manifest（`src/crawler/registry.py` 的 `SOURCES`）一處宣告（key／顯示名稱／
+  建構子／`fetch_all` 爬取策略）；加新來源只改這一筆，crawl／政策／API／TG 全部自動沿用。
 
 完整教學請參考 **[docs/ADDING_A_SOURCE.md](docs/ADDING_A_SOURCE.md)**。
 
@@ -262,9 +263,12 @@ python scripts/test_detail_playwright.py <object_id>
 | -        | `幫助`     | 顯示使用說明 |
 | -        | `清單`     | 查看訂閱清單 |
 | -        | `指令`     | 顯示可用指令 |
-| -        | `開始通知` | 恢復接收通知 |
-| -        | `暫停通知` | 暫停接收通知 |
+| -        | `開始通知` | 回覆「可恢復項目」按鈕選單（使用者層／各訂閱／詳細設定） |
+| -        | `暫停通知` | 回覆「可暫停項目」按鈕選單（使用者層／各訂閱／詳細設定） |
 
+> `開始通知` / `暫停通知` 會掃描目前狀態，回覆可點選的按鈕：可單獨開關「整個使用者」或
+> 「個別訂閱」，或點「詳細設定」開啟網頁管理（含各訂閱的來源開關）。
+>
 > 中文指令不需要加 `/`，直接輸入即可（例如：`幫助`、`清單`）
 >
 > 綁定帳號請透過 Telegram Web App 登入，點擊「開啟管理頁面」按鈕即可
@@ -281,9 +285,11 @@ python scripts/test_detail_playwright.py <object_id>
 | -------- | --------------------------- | --------------------------- |
 | 認證     | `POST /auth/telegram`       | Telegram Web App 登入       |
 | 使用者   | `GET /users/me`             | 取得個人資料                |
-| 訂閱     | `GET /subscriptions`        | 列出所有訂閱                |
+| 訂閱     | `GET /subscriptions`        | 列出所有訂閱（含 `disabled_sources`） |
 |          | `POST /subscriptions`       | 新增訂閱（含即時通知）      |
 |          | `PATCH .../toggle`          | 啟用/停用訂閱               |
+|          | `PATCH .../sources`         | 開關該訂閱的單一來源（`{source, enabled}`） |
+| 來源     | `GET /sources`              | 列出可用來源（key + 顯示名稱） |
 | 綁定     | `PATCH /bindings/telegram/toggle` | 啟用/停用通知（含即時通知） |
 | 健康檢查 | `GET /health`               | 健康檢查                    |
 

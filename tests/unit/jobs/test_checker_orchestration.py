@@ -294,6 +294,24 @@ def saved_by_source_id(repo: FakeRepo) -> dict:
 
 
 class TestCheckOrchestration:
+    async def test_disabled_sources_guard_skips_muted_source(self):
+        """A sub that muted '591' is skipped for 591 objects; others still match."""
+        sub_open = wide_sub(sub_id=1)
+        sub_muted = wide_sub(sub_id=2)
+        sub_muted["disabled_sources"] = ["591"]
+        redis = FakeRedis(subs=[sub_open, sub_muted], new_ids={111})
+        checker, deps = build_checker(
+            pages={0: [make_list_item(111)], 30: []},
+            redis=redis,
+            details={111: make_detail(111)},
+            fetch_all=True,
+        )
+
+        result = await checker.check(region=1)
+
+        matched_sub_ids = {s["id"] for _, subs in result["matches"] for s in subs}
+        assert matched_sub_ids == {1}
+
     async def test_empty_page1_fails_run_and_alerts(self):
         """Page 1 returns nothing -> failed crawler run + admin alert, fetched=0."""
         redis = FakeRedis(subs=[wide_sub()])

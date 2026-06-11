@@ -234,8 +234,14 @@ class Checker:
             fetch_all = self._fetch_all
         else:
             from config.settings import get_settings
+            from src.crawler import registry
 
-            fetch_all = get_settings().source_config(self._source.key).fetch_all
+            override = get_settings().source_config(self._source.key)
+            fetch_all = (
+                override.fetch_all
+                if override is not None
+                else registry.source_default_fetch_all(self._source.key)
+            )
 
         checker_log.info(f"Checking region={region} (fetch_all={fetch_all})")
 
@@ -403,6 +409,10 @@ class Checker:
                     # obj is already DBReadyData (dict), no conversion needed
 
                     for sub in all_subs:
+                        # Source layer: skip objects whose source this sub muted
+                        # (per-subscription × per-source). Default [] = receive all.
+                        if obj["source"] in sub.get("disabled_sources", []):
+                            continue
                         if not match_object_to_subscription(obj, sub):
                             continue
 

@@ -214,6 +214,44 @@ class SubscriptionRepository:
             rows = await conn.fetch(query)
             return [dict(row) for row in rows]
 
+    async def set_source_enabled(
+        self, subscription_id: int, source: str, enabled: bool
+    ) -> dict | None:
+        """Atomically add/remove ``source`` from a subscription's disabled_sources.
+
+        Source state lives ONLY in ``disabled_sources``; this never touches
+        ``subscriptions.enabled`` (that is the user's manual master switch). A
+        subscription with every source muted simply matches nothing (the source
+        guard in the match loops filters it) — no coupling needed.
+
+        The mutation is expressed with direct column references, so it is
+        concurrency-safe (each concurrent update re-evaluates against the locked
+        row): ``enabled`` toggles are idempotent ``array_remove``; ``disable``
+        appends only when not already present (no duplicates).
+
+        Args:
+            subscription_id: Subscription ID.
+            source: Source.key to toggle.
+            enabled: True = receive (remove from disabled), False = mute (add).
+
+        Returns:
+            Updated subscription row (dict) or None if not found.
+        """
+        query = """
+        UPDATE subscriptions
+        SET disabled_sources = CASE
+                WHEN $3::boolean THEN array_remove(disabled_sources, $2)
+                WHEN $2 = ANY(disabled_sources) THEN disabled_sources
+                ELSE disabled_sources || ARRAY[$2]
+            END,
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+        """
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(query, subscription_id, source, enabled)
+            return dict(row) if row else None
+
     async def get_active_regions(self) -> list[int]:
         """
         Get all unique regions that have enabled subscriptions.
